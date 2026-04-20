@@ -1,0 +1,699 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// AUTENTICAÇÃO (NextAuth.js v5)
+// ============================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================
+// USUÁRIOS
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(STUDENT)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  studentProfile StudentProfile?
+
+  @@map("users")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+model StudentProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  planId          String?
+  accessExpiresAt DateTime?
+  phone           String?
+  cpf             String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                Plan?                 @relation(fields: [planId], references: [id])
+  studentCompetitions StudentCompetition[]
+  studentAnswers      StudentAnswer[]
+  trainingSessions    TrainingSession[]
+  simulatedExams      SimulatedExam[]
+  apostilas           Apostila[]
+  usedQuestions       UsedQuestion[]
+
+  @@map("student_profiles")
+}
+
+// ============================================================
+// PLANOS DE ACESSO
+// ============================================================
+
+model Plan {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  isActive     Boolean  @default(true)
+  durationDays Int?
+  features     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  students         StudentProfile[]
+  planCompetitions PlanCompetition[]
+
+  @@map("plans")
+}
+
+model PlanCompetition {
+  planId        String
+  competitionId String
+
+  plan        Plan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@id([planId, competitionId])
+  @@map("plan_competitions")
+}
+
+// ============================================================
+// ESTRUTURA GEOGRÁFICA E INSTITUCIONAL
+// ============================================================
+
+model City {
+  id        String   @id @default(cuid())
+  name      String
+  state     String
+  ibgeCode  String?  @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  competitions Competition[]
+
+  @@map("cities")
+}
+
+model ExamBoard {
+  id          String   @id @default(cuid())
+  name        String
+  acronym     String   @unique
+  website     String?
+  logoUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  competitions Competition[]
+  questions    Question[]
+
+  @@map("exam_boards")
+}
+
+model JobRole {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  area        String?
+  level       String?
+  description String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  competitions        CompetitionJobRole[]
+  subjects            JobRoleSubject[]
+  studentCompetitions StudentCompetition[]
+
+  @@map("job_roles")
+}
+
+// ============================================================
+// CONCURSOS
+// ============================================================
+
+model Competition {
+  id               String            @id @default(cuid())
+  name             String
+  slug             String            @unique
+  cityId           String
+  organization     String?
+  examBoardId      String?
+  examBoardDefined Boolean           @default(false)
+  examDate         DateTime?
+  status           CompetitionStatus @default(UPCOMING)
+  editalUrl        String?
+  description      String?
+  bannerUrl        String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  city             City               @relation(fields: [cityId], references: [id])
+  examBoard        ExamBoard?         @relation(fields: [examBoardId], references: [id])
+  jobRoles         CompetitionJobRole[]
+  subjects         CompetitionSubject[]
+  students         StudentCompetition[]
+  questions        Question[]
+  planCompetitions PlanCompetition[]
+  pdfImports       PDFImport[]
+  simulatedExams   SimulatedExam[]
+  apostilas        Apostila[]
+
+  @@map("competitions")
+}
+
+enum CompetitionStatus {
+  UPCOMING
+  ACTIVE
+  PAST
+  CANCELLED
+}
+
+model CompetitionJobRole {
+  competitionId String
+  jobRoleId     String
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  jobRole     JobRole     @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+
+  @@id([competitionId, jobRoleId])
+  @@map("competition_job_roles")
+}
+
+// ============================================================
+// MATÉRIAS E ASSUNTOS
+// ============================================================
+
+model Subject {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  color       String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topics       Topic[]
+  competitions CompetitionSubject[]
+  questions    Question[]
+  jobRoles     JobRoleSubject[]
+
+  @@map("subjects")
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  subjectId String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([slug, subjectId])
+  @@map("topics")
+}
+
+model CompetitionSubject {
+  competitionId  String
+  subjectId      String
+  weight         Float?
+  questionsCount Int?
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  subject     Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([competitionId, subjectId])
+  @@map("competition_subjects")
+}
+
+model JobRoleSubject {
+  jobRoleId String
+  subjectId String
+  priority  Int    @default(1)
+
+  jobRole JobRole @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([jobRoleId, subjectId])
+  @@map("job_role_subjects")
+}
+
+// ============================================================
+// RELAÇÃO ALUNO-CONCURSO
+// ============================================================
+
+model StudentCompetition {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  competitionId    String
+  jobRoleId        String?
+  enrolledAt       DateTime @default(now())
+  isActive         Boolean  @default(true)
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  competition    Competition    @relation(fields: [competitionId], references: [id])
+  jobRole        JobRole?       @relation(fields: [jobRoleId], references: [id])
+
+  @@unique([studentProfileId, competitionId])
+  @@map("student_competitions")
+}
+
+// ============================================================
+// BANCO DE QUESTÕES
+// ============================================================
+
+model Question {
+  id             String         @id @default(cuid())
+  content        String         @db.Text
+  /// Texto de apoio compartilhado (artigo, trecho comum a várias questões), separado do enunciado
+  supportText    String?        @db.Text
+  correctAnswer  String
+  subjectId      String?
+  topicId        String?
+  examBoardId    String?
+  competitionId  String?
+  year           Int?
+  difficulty     Difficulty     @default(MEDIUM)
+  hasImage       Boolean        @default(false)
+  imageUrl       String?        @db.Text
+  rawText        String?        @db.Text
+  sourceDocument String?
+  sourcePage     Int?
+  sourcePosition Int?
+  status         QuestionStatus @default(ACTIVE)
+  importId       String?
+  confidence     Float?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  subject      Subject?    @relation(fields: [subjectId], references: [id])
+  topic        Topic?      @relation(fields: [topicId], references: [id])
+  examBoard    ExamBoard?  @relation(fields: [examBoardId], references: [id])
+  competition  Competition? @relation(fields: [competitionId], references: [id])
+  pdfImport    PDFImport?  @relation(fields: [importId], references: [id])
+
+  alternatives      Alternative[]
+  studentAnswers    StudentAnswer[]
+  examQuestions     SimulatedExamQuestion[]
+  apostilaQuestions ApostilaQuestion[]
+  usedBy            UsedQuestion[]
+
+  @@map("questions")
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionStatus {
+  PENDING_REVIEW
+  ACTIVE
+  INACTIVE
+  REJECTED
+}
+
+model Alternative {
+  id         String  @id @default(cuid())
+  questionId String
+  letter     String
+  content    String  @db.Text
+  imageUrl   String? @db.Text
+  order      Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, letter])
+  @@map("alternatives")
+}
+
+// ============================================================
+// RESPOSTAS DO ALUNO
+// ============================================================
+
+model StudentAnswer {
+  id               String      @id @default(cuid())
+  studentProfileId String
+  questionId       String
+  selectedAnswer   String
+  isCorrect        Boolean
+  timeSpentSeconds Int?
+  answeredAt       DateTime    @default(now())
+  sessionType      SessionType
+  sessionId        String?
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id])
+
+  @@map("student_answers")
+}
+
+enum SessionType {
+  TRAINING
+  EXAM
+  REVIEW
+}
+
+// ============================================================
+// SESSÕES DE TREINO
+// ============================================================
+
+model TrainingSession {
+  id               String    @id @default(cuid())
+  studentProfileId String
+  competitionId    String?
+  subjectId        String?
+  topicId          String?
+  filters          Json?
+  totalQuestions   Int       @default(0)
+  correctAnswers   Int       @default(0)
+  timeSpentSeconds Int       @default(0)
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@map("training_sessions")
+}
+
+// ============================================================
+// SIMULADOS
+// ============================================================
+
+model SimulatedExam {
+  id                 String     @id @default(cuid())
+  studentProfileId   String
+  competitionId      String?
+  title              String?
+  totalQuestions     Int
+  correctAnswers     Int        @default(0)
+  timeAllowedSeconds Int?
+  timeSpentSeconds   Int        @default(0)
+  completedAt        DateTime?
+  status             ExamStatus @default(IN_PROGRESS)
+  createdAt          DateTime   @default(now())
+
+  studentProfile StudentProfile          @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  competition    Competition?            @relation(fields: [competitionId], references: [id])
+  questions      SimulatedExamQuestion[]
+
+  @@map("simulated_exams")
+}
+
+enum ExamStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model SimulatedExamQuestion {
+  id               String   @id @default(cuid())
+  examId           String
+  questionId       String
+  order            Int
+  selectedAnswer   String?
+  isCorrect        Boolean?
+  timeSpentSeconds Int?
+
+  exam     SimulatedExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question      @relation(fields: [questionId], references: [id])
+
+  @@unique([examId, questionId])
+  @@map("simulated_exam_questions")
+}
+
+// ============================================================
+// APOSTILAS
+// ============================================================
+
+model Apostila {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  competitionId    String?
+  title            String
+  fileUrl          String?
+  generatedAt      DateTime @default(now())
+
+  studentProfile StudentProfile     @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  competition    Competition?       @relation(fields: [competitionId], references: [id])
+  questions      ApostilaQuestion[]
+
+  @@map("apostilas")
+}
+
+model ApostilaQuestion {
+  id         String @id @default(cuid())
+  apostilaId String
+  questionId String
+  order      Int
+
+  apostila Apostila @relation(fields: [apostilaId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([apostilaId, questionId])
+  @@map("apostila_questions")
+}
+
+// ============================================================
+// CONTROLE DE QUESTÕES USADAS (anti-repetição)
+// ============================================================
+
+model UsedQuestion {
+  id               String     @id @default(cuid())
+  studentProfileId String
+  questionId       String
+  usedInType       UsedInType
+  usedAt           DateTime   @default(now())
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id])
+
+  @@map("used_questions")
+}
+
+enum UsedInType {
+  TRAINING
+  EXAM
+  APOSTILA
+}
+
+// ============================================================
+// IMPORTAÇÃO DE PDFs
+// ============================================================
+
+model PDFImport {
+  id                        String       @id @default(cuid())
+  competitionId             String?
+  cityId                    String?
+  examBoardId               String?
+  jobRoleId                 String?
+  subjectId                 String?
+  year                      Int?
+  examDate                  DateTime?
+  originalFilename          String
+  originalFilenameGabarito  String?
+  gabaritoInSamePdf         Boolean      @default(false)
+  /// Caminho relativo ao cwd: private/import-pdfs/{id}.pdf (servido só via API admin)
+  storedPdfPath             String?
+  status                    ImportStatus @default(PENDING)
+  totalExtracted            Int          @default(0)
+  totalApproved             Int          @default(0)
+  totalRejected             Int          @default(0)
+  processingLog             String?
+  processingError           String?
+  createdBy                 String
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+
+  competition       Competition?       @relation(fields: [competitionId], references: [id])
+  questions         Question[]
+  importedQuestions ImportedQuestion[]
+  importAssets      ImportAsset[]
+
+  @@map("pdf_imports")
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  REVIEW_PENDING
+  COMPLETED
+  FAILED
+}
+
+model ImportedQuestion {
+  id                  String                 @id @default(cuid())
+  importId            String
+  content             String
+  alternatives        Json
+  correctAnswer       String?
+  suggestedSubjectId  String?
+  suggestedTopicId    String?
+  sourcePage          Int?
+  sourcePosition      Int?
+  hasImage            Boolean                @default(false)
+  imageUrl            String?
+  rawText             String?
+  confidence          Float?
+  status              ImportedQuestionStatus @default(PENDING_REVIEW)
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  publishedQuestionId String?
+  createdAt           DateTime               @default(now())
+
+  pdfImport   PDFImport                 @relation(fields: [importId], references: [id], onDelete: Cascade)
+  assetLinks  ImportedQuestionAsset[]
+
+  @@map("imported_questions")
+}
+
+/// Região ou elemento visual (texto/imagem) extraído ou marcado manualmente no PDF
+model ImportAsset {
+  id             String           @id @default(cuid())
+  importId       String
+  kind           ImportAssetKind
+  label          String?
+  /// Página 1-based (alinhada ao visualizador)
+  page           Int
+  /// Bounding box normalizado 0–1 em relação à largura/altura da página renderizada
+  bboxX          Float
+  bboxY          Float
+  bboxW          Float
+  bboxH          Float
+  scope          ImportAssetScope @default(EXCLUSIVE)
+  extractedText  String?          @db.Text
+  /// Recorte ou figura em base64 (opcional; prioridade na publicação se vinculado)
+  imageDataUrl   String?          @db.Text
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  pdfImport      PDFImport                 @relation(fields: [importId], references: [id], onDelete: Cascade)
+  questionLinks  ImportedQuestionAsset[]
+
+  @@map("import_assets")
+}
+
+enum ImportAssetKind {
+  TEXT_BLOCK
+  IMAGE
+}
+
+enum ImportAssetScope {
+  EXCLUSIVE
+  SHARED
+}
+
+/// Vínculo entre uma questão importada e um ativo (texto-base compartilhado, figura, etc.)
+model ImportedQuestionAsset {
+  id                 String          @id @default(cuid())
+  importedQuestionId String
+  importAssetId      String
+  role               ImportAssetRole
+
+  importedQuestion ImportedQuestion @relation(fields: [importedQuestionId], references: [id], onDelete: Cascade)
+  importAsset      ImportAsset      @relation(fields: [importAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([importedQuestionId, importAssetId])
+  @@map("imported_question_assets")
+}
+
+enum ImportAssetRole {
+  SUPPORT_TEXT
+  FIGURE
+}
+
+enum ImportedQuestionStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+}
+
+// ============================================================
+// TEMA VISUAL / WHITE-LABEL
+// ============================================================
+
+model BrandTheme {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  logoUrl         String?
+  faviconUrl      String?
+  primaryColor    String   @default("#6366f1")
+  secondaryColor  String   @default("#8b5cf6")
+  accentColor     String   @default("#06b6d4")
+  platformName    String
+  loginBannerUrl  String?
+  footerText      String?
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("brand_themes")
+}
