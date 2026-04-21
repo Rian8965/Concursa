@@ -56,45 +56,24 @@ export default async function CompetitionsPage() {
   });
 
   return (
-    <div className="animate-fade-in">
+    <div className="orbit-stack animate-fade-in">
       <PageHeader
         title="Meus Concursos"
         description="Todos os concursos vinculados ao seu plano de estudos"
       />
 
       {studentCompetitions.length === 0 ? (
-        <div
-          style={{
-            background: "#FFFFFF",
-            border: "1.5px dashed #E5E7EB",
-            borderRadius: 20,
-            padding: "60px 24px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              background: "#F3F2FB",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 16px",
-            }}
-          >
-            <Trophy style={{ width: 26, height: 26, color: "#7C3AED" }} />
+        <div className="orbit-empty-state">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 ring-1 ring-violet-200/60">
+            <Trophy className="h-8 w-8 text-violet-600" strokeWidth={1.75} />
           </div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 6 }}>
-            Nenhum concurso disponível
-          </h3>
-          <p style={{ fontSize: 13.5, color: "#9CA3AF", maxWidth: 320, margin: "0 auto" }}>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Nenhum concurso disponível</h3>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--text-muted)]">
             Seu plano não possui concursos vinculados ainda. Entre em contato com o administrador.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
           {studentCompetitions.map((sc) => {
             const comp = sc.competition;
             const daysLeft = comp.examDate
@@ -110,13 +89,13 @@ export default async function CompetitionsPage() {
               >
                 {/* Linha de cor no topo */}
                 <div
+                  className="h-1"
                   style={{
-                    height: 3,
-                    background: "linear-gradient(90deg, #7C3AED 0%, #A855F7 100%)",
+                    background: "linear-gradient(90deg, #EA580C 0%, #FB923C 22%, #7C3AED 72%, #A855F7 100%)",
                   }}
                 />
 
-                <div className="p-6">
+                <div className="p-7 sm:p-8">
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex flex-wrap gap-2">
                       <Badge variant={statusVariants[comp.status] ?? "secondary"}>
@@ -161,12 +140,12 @@ export default async function CompetitionsPage() {
                         <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                         {formatDate(comp.examDate)} —{" "}
                         {daysLeft !== null && daysLeft > 0 ? (
-                          <span className="font-medium" style={{ color: "#7C3AED" }}>
+                          <span className="font-semibold text-violet-700">
                             <Clock className="w-3 h-3 inline mr-0.5" />
                             {formatCountdown(comp.examDate)}
                           </span>
                         ) : daysLeft === 0 ? (
-                          <span className="font-medium" style={{ color: "#D97706" }}>Hoje!</span>
+                          <span className="font-semibold text-orange-600">Hoje!</span>
                         ) : (
                           <span className="text-gray-400">Prova realizada</span>
                         )}
@@ -180,13 +159,13 @@ export default async function CompetitionsPage() {
                       {comp.subjects.slice(0, 4).map((cs) => (
                         <span
                           key={cs.subjectId}
-                          className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
+                          className="rounded-lg border border-gray-200/80 bg-gray-50/90 px-2.5 py-1 text-xs font-medium text-gray-600"
                         >
                           {cs.subject.name}
                         </span>
                       ))}
                       {comp.subjects.length > 4 && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
+                        <span className="rounded-lg border border-dashed border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500">
                           +{comp.subjects.length - 4}
                         </span>
                       )}
@@ -195,8 +174,7 @@ export default async function CompetitionsPage() {
 
                   <Link
                     href={`/concursos/${comp.id}`}
-                    className="btn btn-primary w-full"
-                    style={{ justifyContent: "center", borderRadius: 12, height: 40, fontSize: 13 }}
+                    className="btn btn-primary mt-1 flex h-11 w-full items-center justify-center rounded-2xl text-[13px]"
                   >
                     Entrar no concurso
                     <ArrowRight className="w-4 h-4" />

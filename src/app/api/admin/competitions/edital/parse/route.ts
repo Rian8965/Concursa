@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import type { protos } from "@google-cloud/documentai";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
 import { runLlmJson } from "@/lib/ai/llm";
-import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "@/lib/docai/process-options";
+import { extractPdfFullTextWithDocumentAi } from "@/lib/docai/extract-pdf-fulltext";
 
 export const runtime = "nodejs";
 
@@ -72,14 +71,9 @@ export async function POST(req: Request) {
   const client = new DocumentProcessorServiceClient({ apiEndpoint: `${location}-documentai.googleapis.com` });
   const name = client.processorPath(projectId, location, processorId);
 
-  let result: protos.google.cloud.documentai.v1.IProcessResponse;
+  let result: Awaited<ReturnType<typeof extractPdfFullTextWithDocumentAi>>;
   try {
-    const [res] = await client.processDocument({
-      name,
-      rawDocument: { content: bytes.toString("base64"), mimeType: "application/pdf" },
-      processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
-    });
-    result = res;
+    result = await extractPdfFullTextWithDocumentAi(client, name, bytes);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // #region agent log
@@ -90,26 +84,17 @@ export async function POST(req: Request) {
         sessionId: "03dbee",
         runId: "post-fix",
         hypothesisId: "H-docai-process",
-        location: "src/app/api/admin/competitions/edital/parse/route.ts:processDocument:catch",
-        message: "Document AI processDocument failed",
+        location: "src/app/api/admin/competitions/edital/parse/route.ts:extractPdf:catch",
+        message: "Document AI extract failed",
         data: { messageHead: message.slice(0, 500) },
         timestamp: Date.now(),
       }),
     }).catch(() => {});
     // #endregion
-    if (/exceed the limit|INVALID_ARGUMENT|pages in non-imageless/i.test(message)) {
-      return NextResponse.json(
-        {
-          error:
-            "Este PDF tem muitas páginas para o processamento online. Tente um PDF com até 30 páginas ou divida o arquivo em partes menores.",
-        },
-        { status: 400 },
-      );
-    }
     return NextResponse.json({ error: `Falha ao ler o PDF (Document AI): ${message}`.slice(0, 900) }, { status: 502 });
   }
 
-  const pageCount = result.document?.pages?.length ?? null;
+  const pageCount = result.pageCount;
   // #region agent log
   fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
     method: "POST",
@@ -120,7 +105,7 @@ export async function POST(req: Request) {
       hypothesisId: "H-docai-process",
       location: "src/app/api/admin/competitions/edital/parse/route.ts:processDocument:ok",
       message: "Document AI ok",
-      data: { pageCount, textChars: (result.document?.text ?? "").length },
+      data: { pageCount, textChars: (result.document?.text ?? "").length, usedChunking: result.usedChunking },
       timestamp: Date.now(),
     }),
   }).catch(() => {});

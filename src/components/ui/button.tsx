@@ -3,31 +3,33 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.97] cursor-pointer",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.97] cursor-pointer rounded-2xl",
   {
     variants: {
       variant: {
         default:
-          "bg-purple-700 text-white rounded-xl shadow-[0_4px_16px_rgba(124,58,237,0.28)] hover:bg-purple-800 hover:shadow-[0_6px_22px_rgba(124,58,237,0.36)] hover:-translate-y-px",
+          "bg-gradient-to-b from-violet-600 to-violet-700 text-white shadow-[0_4px_18px_rgba(124,58,237,0.3)] hover:from-violet-500 hover:to-violet-700 hover:shadow-[0_8px_26px_rgba(124,58,237,0.38)] hover:-translate-y-px",
+        accent:
+          "bg-gradient-to-b from-orange-400 to-orange-600 text-white shadow-[0_4px_18px_rgba(234,88,12,0.32)] hover:from-orange-300 hover:to-orange-600 hover:shadow-[0_8px_26px_rgba(234,88,12,0.38)] hover:-translate-y-px",
         destructive:
-          "bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100",
+          "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
         outline:
-          "border border-gray-200 bg-white text-gray-600 rounded-xl hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900",
+          "border border-gray-200/90 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900",
         secondary:
-          "bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100",
+          "bg-violet-50 text-violet-800 border border-violet-200/90 hover:bg-violet-100",
         ghost:
-          "text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl",
-        link: "text-purple-700 underline-offset-4 hover:underline p-0 h-auto",
+          "text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-2xl",
+        link: "text-violet-700 underline-offset-4 hover:underline p-0 h-auto rounded-none shadow-none bg-transparent",
         success:
-          "bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100",
+          "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100",
       },
       size: {
-        default: "h-9 px-4 text-[13px]",
-        sm:      "h-7 px-3 text-[12px] rounded-lg",
+        default: "h-10 px-5 text-[13px]",
+        sm:      "h-8 px-3.5 text-[12px] rounded-xl",
         lg:      "h-11 px-6 text-[14px]",
-        xl:      "h-12 px-7 text-[15px]",
-        icon:    "h-8 w-8 rounded-xl",
-        "icon-sm": "h-7 w-7 rounded-lg",
+        xl:      "h-12 px-8 text-[15px]",
+        icon:    "h-10 w-10 rounded-2xl",
+        "icon-sm": "h-8 w-8 rounded-xl",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

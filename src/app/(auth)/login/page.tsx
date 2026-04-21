@@ -40,10 +40,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div
-      className="min-h-screen flex"
-      style={{ background: "#F8F7FF", fontFamily: "var(--font-sans)" }}
-    >
+    <div className="flex min-h-screen bg-[var(--bg-base)] font-[family-name:var(--font-sans)]">
       {/* ══════════════════════════════════════
           PAINEL ESQUERDO — BRANDING
       ══════════════════════════════════════ */}
@@ -51,7 +48,8 @@ export default function LoginPage() {
         className="hidden lg:flex flex-col justify-between relative overflow-hidden"
         style={{
           width: "46%",
-          background: "linear-gradient(145deg, #7C3AED 0%, #6D28D9 50%, #5B21B6 100%)",
+          background:
+            "linear-gradient(155deg, #4C1D95 0%, #5B21B6 35%, #6D28D9 65%, #7C3AED 100%)",
           padding: "48px 52px",
         }}
       >
@@ -59,7 +57,8 @@ export default function LoginPage() {
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: `radial-gradient(circle at 20% 80%, rgba(255,255,255,0.06) 0%, transparent 50%),
+            backgroundImage: `radial-gradient(circle at 18% 22%, rgba(251,146,60,0.22) 0%, transparent 42%),
+                              radial-gradient(circle at 20% 80%, rgba(255,255,255,0.06) 0%, transparent 50%),
                               radial-gradient(circle at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 50%)`,
           }}
         />
@@ -182,16 +181,16 @@ export default function LoginPage() {
                   style={{
                     width: 28,
                     height: 28,
-                    borderRadius: 8,
-                    background: "rgba(255,255,255,0.12)",
-                    border: "1px solid rgba(255,255,255,0.18)",
+                    borderRadius: 10,
+                    background: "rgba(251,146,60,0.2)",
+                    border: "1px solid rgba(251,146,60,0.35)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                   }}
                 >
-                  <f.icon style={{ width: 14, height: 14, color: "rgba(255,255,255,0.85)" }} />
+                  <f.icon style={{ width: 14, height: 14, color: "rgba(255,237,213,0.95)" }} />
                 </div>
                 <p style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", fontWeight: 500 }}>
                   {f.text}
@@ -204,7 +203,7 @@ export default function LoginPage() {
         {/* Rodapé do painel */}
         <div className="relative z-10">
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
-            © 2025 ÓRBITA Concursos. Todos os direitos reservados.
+            © 2026 ÓRBITA Concursos. Todos os direitos reservados.
           </p>
         </div>
       </div>
@@ -212,11 +211,8 @@ export default function LoginPage() {
       {/* ══════════════════════════════════════
           PAINEL DIREITO — FORMULÁRIO
       ══════════════════════════════════════ */}
-      <div
-        className="flex-1 flex flex-col items-center justify-center"
-        style={{ padding: "40px 24px", background: "#FFFFFF" }}
-      >
-        <div style={{ width: "100%", maxWidth: 400 }}>
+      <div className="flex flex-1 flex-col items-center justify-center bg-[var(--bg-surface)] px-5 py-10 sm:px-8">
+        <div className="w-full max-w-[420px] rounded-[var(--r-3xl)] border border-black/[0.06] bg-gradient-to-b from-white to-[#FAFAFD] p-8 shadow-[var(--shadow-card)] sm:p-10">
 
           {/* Logo mobile */}
           <div className="flex items-center gap-2.5 mb-8 lg:hidden">
@@ -360,26 +356,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              style={{
-                width: "100%",
-                padding: "13px 24px",
-                borderRadius: 12,
-                background: isSubmitting ? "#A78BFA" : "#7C3AED",
-                color: "#fff",
-                fontSize: 15,
-                fontWeight: 700,
-                letterSpacing: "-0.01em",
-                border: "none",
-                cursor: isSubmitting ? "not-allowed" : "pointer",
-                transition: "all 0.2s ease",
-                boxShadow: "0 4px 16px rgba(124,58,237,0.3)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                fontFamily: "var(--font-sans)",
-                marginTop: 4,
-              }}
+              className="btn btn-primary mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[15px] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? (
                 <>

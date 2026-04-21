@@ -54,14 +54,14 @@ export default async function StudentDashboardPage() {
     : null;
 
   return (
-    <div className="animate-fade-up w-full max-w-[1120px]">
-      <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+    <div className="orbit-stack w-full max-w-[1120px] animate-fade-up">
+      <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="orbit-kicker">{greeting}</p>
-          <h1 className="text-[clamp(1.8rem,3.1vw,2.35rem)] font-extrabold tracking-tight text-[#111827]">
+          <h1 className="text-[clamp(1.8rem,3.1vw,2.35rem)] font-extrabold tracking-tight text-[var(--text-primary)]">
             {firstName}
           </h1>
-          <p className="mt-2 text-[13.5px] font-medium text-[#8B92A0]">
+          <p className="mt-2 text-[13.5px] font-medium text-[var(--text-muted)]">
             {formatDate(now, "EEEE, dd 'de' MMMM")}
           </p>
         </div>

@@ -14,15 +14,10 @@ export default async function StudentLayout({ children }: { children: React.Reac
   });
 
   return (
-    <div className="min-h-screen" style={{ background: "#F8F7FF" }}>
-      <StudentSidebar
-        studentName={session.user.name}
-        planName={studentProfile?.plan?.name}
-      />
-      <main style={{ paddingLeft: "240px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 40px" }}>
-          {children}
-        </div>
+    <div className="orbit-shell min-h-screen">
+      <StudentSidebar studentName={session.user.name} planName={studentProfile?.plan?.name} />
+      <main className="student-main">
+        <div className="student-main-inner">{children}</div>
       </main>
     </div>
   );

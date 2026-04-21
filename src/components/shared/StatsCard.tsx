@@ -50,14 +50,8 @@ export function StatsCard({
 
       <div className="relative z-[1] flex items-start justify-between gap-4" style={{ marginTop: 6 }}>
         <div className="min-w-0 flex-1">
-          <p
-            className="text-[12px] font-semibold uppercase tracking-[0.07em] text-[#8B92A0]"
-          >
-            {title}
-          </p>
-          <p
-            className="mt-3 text-[clamp(1.85rem,3.2vw,2.65rem)] font-extrabold leading-none tracking-tight text-[#111827]"
-          >
+          <p className="text-[12px] font-semibold uppercase tracking-[0.07em] text-[var(--text-muted)]">{title}</p>
+          <p className="mt-3 text-[clamp(1.85rem,3.2vw,2.65rem)] font-extrabold leading-none tracking-tight text-[var(--text-primary)]">
             {numericValue != null ? <CountUp value={numericValue} /> : value}
           </p>
           {description && (

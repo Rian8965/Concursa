@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#7C3AED",
+  themeColor: "#3B0764",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -42,9 +42,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               fontFamily: "var(--font-sans)",
               fontSize: "13.5px",
               background: "#FFFFFF",
-              border: "1px solid #E5E7EB",
+              border: "1px solid rgba(17,24,39,0.08)",
+              borderLeft: "3px solid var(--accent)",
               color: "#111827",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+              boxShadow: "var(--shadow-md)",
+              borderRadius: "16px",
             },
           }}
         />
