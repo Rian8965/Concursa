@@ -255,17 +255,26 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
 
   return (
     <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="orbit-modal-panel orbit-modal-panel--sm" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
-            {isNew ? "Novo aluno" : `Gerenciar: ${student.name}`}
-          </h2>
-          <button type="button" className="orbit-modal-close" onClick={onClose} aria-label="Fechar">
-            ×
-          </button>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="student-modal-title"
+        className="orbit-modal-panel orbit-modal-panel--sm orbit-modal-panel--flex"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="orbit-modal-panel__head">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="student-modal-title" className="min-w-0 text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+              {isNew ? "Novo aluno" : `Gerenciar: ${student.name}`}
+            </h2>
+            <button type="button" className="orbit-modal-close shrink-0" onClick={onClose} aria-label="Fechar">
+              ×
+            </button>
+          </div>
         </div>
 
-        <div className="orbit-form-stack">
+        <div className="orbit-modal-panel__body">
+          <div className="orbit-form-stack">
           <div>
             <label className="orbit-form-label">Nome *</label>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome completo" />
@@ -338,9 +347,10 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
               {competitions.length === 0 && <p className="text-xs text-[var(--text-muted)]">Nenhum concurso disponível</p>}
             </div>
           </div>
+          </div>
         </div>
 
-        <div className="mt-6 flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+        <div className="orbit-modal-panel__foot">
           <button type="button" onClick={onClose} className="btn btn-ghost rounded-2xl">
             Cancelar
           </button>

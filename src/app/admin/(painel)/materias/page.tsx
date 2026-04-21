@@ -102,46 +102,60 @@ export default function AdminMateriasPage() {
 
       {editing && (
         <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && setEditing(null)}>
-          <div className="orbit-modal-panel orbit-modal-panel--sm" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
-                {(editing as Subject).id ? "Editar" : "Nova"} Matéria
-              </h2>
-              <button type="button" className="orbit-modal-close" onClick={() => setEditing(null)} aria-label="Fechar">
-                ×
-              </button>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="subject-modal-title"
+            className="orbit-modal-panel orbit-modal-panel--sm orbit-modal-panel--flex"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="orbit-modal-panel__head">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="subject-modal-title" className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+                  {(editing as Subject).id ? "Editar" : "Nova"} Matéria
+                </h2>
+                <button type="button" className="orbit-modal-close shrink-0" onClick={() => setEditing(null)} aria-label="Fechar">
+                  ×
+                </button>
+              </div>
             </div>
-            <div className="orbit-form-stack">
-              <div>
-                <label className="orbit-form-label">Nome *</label>
-                <input className="input" value={(editing as Subject).name ?? ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="orbit-form-label">Descrição</label>
-                <input className="input" value={(editing as Subject).description ?? ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
-              </div>
-              <div>
-                <label className="orbit-form-label">Cor</label>
-                <div className="flex items-center gap-2.5">
+            <div className="orbit-modal-panel__body">
+              <div className="orbit-form-stack">
+                <div>
+                  <label className="orbit-form-label">Nome *</label>
+                  <input className="input" value={(editing as Subject).name ?? ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="orbit-form-label">Descrição</label>
                   <input
-                    type="color"
-                    value={(editing as Subject).color ?? "#7C3AED"}
-                    onChange={(e) => setEditing({ ...editing, color: e.target.value })}
-                    className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-black/[0.08] bg-transparent p-0.5"
+                    className="input"
+                    value={(editing as Subject).description ?? ""}
+                    onChange={(e) => setEditing({ ...editing, description: e.target.value })}
                   />
-                  <input
-                    className="input min-w-0 flex-1 font-mono text-[13px]"
-                    value={(editing as Subject).color ?? "#7C3AED"}
-                    onChange={(e) => setEditing({ ...editing, color: e.target.value })}
-                  />
+                </div>
+                <div>
+                  <label className="orbit-form-label">Cor</label>
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="color"
+                      value={(editing as Subject).color ?? "#7C3AED"}
+                      onChange={(e) => setEditing({ ...editing, color: e.target.value })}
+                      className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-black/[0.08] bg-transparent p-0.5"
+                    />
+                    <input
+                      className="input min-w-0 flex-1 font-mono text-[13px]"
+                      value={(editing as Subject).color ?? "#7C3AED"}
+                      onChange={(e) => setEditing({ ...editing, color: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+            <div className="orbit-modal-panel__foot">
               <button type="button" onClick={() => setEditing(null)} className="btn btn-ghost rounded-2xl">
                 Cancelar
               </button>
-              <button type="button" onClick={save} disabled={saving} className={cn("btn btn-primary rounded-2xl", saving && "opacity-70")}>
+              <button type="button" onClick={save} disabled={saving} className={cn("btn btn-primary min-w-[110px] rounded-2xl", saving && "opacity-70")}>
                 {saving ? "Salvando..." : "Salvar"}
               </button>
             </div>

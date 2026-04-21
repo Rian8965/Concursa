@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Plus, Search, Edit2, Trash2, Trophy, Upload } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 interface Competition {
   id: string;
@@ -221,42 +220,44 @@ export default function AdminConcursosPage() {
         </div>
       )}
 
-      <AnimatePresence>
-        {showEdital && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-[rgba(15,23,42,0.48)] p-5 backdrop-blur-sm"
-            onMouseDown={(e) => e.target === e.currentTarget && setShowEdital(false)}
+      {showEdital && (
+        <div
+          className="orbit-modal-backdrop z-[120]"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && setShowEdital(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edital-modal-title"
+            className="orbit-modal-panel orbit-modal-panel--lg orbit-modal-panel--flex shadow-[0_18px_70px_rgba(0,0,0,0.22)]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ opacity: 0, y: 12, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.18 }}
-              className="orbit-modal-panel orbit-modal-panel--lg max-h-[min(90vh,880px)] p-6 shadow-[0_18px_70px_rgba(0,0,0,0.22)]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
+            <div className="orbit-modal-panel__head">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 pr-2">
                   <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[var(--text-muted)]">IA • Cadastro por edital</p>
-                  <h2 className="mt-1 text-[18px] font-extrabold tracking-tight text-[var(--text-primary)]">Subir edital (PDF)</h2>
-                  <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                  <h2 id="edital-modal-title" className="mt-1 text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+                    Subir edital (PDF)
+                  </h2>
+                  <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">
                     Envie o edital, revise os dados extraídos e confirme para criar o concurso automaticamente.
                   </p>
                 </div>
-                <button type="button" className="btn btn-ghost shrink-0" onClick={() => setShowEdital(false)}>
-                  Fechar
+                <button type="button" className="orbit-modal-close shrink-0" onClick={() => setShowEdital(false)} aria-label="Fechar">
+                  ×
                 </button>
               </div>
+            </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-black/[0.08] bg-[var(--bg-elevated)] p-4">
+            <div className="orbit-modal-panel__body">
+              <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+                <div className="min-w-0 rounded-2xl border border-black/[0.08] bg-[var(--bg-elevated)] p-4">
                   <p className="text-[12px] font-semibold text-[var(--text-primary)]">1) Enviar PDF</p>
                   <input
                     type="file"
                     accept="application/pdf"
-                    className="mt-2 block w-full text-[13px] file:mr-3 file:rounded-lg file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-violet-800"
+                    className="mt-2 block w-full min-w-0 text-[13px] file:mr-3 file:rounded-lg file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-violet-800"
                     onChange={(e) => setEditalFile(e.target.files?.[0] ?? null)}
                   />
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -278,23 +279,23 @@ export default function AdminConcursosPage() {
                   <p className="mt-3 text-[12px] text-[var(--text-muted)]">Dica: PDFs escaneados podem levar mais tempo.</p>
                 </div>
 
-                <div className="rounded-2xl border border-black/[0.08] bg-[var(--bg-surface)] p-4">
+                <div className="min-w-0 rounded-2xl border border-black/[0.08] bg-[var(--bg-surface)] p-4">
                   <p className="text-[12px] font-semibold text-[var(--text-primary)]">2) Revisar dados</p>
                   {!draft ? (
                     <p className="mt-2 text-[13px] text-[var(--text-muted)]">Depois de analisar, o rascunho aparecerá aqui.</p>
                   ) : (
-                    <div className="mt-3 grid gap-3">
+                    <div className="orbit-form-stack mt-3">
                       <div>
-                        <label className="orbit-form-label text-[12px]">Nome *</label>
+                        <label className="orbit-form-label">Nome *</label>
                         <input
                           className="input"
                           value={(draft.name as string) ?? ""}
                           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="orbit-form-label text-[12px]">Banca (sigla)</label>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <label className="orbit-form-label">Banca (sigla)</label>
                           <input
                             className="input"
                             value={((draft.examBoard as { acronym?: string } | undefined)?.acronym as string) ?? ""}
@@ -306,8 +307,8 @@ export default function AdminConcursosPage() {
                             }
                           />
                         </div>
-                        <div>
-                          <label className="orbit-form-label text-[12px]">Organização</label>
+                        <div className="min-w-0">
+                          <label className="orbit-form-label">Organização</label>
                           <input
                             className="input"
                             value={(draft.organization as string) ?? ""}
@@ -315,9 +316,9 @@ export default function AdminConcursosPage() {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="orbit-form-label text-[12px]">Cidade (principal) *</label>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <label className="orbit-form-label">Cidade (principal) *</label>
                           <input
                             className="input"
                             value={((draft.cities as { name?: string; state?: string }[] | undefined)?.[0]?.name as string) ?? ""}
@@ -328,8 +329,8 @@ export default function AdminConcursosPage() {
                             }}
                           />
                         </div>
-                        <div>
-                          <label className="orbit-form-label text-[12px]">UF *</label>
+                        <div className="min-w-0">
+                          <label className="orbit-form-label">UF *</label>
                           <input
                             className="input"
                             value={((draft.cities as { name?: string; state?: string }[] | undefined)?.[0]?.state as string) ?? ""}
@@ -342,7 +343,7 @@ export default function AdminConcursosPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="orbit-form-label text-[12px]">Data da prova (YYYY-MM-DD)</label>
+                        <label className="orbit-form-label">Data da prova (YYYY-MM-DD)</label>
                         <input
                           className="input"
                           value={(draft.examDate as string) ?? ""}
@@ -351,27 +352,41 @@ export default function AdminConcursosPage() {
                         />
                       </div>
                       <div>
-                        <label className="orbit-form-label text-[12px]">Descrição / notas</label>
+                        <label className="orbit-form-label">Descrição / notas</label>
                         <textarea
-                          className="input"
+                          className="input min-h-[88px] resize-y"
                           rows={3}
                           value={(draft.description as string) ?? ""}
                           onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                         />
                       </div>
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <button type="button" className="btn btn-primary rounded-2xl" disabled={confirming} onClick={confirmCreate}>
-                          {confirming ? "Criando..." : "Confirmar e criar concurso"}
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+
+            {draft && (
+              <div className="orbit-modal-panel__foot">
+                <button
+                  type="button"
+                  className="btn btn-ghost rounded-2xl"
+                  disabled={confirming}
+                  onClick={() => {
+                    setDraft(null);
+                    setPdfBase64(null);
+                  }}
+                >
+                  Limpar rascunho
+                </button>
+                <button type="button" className="btn btn-primary min-w-[160px] rounded-2xl" disabled={confirming} onClick={confirmCreate}>
+                  {confirming ? "Criando..." : "Confirmar e criar concurso"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

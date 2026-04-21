@@ -509,15 +509,26 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
 
   return (
     <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="orbit-modal-panel orbit-modal-panel--md max-h-[min(90vh,720px)]" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">{id ? "Editar questão" : "Nova questão"}</h2>
-          <button type="button" className="orbit-modal-close" onClick={onClose} aria-label="Fechar">
-            ×
-          </button>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="question-modal-title"
+        className="orbit-modal-panel orbit-modal-panel--md orbit-modal-panel--flex"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="orbit-modal-panel__head">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="question-modal-title" className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+              {id ? "Editar questão" : "Nova questão"}
+            </h2>
+            <button type="button" className="orbit-modal-close" onClick={onClose} aria-label="Fechar">
+              ×
+            </button>
+          </div>
         </div>
 
-        <div className="orbit-form-stack">
+        <div className="orbit-modal-panel__body">
+          <div className="orbit-form-stack">
           <div>
             <label className="orbit-form-label">Enunciado *</label>
             <textarea
@@ -687,9 +698,10 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
             <label className="orbit-form-label">Ano</label>
             <input className="input w-36" type="number" placeholder="Ex: 2023" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
           </div>
+          </div>
         </div>
 
-        <div className="mt-6 flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+        <div className="orbit-modal-panel__foot">
           <button type="button" onClick={onClose} className="btn btn-ghost rounded-2xl">
             Cancelar
           </button>

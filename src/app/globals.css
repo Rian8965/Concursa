@@ -909,6 +909,43 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 880px;
 }
 
+/**
+ * Modal em coluna: cabeçalho e rodapé fixos, corpo com scroll (evita cortes em formulários longos).
+ * Usar em conjunto com .orbit-modal-panel + tamanho (--sm/--md/--lg).
+ */
+.orbit-modal-panel.orbit-modal-panel--flex {
+  display: flex;
+  flex-direction: column;
+  max-height: min(92dvh, 900px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.orbit-modal-panel__head {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+  padding: clamp(22px, 3vw, 28px);
+  padding-bottom: 18px;
+}
+
+.orbit-modal-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: clamp(18px, 2.5vw, 24px) clamp(22px, 3vw, 28px);
+}
+
+.orbit-modal-panel__foot {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid rgba(17, 24, 39, 0.06);
+  padding: 16px clamp(22px, 3vw, 28px) clamp(22px, 3vw, 28px);
+}
+
 .orbit-form-label {
   display: block;
   margin-bottom: 6px;
