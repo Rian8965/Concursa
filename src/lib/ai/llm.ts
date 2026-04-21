@@ -34,7 +34,26 @@ async function listGeminiModels(apiKey: string): Promise<string[]> {
     .filter(Boolean)
     // a API costuma devolver "models/<id>", a gente quer só o id
     .map((name) => (name.startsWith("models/") ? name.slice("models/".length) : name));
-  return Array.from(new Set(eligible));
+  // Filtra modelos conhecidos por quebrarem/serem descontinuados para alguns usuários.
+  const filtered = eligible.filter((m) => !m.includes("lite"));
+
+  // Ordena por preferência (tenta primeiro os mais prováveis de existir).
+  const preferredPrefixes = [
+    "gemini-2.0-flash",
+    "gemini-2.0-pro",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+  ];
+  filtered.sort((a, b) => {
+    const ia = preferredPrefixes.findIndex((p) => a.startsWith(p));
+    const ib = preferredPrefixes.findIndex((p) => b.startsWith(p));
+    const pa = ia === -1 ? 999 : ia;
+    const pb = ib === -1 ? 999 : ib;
+    if (pa !== pb) return pa - pb;
+    return a.localeCompare(b);
+  });
+
+  return Array.from(new Set(filtered));
 }
 
 export async function runLlmJson(system: string, user: string): Promise<LlmResult> {
@@ -42,9 +61,10 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
 
   if (provider === "gemini") {
     const apiKey = requiredEnv("GEMINI_API_KEY");
-    const requestedModel = (process.env.GEMINI_MODEL ?? "gemini-1.5-flash-latest").trim();
+    const requestedModel = (process.env.GEMINI_MODEL ?? "gemini-2.0-flash").trim();
     const candidates = [
       requestedModel,
+      "gemini-2.0-flash",
       "gemini-1.5-pro-latest",
       "gemini-1.5-flash-latest",
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
