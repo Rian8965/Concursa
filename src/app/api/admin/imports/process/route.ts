@@ -138,8 +138,8 @@ export async function POST(req: NextRequest) {
 
       // Document AI
       const projectId = process.env.DOC_AI_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? "concursa-docai";
-      const location = requiredEnv("DOC_AI_LOCATION");
-      const processorId = requiredEnv("DOC_AI_PROCESSOR_ID");
+      const location = requiredEnv("DOC_AI_LOCATION").trim().toLowerCase();
+      const processorId = requiredEnv("DOC_AI_PROCESSOR_ID").trim();
 
       const buf = Buffer.from(await provaFile.arrayBuffer());
 
@@ -148,10 +148,54 @@ export async function POST(req: NextRequest) {
       });
 
       const name = client.processorPath(projectId, location, processorId);
-      const [docaiRes] = await client.processDocument({
-        name,
-        rawDocument: { content: buf.toString("base64"), mimeType: "application/pdf" },
-      });
+
+      let docaiRes: any;
+      try {
+        const [res] = await client.processDocument({
+          name,
+          rawDocument: { content: buf.toString("base64"), mimeType: "application/pdf" },
+        });
+        docaiRes = res;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        const userFacing =
+          message.includes("PERMISSION_DENIED")
+            ? "Permissão negada no Document AI (produção). Você precisa dar acesso ao processor para a service account do Firebase App Hosting no projeto concursa-docai."
+            : message.includes("NOT_FOUND") || message.includes("not found")
+              ? "Processor do Document AI não encontrado. Confira DOC_AI_LOCATION (ex: us) e DOC_AI_PROCESSOR_ID no Firebase App Hosting."
+              : `Falha no Document AI: ${message}`.slice(0, 900);
+
+        // #region agent log
+        fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+          body: JSON.stringify({
+            sessionId: "03dbee",
+            runId: "pre-fix",
+            hypothesisId: "H-docai-prod-permission",
+            location: "src/app/api/admin/imports/process/route.ts:docai:catch",
+            message: "docai processDocument failed",
+            data: {
+              projectId,
+              location,
+              processorIdPrefix: processorId.slice(0, 6),
+              errorHasPermissionDenied: message.includes("PERMISSION_DENIED"),
+              errorHasNotFound: message.toLowerCase().includes("not found"),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+
+        await prisma.pDFImport.update({
+          where: { id: pdfImport.id },
+          data: {
+            status: "FAILED",
+            processingError: userFacing,
+          },
+        });
+        return NextResponse.json({ error: userFacing }, { status: 502 });
+      }
 
       const fullText = docaiRes.document?.text ?? "";
       const doc = docaiRes.document as unknown as {
