@@ -61,7 +61,7 @@ export default function AdminAlunosPage() {
   }
 
   return (
-    <div className="orbit-stack max-w-5xl animate-fade-up">
+    <div className="orbit-stack mx-auto w-full max-w-5xl animate-fade-up">
       <PageHeader eyebrow="Alunos" title="Alunos" description={`${total} aluno${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}>
         <button
           type="button"
@@ -96,13 +96,23 @@ export default function AdminAlunosPage() {
       ) : (
         <div className="orbit-panel overflow-hidden p-0">
           <div className="orbit-table-wrap border-0 shadow-none">
-            <table className="w-full border-collapse">
+            <table className="orbit-admin-table">
+              <colgroup>
+                <col className="w-[30%]" />
+                <col className="w-[20%]" />
+                <col className="w-[10%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+              </colgroup>
               <thead>
                 <tr>
                   {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
+                        h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"
+                      }`}
                     >
                       {h}
                     </th>
@@ -112,20 +122,22 @@ export default function AdminAlunosPage() {
               <tbody>
                 {students.map((s) => (
                   <tr key={s.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                    <td className="px-4 py-3.5">
-                      <p className="text-[13.5px] font-semibold text-[var(--text-primary)]">{s.name}</p>
-                      <p className="text-xs text-[var(--text-muted)]">{s.email}</p>
+                    <td className="min-w-0 px-4 py-3">
+                      <p className="truncate text-[13.5px] font-semibold text-[var(--text-primary)]">{s.name}</p>
+                      <p className="truncate text-xs text-[var(--text-muted)]">{s.email}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-[13px] text-[var(--text-secondary)]">
-                      {s.studentProfile?.plan?.name ?? <span className="text-[var(--text-muted)]">—</span>}
+                    <td className="min-w-0 px-4 py-3">
+                      <p className="truncate text-[13px] text-[var(--text-secondary)]">
+                        {s.studentProfile?.plan?.name ?? <span className="text-[var(--text-muted)]">—</span>}
+                      </p>
                     </td>
-                    <td className="px-4 py-3.5 text-[13px] font-bold text-[var(--text-secondary)]">
+                    <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-[var(--text-secondary)]">
                       {s.studentProfile?._count?.studentAnswers ?? 0}
                     </td>
-                    <td className="px-4 py-3.5 text-xs text-[var(--text-secondary)]">
+                    <td className="px-4 py-3 text-right text-xs tabular-nums text-[var(--text-secondary)]">
                       {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3">
                       <span
                         className={cn(
                           "inline-flex rounded-lg px-2.5 py-0.5 text-[11px] font-bold ring-1",
@@ -135,9 +147,13 @@ export default function AdminAlunosPage() {
                         {s.isActive ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={() => setSelected(s)} className="btn btn-ghost h-8 rounded-xl px-3 text-xs font-semibold">
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelected(s)}
+                          className="btn btn-ghost h-9 min-w-[5.5rem] rounded-xl px-3 text-xs font-semibold"
+                        >
                           Gerenciar
                         </button>
                         <button
@@ -145,7 +161,7 @@ export default function AdminAlunosPage() {
                           onClick={() => toggleActive(s.id, s.isActive)}
                           className={cn(
                             "orbit-icon-btn",
-                            s.isActive ? "orbit-icon-btn--danger" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                            s.isActive ? "orbit-icon-btn--danger" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
                           )}
                           title={s.isActive ? "Desativar" : "Ativar"}
                         >

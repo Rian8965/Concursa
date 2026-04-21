@@ -111,14 +111,14 @@ export default function AdminConcursosPage() {
   }
 
   return (
-    <div className="orbit-stack max-w-5xl animate-fade-up">
+    <div className="orbit-stack mx-auto w-full max-w-5xl animate-fade-up">
       <PageHeader
         eyebrow="Estrutura"
         title="Concursos"
         description={`${total} concurso${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setShowEdital(true)} className="btn btn-ghost transition-transform hover:-translate-y-px">
+          <button type="button" onClick={() => setShowEdital(true)} className="btn btn-ghost">
             <Upload className="h-3.5 w-3.5" strokeWidth={2} />
             Subir edital
           </button>
@@ -156,13 +156,23 @@ export default function AdminConcursosPage() {
       ) : (
         <div className="orbit-panel overflow-hidden p-0">
           <div className="orbit-table-wrap border-0 shadow-none">
-            <table className="w-full border-collapse">
+            <table className="orbit-admin-table">
+              <colgroup>
+                <col className="w-[34%]" />
+                <col className="w-[26%]" />
+                <col className="w-[12%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead>
                 <tr>
                   {["Concurso", "Localidade / Banca", "Status", "Questões", "Alunos", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className="whitespace-nowrap px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
+                        h === "Questões" || h === "Alunos" || h === "Ações" ? "text-right" : "text-left"
+                      }`}
                     >
                       {h}
                     </th>
@@ -174,29 +184,31 @@ export default function AdminConcursosPage() {
                   const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
                   return (
                     <tr key={c.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                      <td className="px-4 py-3.5">
-                        <p className="text-[13.5px] font-semibold text-[var(--text-primary)]">{c.name}</p>
+                      <td className="px-4 py-3">
+                        <p className="line-clamp-2 text-[13.5px] font-semibold leading-snug text-[var(--text-primary)]">{c.name}</p>
                         {c.examDate && (
-                          <p className="mt-0.5 text-[11.5px] text-[var(--text-muted)]">
+                          <p className="mt-1 text-[11.5px] text-[var(--text-muted)]">
                             {new Date(c.examDate).toLocaleDateString("pt-BR")}
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-3.5">
-                        <p className="text-[13px] text-[var(--text-secondary)]">
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] leading-snug text-[var(--text-secondary)]">
                           {c.city.name} — {c.city.state}
                         </p>
-                        {c.examBoard && (
-                          <p className="text-[11.5px] font-semibold text-violet-700">{c.examBoard.acronym}</p>
-                        )}
+                        {c.examBoard && <p className="mt-0.5 text-[11.5px] font-semibold text-violet-700">{c.examBoard.acronym}</p>}
                       </td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3">
                         <Badge variant={s.variant}>{s.label}</Badge>
                       </td>
-                      <td className="px-4 py-3.5 text-[13px] font-bold text-[var(--text-secondary)]">{c._count.questions}</td>
-                      <td className="px-4 py-3.5 text-[13px] font-bold text-[var(--text-secondary)]">{c._count.students}</td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex gap-1.5">
+                      <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-[var(--text-secondary)]">
+                        {c._count.questions}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-[var(--text-secondary)]">
+                        {c._count.students}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           <Link href={`/admin/concursos/${c.id}`} className="orbit-icon-btn" title="Editar">
                             <Edit2 className="h-3 w-3" />
                           </Link>

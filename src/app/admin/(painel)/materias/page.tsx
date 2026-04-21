@@ -47,7 +47,7 @@ export default function AdminMateriasPage() {
   }
 
   return (
-    <div className="orbit-stack max-w-3xl animate-fade-up">
+    <div className="orbit-stack mx-auto w-full max-w-5xl animate-fade-up">
       <PageHeader eyebrow="Conteúdo" title="Matérias" description={`${items.length} matérias cadastradas`}>
         <button type="button" onClick={() => setEditing({ name: "", description: "", color: "#7C3AED" })} className="btn btn-primary inline-flex items-center gap-2 rounded-2xl">
           <Plus className="h-3.5 w-3.5" />
@@ -62,13 +62,21 @@ export default function AdminMateriasPage() {
           </div>
         ) : (
           <div className="orbit-table-wrap border-0 shadow-none">
-            <table className="w-full border-collapse">
+            <table className="orbit-admin-table">
+              <colgroup>
+                <col className="w-[26%]" />
+                <col className="w-[46%]" />
+                <col className="w-[10%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead>
                 <tr>
                   {["Matéria", "Descrição", "Cor", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className="whitespace-nowrap px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
+                        h === "Cor" ? "text-center" : h === "Ações" ? "text-right" : "text-left"
+                      }`}
                     >
                       {h}
                     </th>
@@ -78,16 +86,24 @@ export default function AdminMateriasPage() {
               <tbody>
                 {items.map((s) => (
                   <tr key={s.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                    <td className="px-4 py-3.5 text-[13px] font-semibold text-[var(--text-primary)]">{s.name}</td>
-                    <td className="px-4 py-3.5 text-[13px] text-[var(--text-secondary)]">{s.description ?? "—"}</td>
-                    <td className="px-4 py-3.5">
-                      <div
-                        className="h-6 w-6 rounded-md border border-black/[0.08] shadow-sm"
-                        style={{ background: s.color ?? "#E5E7EB" }}
-                        title={s.color ?? undefined}
-                      />
+                    <td className="px-4 py-3">
+                      <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-[var(--text-primary)]">{s.name}</p>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="min-w-0 px-4 py-3">
+                      <p className="truncate text-[13px] text-[var(--text-secondary)]" title={s.description?.trim() ? s.description : undefined}>
+                        {s.description?.trim() ? s.description : "—"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="inline-flex h-8 w-8 items-center justify-center">
+                        <div
+                          className="h-6 w-6 rounded-md border border-black/[0.08] shadow-sm"
+                          style={{ background: s.color ?? "#E5E7EB" }}
+                          title={s.color ?? undefined}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
                       <button type="button" onClick={() => setEditing(s)} className="orbit-icon-btn" title="Editar">
                         <Edit2 className="h-3 w-3" />
                       </button>

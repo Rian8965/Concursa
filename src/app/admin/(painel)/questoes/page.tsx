@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Plus, Search, Edit2, Trash2, BookOpen, Filter } from "lucide-react";
@@ -112,6 +112,7 @@ export default function AdminQuestoesPage() {
   const emptyFilters = { examBoardId: "", year: "", cityId: "", jobRoleId: "", subjectId: "" };
 
   return (
+    <>
     <div className="orbit-stack max-w-5xl animate-fade-up">
       <PageHeader
         eyebrow="Conteúdo"
@@ -359,6 +360,7 @@ export default function AdminQuestoesPage() {
         </div>
       )}
 
+    </div>
       {showForm && (
         <QuestionModal
           id={editingId}
@@ -373,7 +375,7 @@ export default function AdminQuestoesPage() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -392,6 +394,7 @@ const emptyAlternatives = () => [
 ];
 
 function QuestionModal({ id, onClose, onSaved }: ModalProps) {
+  const backdropRef = useRef<HTMLDivElement>(null);
   const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -460,6 +463,49 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
       });
   }, [id]);
 
+  // #region agent log
+  useLayoutEffect(() => {
+    const el = backdropRef.current;
+    if (!el || typeof window === "undefined") return;
+    const r = el.getBoundingClientRect();
+    const panel = el.querySelector(".orbit-modal-panel");
+    const pr = panel?.getBoundingClientRect();
+    const head = el.querySelector("#question-modal-title");
+    const hr = head?.getBoundingClientRect();
+    let transformAncestors = 0;
+    let p: HTMLElement | null = el.parentElement;
+    const chain: { d: number; cls: string; transform: string }[] = [];
+    for (let d = 0; p && d < 14; d++) {
+      const cs = getComputedStyle(p);
+      const hasT = cs.transform !== "none";
+      if (hasT) transformAncestors++;
+      chain.push({ d, cls: String(p.className).slice(0, 100), transform: hasT ? "has-transform" : "none" });
+      p = p.parentElement;
+    }
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+      body: JSON.stringify({
+        sessionId: "03dbee",
+        runId: "post-fix",
+        hypothesisId: "H1",
+        location: "questoes/page.tsx:QuestionModal",
+        message: "modal layout: fixed ancestor + rects",
+        data: {
+          backdropTop: r.top,
+          backdropBottom: r.bottom,
+          panelTop: pr?.top,
+          titleTop: hr?.top,
+          viewportH: window.innerHeight,
+          transformAncestors,
+          chainFirst4: chain.slice(0, 4),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [id]);
+  // #endregion
+
   async function save() {
     setSaving(true);
     const alts = form.alternatives.filter((a) => a.content.trim());
@@ -508,7 +554,7 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
   }
 
   return (
-    <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div ref={backdropRef} className="orbit-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         role="dialog"
         aria-modal="true"

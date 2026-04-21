@@ -600,6 +600,20 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-muted);
 }
 
+/* Tabelas admin: colunas estáveis, linhas alinhadas, leitura uniforme */
+.orbit-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.orbit-admin-table th,
+.orbit-admin-table td {
+  vertical-align: middle;
+}
+.orbit-admin-table tbody tr {
+  min-height: 52px;
+}
+
 .orbit-alert {
   display: flex;
   align-items: flex-start;
@@ -877,13 +891,22 @@ h1, h2, h3, h4, h5, h6 {
 .orbit-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: clamp(16px, 4vw, 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(15, 23, 42, 0.48);
   backdrop-filter: blur(5px);
+}
+
+@supports (align-items: safe center) {
+  .orbit-modal-backdrop {
+    align-items: safe center;
+    justify-content: safe center;
+  }
 }
 
 .orbit-modal-panel {

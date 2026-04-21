@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils/cn";
 
 export function DeleteImportButton({ importId, filename }: { importId: string; filename: string }) {
   const router = useRouter();
@@ -45,20 +46,9 @@ export function DeleteImportButton({ importId, filename }: { importId: string; f
       title="Excluir importação"
       disabled={loading}
       onClick={handleDelete}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 6,
-        borderRadius: 8,
-        border: "1px solid #FECACA",
-        background: "#FEF2F2",
-        color: "#DC2626",
-        cursor: loading ? "wait" : "pointer",
-        opacity: loading ? 0.7 : 1,
-      }}
+      className={cn("orbit-icon-btn orbit-icon-btn--danger", loading && "cursor-wait opacity-70")}
     >
-      <Trash2 style={{ width: 14, height: 14 }} />
+      <Trash2 className="h-3.5 w-3.5" />
     </button>
   );
 }
