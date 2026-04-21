@@ -146,6 +146,10 @@ export default function RevisaoImportacaoPage() {
       // #region agent log
       fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-review-ui',location:'revisao/page.tsx:loaded',message:'review page loaded import data',data:{importId:id,questionsCount:impData.import.importedQuestions?.length ?? 0,assetsCount:impData.import.importAssets?.length ?? 0,pdfAvailable:Boolean(impData.import.storedPdfPath)},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
+    }).catch((e) => {
+      console.error("[review] failed to load initial data", e);
+      toast.error("Falha ao carregar dados da revisão (ver logs).");
+      setLoading(false);
     });
   }, [id]);
 
