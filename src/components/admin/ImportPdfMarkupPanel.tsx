@@ -37,8 +37,9 @@ type Props = {
   onChanged: () => Promise<void> | void;
   selectedQuestionId?: string;
   onSelectedQuestionIdChange?: (id: string) => void;
-  uiMode?: "review" | "linker";
+  uiMode?: "review" | "linker" | "selector";
   linkType?: PdfLinkType;
+  onBoxSelected?: (sel: { page: number; bbox: { x: number; y: number; w: number; h: number } }) => Promise<void> | void;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -59,6 +60,7 @@ export function ImportPdfMarkupPanel({
   onSelectedQuestionIdChange,
   uiMode = "review",
   linkType = "TEXT",
+  onBoxSelected,
 }: Props) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -84,6 +86,7 @@ export function ImportPdfMarkupPanel({
 
   const [wrapWidth, setWrapWidth] = useState(720);
   const [zoom, setZoom] = useState(1);
+  const [showAllRegions, setShowAllRegions] = useState(false);
   useEffect(() => {
     const el = pageWrapRef.current;
     if (!el) return;
@@ -129,6 +132,16 @@ export function ImportPdfMarkupPanel({
     }
     return ids;
   }, [assets, effectiveTargetQ]);
+
+  const displayedPageAssets = useMemo(() => {
+    if (uiMode === "linker" || uiMode === "selector") {
+      // Durante vínculo/seleção, NÃO poluir o PDF com regiões de outras questões.
+      return pageAssets.filter((a) => selectedQuestionAssetIds.has(a.id));
+    }
+    if (showAllRegions) return pageAssets;
+    // Por padrão no review: mostrar apenas regiões da questão atual (isola highlights por questão).
+    return pageAssets.filter((a) => selectedQuestionAssetIds.has(a.id));
+  }, [pageAssets, selectedQuestionAssetIds, showAllRegions, uiMode]);
 
   const startDraw = useCallback(
     (e: React.MouseEvent) => {
@@ -271,6 +284,13 @@ export function ImportPdfMarkupPanel({
 
       setBusy(true);
       try {
+        if (uiMode === "selector" && onBoxSelected) {
+          // #region agent log
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-alt-identify',location:'ImportPdfMarkupPanel.tsx:endDraw',message:'selector mode box selected',data:{importId,page,bbox:box,targetQuestionId:effectiveTargetQ},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          await onBoxSelected({ page, bbox: box });
+          return;
+        }
         // #region agent log
         fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-link-flow',location:'ImportPdfMarkupPanel.tsx:endDraw',message:'creating asset+link from selection',data:{importId,page,mode,targetQuestionId:effectiveTargetQ,bbox:{x:box.x,y:box.y,w:box.w,h:box.h}},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
@@ -315,7 +335,7 @@ export function ImportPdfMarkupPanel({
         setBusy(false);
       }
     },
-    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged],
+    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged, onBoxSelected],
   );
 
   const patchAssetText = async (assetId: string, extractedText: string) => {
@@ -459,10 +479,20 @@ export function ImportPdfMarkupPanel({
               >
                 <ImageIcon className="h-3.5 w-3.5" /> Figura
               </button>
+              <button
+                type="button"
+                className={`btn ${showAllRegions ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
+                onClick={() => setShowAllRegions((v) => !v)}
+                title="Mostrar regiões de todas as questões"
+              >
+                {showAllRegions ? "Todas" : "Só esta"}
+              </button>
               {mode && <span className="text-[12px] font-semibold text-[#7C3AED]">Desenhe um retângulo na página</span>}
             </>
           ) : (
-            <span className="text-[12px] font-semibold text-[#7C3AED]">Selecione a área no PDF ({computedLabel.toLowerCase()})</span>
+            <span className="text-[12px] font-semibold text-[#7C3AED]">
+              {uiMode === "selector" ? "Selecione a área no PDF" : `Selecione a área no PDF (${computedLabel.toLowerCase()})`}
+            </span>
           )}
         </div>
 
@@ -540,7 +570,7 @@ export function ImportPdfMarkupPanel({
                   setResizingAsset(null);
                 }}
               >
-                {pageAssets.map((a) => (
+                {displayedPageAssets.map((a) => (
                   <div
                     key={a.id}
                     title={a.kind}
@@ -550,13 +580,8 @@ export function ImportPdfMarkupPanel({
                       top: `${a.bboxY * 100}%`,
                       width: `${a.bboxW * 100}%`,
                       height: `${a.bboxH * 100}%`,
-                      borderColor: selectedAssetId === a.id ? "#111827" : (a.kind === "IMAGE" ? "#D97706" : "#7C3AED"),
-                      background:
-                        selectedAssetId === a.id
-                          ? "rgba(17,24,39,0.10)"
-                          : selectedQuestionAssetIds.has(a.id)
-                            ? "rgba(124,58,237,0.14)"
-                            : (a.kind === "IMAGE" ? "rgba(217,119,6,0.12)" : "rgba(124,58,237,0.10)"),
+                      borderColor: selectedAssetId === a.id ? "#111827" : (a.kind === "IMAGE" ? "#B45309" : "#6D28D9"),
+                      background: "rgba(109,40,217,0.06)",
                     }}
                     onMouseDown={(e) => {
                       if (!overlayRef.current) return;
@@ -632,16 +657,18 @@ export function ImportPdfMarkupPanel({
       {uiMode === "review" && (
       <div className="flex flex-col gap-4">
         <div className="rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-[13px] font-bold text-[#111827]">Regiões marcadas</h3>
+          <h3 className="mb-2 text-[13px] font-bold text-[#111827]">Vínculos da questão atual</h3>
           <p className="mb-3 text-[11px] leading-relaxed text-[#6B7280]">
-            Cada região pode ser <strong>exclusiva</strong> ou <strong>compartilhada</strong> (escopo). Para o mesmo
-            bloco servir a várias questões, marque como compartilhado e adicione vínculos extras abaixo.
+            Aqui aparecem apenas regiões vinculadas à questão selecionada. Use &quot;Todas as regiões&quot; para
+            gerenciar regiões compartilhadas.
           </p>
           <div className="max-h-[280px] space-y-2 overflow-y-auto">
-            {assets.length === 0 ? (
+            {assets.filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === effectiveTargetQ)).length === 0 ? (
               <p className="text-[12px] text-[#9CA3AF]">Nenhuma região ainda.</p>
             ) : (
-              assets.map((a) => (
+              assets
+                .filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === effectiveTargetQ))
+                .map((a) => (
                 <div key={a.id} className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFC] p-2.5 text-[12px]">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -701,6 +728,7 @@ export function ImportPdfMarkupPanel({
                   )}
                   <div className="mt-2 space-y-1 border-t border-[#E5E7EB] pt-2">
                     {a.questionLinks.map((l) => (
+                      l.importedQuestionId === effectiveTargetQ ? (
                       <div key={l.id} className="flex items-center justify-between gap-1 text-[11px]">
                         <span>
                           {l.role === "FIGURE" ? "Figura" : "Texto-base"} →{" "}
@@ -710,6 +738,7 @@ export function ImportPdfMarkupPanel({
                           <Unlink className="h-3 w-3" />
                         </button>
                       </div>
+                      ) : null
                     ))}
                   </div>
                 </div>

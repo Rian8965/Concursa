@@ -5,10 +5,11 @@ import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy, Link2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy } from "lucide-react";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportLinkDrawer } from "@/components/admin/ImportLinkDrawer";
 import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
+import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdentifyAlternativesDrawer";
 
 const ImportPdfMarkupPanel = dynamic(
   () => import("@/components/admin/ImportPdfMarkupPanel").then((m) => m.ImportPdfMarkupPanel),
@@ -108,6 +109,7 @@ export default function RevisaoImportacaoPage() {
   const rightRef = useRef<HTMLDivElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerLinkType, setDrawerLinkType] = useState<PdfLinkType>("TEXT");
+  const [altDrawerOpen, setAltDrawerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(60);
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -205,6 +207,36 @@ export default function RevisaoImportacaoPage() {
       return;
     }
     toast.success("Questão salva");
+    await refreshImport();
+  }
+
+  async function applyAlternativesFromAi(questionId: string, mode: "replace" | "merge", alternatives: { letter: string; content: string }[]) {
+    const cur = drafts[questionId];
+    if (!cur) return;
+    let nextAlts = alternatives;
+    if (mode === "merge") {
+      const seen = new Set<string>();
+      const merged: { letter: string; content: string }[] = [];
+      for (const a of [...(cur.alternatives ?? []), ...(alternatives ?? [])]) {
+        const l = String(a.letter ?? "").trim().toUpperCase().slice(0, 1);
+        const c = String(a.content ?? "").trim();
+        if (!l || !c) continue;
+        const key = `${l}:${c}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push({ letter: l, content: c });
+      }
+      merged.sort((a, b) => a.letter.localeCompare(b.letter));
+      nextAlts = merged;
+    }
+
+    setDrafts((prev) => ({ ...prev, [questionId]: { ...cur, alternatives: nextAlts } }));
+    await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alternatives: nextAlts }),
+    });
+    toast.success("Alternativas aplicadas");
     await refreshImport();
   }
 
@@ -710,17 +742,6 @@ export default function RevisaoImportacaoPage() {
                             setDrawerOpen(true);
                           }}
                         >
-                          <Link2 className="h-4 w-4" /> Vincular imagem/texto
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost !h-[34px] !text-[12px]"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setDrawerLinkType("TEXT");
-                            setDrawerOpen(true);
-                          }}
-                        >
                           Vincular texto
                         </button>
                         <button
@@ -733,6 +754,16 @@ export default function RevisaoImportacaoPage() {
                           }}
                         >
                           Vincular imagem
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost !h-[34px] !text-[12px]"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setAltDrawerOpen(true);
+                          }}
+                        >
+                          Identificar alternativas
                         </button>
                       </div>
 
@@ -838,6 +869,19 @@ export default function RevisaoImportacaoPage() {
         linkType={drawerLinkType}
         onLinkTypeChange={setDrawerLinkType}
         onChanged={refreshImport}
+      />
+
+      <ImportIdentifyAlternativesDrawer
+        open={altDrawerOpen}
+        onClose={() => setAltDrawerOpen(false)}
+        importId={id}
+        pdfAvailable={Boolean(imp.storedPdfPath)}
+        questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
+        assets={imp.importAssets ?? []}
+        selectedQuestionId={selectedQ}
+        onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
+        existingAlternatives={(drafts[selectedQ]?.alternatives ?? []) as any}
+        onApply={async (mode, alternatives) => applyAlternativesFromAi(selectedQ, mode, alternatives)}
       />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
