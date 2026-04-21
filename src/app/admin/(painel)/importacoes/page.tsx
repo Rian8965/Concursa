@@ -7,12 +7,12 @@ import { Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle } from "lucid
 import { formatDate } from "@/lib/utils/date";
 import { DeleteImportButton } from "./delete-import-button";
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
-  PENDING: { label: "Aguardando", color: "#D97706", bg: "#FFFBEB", icon: Clock },
-  PROCESSING: { label: "Processando", color: "#2563EB", bg: "#EFF6FF", icon: Clock },
-  REVIEW_PENDING: { label: "Revisar", color: "#7C3AED", bg: "#EDE9FE", icon: AlertCircle },
-  COMPLETED: { label: "Concluído", color: "#059669", bg: "#ECFDF5", icon: CheckCircle2 },
-  FAILED: { label: "Falhou", color: "#DC2626", bg: "#FEF2F2", icon: XCircle },
+const STATUS_MAP: Record<string, { label: string; badgeClass: string; icon: typeof Clock }> = {
+  PENDING: { label: "Aguardando", badgeClass: "bg-amber-50 text-amber-900 ring-amber-200/80", icon: Clock },
+  PROCESSING: { label: "Processando", badgeClass: "bg-blue-50 text-blue-800 ring-blue-200/80", icon: Clock },
+  REVIEW_PENDING: { label: "Revisar", badgeClass: "bg-violet-50 text-violet-800 ring-violet-200/80", icon: AlertCircle },
+  COMPLETED: { label: "Concluído", badgeClass: "bg-emerald-50 text-emerald-800 ring-emerald-200/80", icon: CheckCircle2 },
+  FAILED: { label: "Falhou", badgeClass: "bg-red-50 text-red-800 ring-red-200/80", icon: XCircle },
 };
 
 export default async function AdminImportacoesPage() {
@@ -28,7 +28,7 @@ export default async function AdminImportacoesPage() {
   const pending = imports.filter((i) => i.status === "REVIEW_PENDING").length;
 
   return (
-    <div className="w-full max-w-none">
+    <div className="orbit-stack w-full max-w-none animate-fade-up">
       <PageHeader
         eyebrow="Conteúdo"
         title="Importações de PDF"
@@ -90,8 +90,7 @@ export default async function AdminImportacoesPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                        style={{ background: s.bg, color: s.color }}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold ring-1 ${s.badgeClass}`}
                       >
                         <Icon className="h-3 w-3" /> {s.label}
                       </span>

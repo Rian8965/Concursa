@@ -32,51 +32,37 @@ export default async function ApostilasConcursoPage({ params }: Props) {
   });
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div className="orbit-stack max-w-xl animate-fade-up">
       <Link
         href={`/concursos/${id}`}
-        style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 16 }}
+        className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 hover:text-violet-900"
       >
-        <ArrowLeft style={{ width: 14, height: 14 }} /> Voltar ao concurso
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Voltar ao concurso
       </Link>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: "linear-gradient(135deg, #EDE9FE, #F3E8FF)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <FileText style={{ width: 22, height: 22, color: "#7C3AED" }} />
+      <div className="mb-2 flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-fuchsia-100 ring-1 ring-violet-200/60">
+          <FileText className="h-5 w-5 text-violet-700" />
         </div>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Apostila em PDF</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{enrollment.competition.name}</p>
+          <h1 className="text-[22px] font-extrabold tracking-tight text-[var(--text-primary)]">Apostila em PDF</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">{enrollment.competition.name}</p>
         </div>
       </div>
 
-      <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.65, marginBottom: 20 }}>
+      <p className="text-[14px] leading-relaxed text-[var(--text-secondary)]">
         Gere um PDF com questões objetivas deste concurso para imprimir ou estudar offline. O sistema prioriza questões que você ainda não usou em apostilas
         anteriores; se não houver quantidade suficiente, complementa com sorteio entre o banco completo.
       </p>
 
       {qCount === 0 ? (
-        <div
-          className="card"
-          style={{ padding: 20, background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E", fontSize: 14 }}
-        >
+        <div className="orbit-card-premium border-amber-200/80 bg-amber-50/90 text-[14px] leading-relaxed text-amber-950 ring-1 ring-amber-200/60">
           Ainda não há questões publicadas para este concurso. Quando o administrador importar e aprovar questões, a geração ficará disponível.
         </div>
       ) : (
         <>
-          <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 12 }}>
-            {qCount} questão(ões) disponível(is) no banco
-          </p>
+          <p className="text-xs text-[var(--text-muted)]">{qCount} questão(ões) disponível(is) no banco</p>
           <ApostilasActions competitionId={id} competitionName={enrollment.competition.name} />
         </>
       )}

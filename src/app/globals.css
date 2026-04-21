@@ -401,6 +401,12 @@ h1, h2, h3, h4, h5, h6 {
 .animate-fade-up { animation: fadeUp 0.32s ease forwards; }
 .animate-fade-in { animation: fadeIn 0.22s ease forwards; }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .delay-1 { animation-delay: 60ms; }
 .delay-2 { animation-delay: 120ms; }
 .delay-3 { animation-delay: 180ms; }
@@ -862,4 +868,160 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid var(--accent-border);
   padding: 4px 10px;
   border-radius: 999px;
+}
+
+/* ============================================================
+   MODAIS, FORM E AÇÕES (páginas admin / aluno)
+   ============================================================ */
+
+.orbit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 24px);
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(5px);
+}
+
+.orbit-modal-panel {
+  width: 100%;
+  max-height: min(90vh, 900px);
+  overflow-y: auto;
+  border-radius: var(--r-3xl);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: linear-gradient(165deg, #ffffff 0%, #fafafd 100%);
+  padding: clamp(22px, 3vw, 28px);
+  box-shadow: var(--shadow-xl);
+}
+
+.orbit-modal-panel--sm {
+  max-width: 560px;
+}
+
+.orbit-modal-panel--md {
+  max-width: 680px;
+}
+
+.orbit-modal-panel--lg {
+  max-width: 880px;
+}
+
+.orbit-form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.orbit-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.orbit-spinner {
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 999px;
+  border: 3px solid var(--purple-200);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+}
+
+.orbit-search-wrap {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.orbit-search-wrap .input {
+  padding-left: 42px;
+}
+
+.orbit-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.orbit-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--gray-100);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast), transform var(--t-fast);
+  font-family: inherit;
+}
+
+.orbit-icon-btn:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.orbit-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.orbit-icon-btn--danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.orbit-icon-btn--danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.orbit-icon-btn--warn {
+  background: #fffbeb;
+  border-color: rgba(217, 119, 6, 0.35);
+  color: #92400e;
+}
+
+.orbit-icon-btn--purple {
+  background: var(--primary-light);
+  border-color: var(--primary-border);
+  color: var(--primary-hover);
+}
+
+.orbit-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.orbit-modal-close:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
 }

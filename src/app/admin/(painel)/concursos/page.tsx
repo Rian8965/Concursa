@@ -9,7 +9,9 @@ import { Plus, Search, Edit2, Trash2, Trophy, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Competition {
-  id: string; name: string; status: string;
+  id: string;
+  name: string;
+  status: string;
   city: { name: string; state: string };
   examBoard?: { acronym: string } | null;
   examDate?: string | null;
@@ -33,7 +35,7 @@ export default function AdminConcursosPage() {
   const [editalFile, setEditalFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [draft, setDraft] = useState<any | null>(null);
+  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
 
   async function load(q = "") {
@@ -45,14 +47,18 @@ export default function AdminConcursosPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Excluir "${name}"? Esta ação não pode ser desfeita.`)) return;
     setDeleting(id);
     const res = await fetch(`/api/admin/competitions/${id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("Concurso excluído"); load(search); }
-    else toast.error("Erro ao excluir");
+    if (res.ok) {
+      toast.success("Concurso excluído");
+      load(search);
+    } else toast.error("Erro ao excluir");
     setDeleting(null);
   }
 
@@ -106,25 +112,28 @@ export default function AdminConcursosPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1000 }}>
-      <PageHeader eyebrow="Estrutura" title="Concursos" description={`${total} concurso${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}>
+    <div className="orbit-stack max-w-5xl animate-fade-up">
+      <PageHeader
+        eyebrow="Estrutura"
+        title="Concursos"
+        description={`${total} concurso${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}
+      >
         <div className="flex flex-wrap items-center gap-2">
-          <motion.button whileHover={{ y: -1, scale: 1.01 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}
-            onClick={() => setShowEdital(true)} className="btn btn-ghost">
-            <Upload style={{ width: 14, height: 14 }} /> Subir edital
-          </motion.button>
-          <Link href="/admin/concursos/novo" className="btn btn-primary">
-            <Plus style={{ width: 14, height: 14 }} /> Novo Concurso
+          <button type="button" onClick={() => setShowEdital(true)} className="btn btn-ghost transition-transform hover:-translate-y-px">
+            <Upload className="h-3.5 w-3.5" strokeWidth={2} />
+            Subir edital
+          </button>
+          <Link href="/admin/concursos/novo" className="btn btn-primary inline-flex items-center gap-2 rounded-2xl">
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            Novo concurso
           </Link>
         </div>
       </PageHeader>
 
-      {/* Search */}
-      <div style={{ position: "relative", marginBottom: 20 }}>
-        <Search style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", width: 15, height: 15, color: "#9CA3AF" }} />
+      <div className="orbit-search-wrap">
+        <Search className="orbit-search-icon" aria-hidden />
         <input
           className="input"
-          style={{ paddingLeft: 42 }}
           placeholder="Buscar concursos..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -133,72 +142,84 @@ export default function AdminConcursosPage() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: "48px 0" }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
+        <div className="py-14 text-center">
+          <div className="orbit-spinner" />
         </div>
       ) : competitions.length === 0 ? (
-        <div style={{ background: "#fff", border: "1.5px dashed #E5E7EB", borderRadius: 16, padding: "48px 24px", textAlign: "center" }}>
-          <Trophy style={{ width: 32, height: 32, color: "#D1D5DB", margin: "0 auto 12px" }} />
-          <p style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>Nenhum concurso encontrado</p>
-          <Link href="/admin/concursos/novo" className="btn btn-primary" style={{ marginTop: 12, fontSize: 13 }}>
-            <Plus style={{ width: 13, height: 13 }} /> Criar primeiro concurso
+        <div className="orbit-empty-state">
+          <Trophy className="mx-auto mb-4 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.5} />
+          <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhum concurso encontrado</p>
+          <Link href="/admin/concursos/novo" className="btn btn-primary mt-4 inline-flex items-center gap-2 rounded-2xl text-[13px]">
+            <Plus className="h-3.5 w-3.5" />
+            Criar primeiro concurso
           </Link>
         </div>
       ) : (
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                {["Concurso", "Localidade / Banca", "Status", "Questões", "Alunos", "Ações"].map((h) => (
-                  <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {competitions.map((c, i) => {
-                const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
-                return (
-                  <tr key={c.id} style={{ borderBottom: i < competitions.length - 1 ? "1px solid #F9FAFB" : "none", transition: "background 0.1s" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFE")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <td style={{ padding: "13px 16px" }}>
-                      <p style={{ fontSize: 13.5, fontWeight: 600, color: "#111827" }}>{c.name}</p>
-                      {c.examDate && <p style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 1 }}>{new Date(c.examDate).toLocaleDateString("pt-BR")}</p>}
-                    </td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <p style={{ fontSize: 13, color: "#374151" }}>{c.city.name} — {c.city.state}</p>
-                      {c.examBoard && <p style={{ fontSize: 11.5, color: "#7C3AED", fontWeight: 600 }}>{c.examBoard.acronym}</p>}
-                    </td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <Badge variant={s.variant}>{s.label}</Badge>
-                    </td>
-                    <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: "#374151" }}>{c._count.questions}</td>
-                    <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: "#374151" }}>{c._count.students}</td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <Link href={`/admin/concursos/${c.id}`}
-                          style={{ width: 30, height: 30, borderRadius: 8, background: "#F3F4F6", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", textDecoration: "none" }}>
-                          <Edit2 style={{ width: 12, height: 12 }} />
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(c.id, c.name)}
-                          disabled={deleting === c.id}
-                          style={{ width: 30, height: 30, borderRadius: 8, background: "#FEF2F2", border: "1px solid #FCA5A5", display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                          <Trash2 style={{ width: 12, height: 12 }} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="orbit-panel overflow-hidden p-0">
+          <div className="orbit-table-wrap border-0 shadow-none">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  {["Concurso", "Localidade / Banca", "Status", "Questões", "Alunos", "Ações"].map((h) => (
+                    <th
+                      key={h}
+                      className="whitespace-nowrap px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {competitions.map((c) => {
+                  const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
+                  return (
+                    <tr key={c.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
+                      <td className="px-4 py-3.5">
+                        <p className="text-[13.5px] font-semibold text-[var(--text-primary)]">{c.name}</p>
+                        {c.examDate && (
+                          <p className="mt-0.5 text-[11.5px] text-[var(--text-muted)]">
+                            {new Date(c.examDate).toLocaleDateString("pt-BR")}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="text-[13px] text-[var(--text-secondary)]">
+                          {c.city.name} — {c.city.state}
+                        </p>
+                        {c.examBoard && (
+                          <p className="text-[11.5px] font-semibold text-violet-700">{c.examBoard.acronym}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Badge variant={s.variant}>{s.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3.5 text-[13px] font-bold text-[var(--text-secondary)]">{c._count.questions}</td>
+                      <td className="px-4 py-3.5 text-[13px] font-bold text-[var(--text-secondary)]">{c._count.students}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex gap-1.5">
+                          <Link href={`/admin/concursos/${c.id}`} className="orbit-icon-btn" title="Editar">
+                            <Edit2 className="h-3 w-3" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(c.id, c.name)}
+                            disabled={deleting === c.id}
+                            className="orbit-icon-btn orbit-icon-btn--danger"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       <AnimatePresence>
         {showEdital && (
@@ -206,7 +227,7 @@ export default function AdminConcursosPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-5"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-[rgba(15,23,42,0.48)] p-5 backdrop-blur-sm"
             onMouseDown={(e) => e.target === e.currentTarget && setShowEdital(false)}
           >
             <motion.div
@@ -214,93 +235,132 @@ export default function AdminConcursosPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ duration: 0.18 }}
-              className="w-full max-w-[880px] rounded-[20px] border border-black/[0.08] bg-white p-6 shadow-[0_18px_70px_rgba(0,0,0,0.25)]"
+              className="orbit-modal-panel orbit-modal-panel--lg max-h-[min(90vh,880px)] p-6 shadow-[0_18px_70px_rgba(0,0,0,0.22)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                    IA • Cadastro por edital
-                  </p>
-                  <h2 className="mt-1 text-[18px] font-extrabold tracking-tight text-[#111827]">
-                    Subir edital (PDF)
-                  </h2>
-                  <p className="mt-1 text-[13px] text-[#6B7280]">
+                  <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[var(--text-muted)]">IA • Cadastro por edital</p>
+                  <h2 className="mt-1 text-[18px] font-extrabold tracking-tight text-[var(--text-primary)]">Subir edital (PDF)</h2>
+                  <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
                     Envie o edital, revise os dados extraídos e confirme para criar o concurso automaticamente.
                   </p>
                 </div>
-                <button className="btn btn-ghost" onClick={() => setShowEdital(false)}>Fechar</button>
+                <button type="button" className="btn btn-ghost shrink-0" onClick={() => setShowEdital(false)}>
+                  Fechar
+                </button>
               </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
-                <div className="rounded-[16px] border border-black/[0.08] bg-[#FBFAFF] p-4">
-                  <p className="text-[12px] font-semibold text-[#111827]">1) Enviar PDF</p>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-black/[0.08] bg-[var(--bg-elevated)] p-4">
+                  <p className="text-[12px] font-semibold text-[var(--text-primary)]">1) Enviar PDF</p>
                   <input
                     type="file"
                     accept="application/pdf"
-                    className="mt-2 block w-full text-[13px]"
+                    className="mt-2 block w-full text-[13px] file:mr-3 file:rounded-lg file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-violet-800"
                     onChange={(e) => setEditalFile(e.target.files?.[0] ?? null)}
                   />
-                  <div className="mt-3 flex gap-2">
-                    <button className="btn btn-primary" disabled={!editalFile || parsing} onClick={parseEdital}>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn btn-primary rounded-2xl" disabled={!editalFile || parsing} onClick={parseEdital}>
                       {parsing ? "Analisando..." : "Analisar edital"}
                     </button>
-                    <button className="btn btn-ghost" onClick={() => { setEditalFile(null); setDraft(null); setPdfBase64(null); }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost rounded-2xl"
+                      onClick={() => {
+                        setEditalFile(null);
+                        setDraft(null);
+                        setPdfBase64(null);
+                      }}
+                    >
                       Limpar
                     </button>
                   </div>
-                  <p className="mt-3 text-[12px] text-[#9CA3AF]">
-                    Dica: PDFs escaneados podem levar mais tempo.
-                  </p>
+                  <p className="mt-3 text-[12px] text-[var(--text-muted)]">Dica: PDFs escaneados podem levar mais tempo.</p>
                 </div>
 
-                <div className="rounded-[16px] border border-black/[0.08] bg-white p-4">
-                  <p className="text-[12px] font-semibold text-[#111827]">2) Revisar dados</p>
+                <div className="rounded-2xl border border-black/[0.08] bg-[var(--bg-surface)] p-4">
+                  <p className="text-[12px] font-semibold text-[var(--text-primary)]">2) Revisar dados</p>
                   {!draft ? (
-                    <p className="mt-2 text-[13px] text-[#9CA3AF]">Depois de analisar, o rascunho aparecerá aqui.</p>
+                    <p className="mt-2 text-[13px] text-[var(--text-muted)]">Depois de analisar, o rascunho aparecerá aqui.</p>
                   ) : (
                     <div className="mt-3 grid gap-3">
                       <div>
-                        <label className="text-[12px] font-semibold text-[#374151]">Nome *</label>
-                        <input className="input mt-1" value={draft.name ?? ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                        <label className="orbit-form-label text-[12px]">Nome *</label>
+                        <input
+                          className="input"
+                          value={(draft.name as string) ?? ""}
+                          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[12px] font-semibold text-[#374151]">Banca (sigla)</label>
-                          <input className="input mt-1" value={draft.examBoard?.acronym ?? ""} onChange={(e) => setDraft({ ...draft, examBoard: { ...(draft.examBoard ?? {}), acronym: e.target.value } })} />
+                          <label className="orbit-form-label text-[12px]">Banca (sigla)</label>
+                          <input
+                            className="input"
+                            value={((draft.examBoard as { acronym?: string } | undefined)?.acronym as string) ?? ""}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                examBoard: { ...((draft.examBoard as object) ?? {}), acronym: e.target.value },
+                              })
+                            }
+                          />
                         </div>
                         <div>
-                          <label className="text-[12px] font-semibold text-[#374151]">Organização</label>
-                          <input className="input mt-1" value={draft.organization ?? ""} onChange={(e) => setDraft({ ...draft, organization: e.target.value })} />
+                          <label className="orbit-form-label text-[12px]">Organização</label>
+                          <input
+                            className="input"
+                            value={(draft.organization as string) ?? ""}
+                            onChange={(e) => setDraft({ ...draft, organization: e.target.value })}
+                          />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[12px] font-semibold text-[#374151]">Cidade (principal) *</label>
-                          <input className="input mt-1" value={draft.cities?.[0]?.name ?? ""} onChange={(e) => {
-                            const cities = Array.isArray(draft.cities) ? [...draft.cities] : [{ name: "", state: "" }];
-                            cities[0] = { ...(cities[0] ?? { name: "", state: "" }), name: e.target.value };
-                            setDraft({ ...draft, cities });
-                          }} />
+                          <label className="orbit-form-label text-[12px]">Cidade (principal) *</label>
+                          <input
+                            className="input"
+                            value={((draft.cities as { name?: string; state?: string }[] | undefined)?.[0]?.name as string) ?? ""}
+                            onChange={(e) => {
+                              const cities = Array.isArray(draft.cities) ? [...(draft.cities as object[])] : [{ name: "", state: "" }];
+                              cities[0] = { ...(cities[0] as object), name: e.target.value };
+                              setDraft({ ...draft, cities });
+                            }}
+                          />
                         </div>
                         <div>
-                          <label className="text-[12px] font-semibold text-[#374151]">UF *</label>
-                          <input className="input mt-1" value={draft.cities?.[0]?.state ?? ""} onChange={(e) => {
-                            const cities = Array.isArray(draft.cities) ? [...draft.cities] : [{ name: "", state: "" }];
-                            cities[0] = { ...(cities[0] ?? { name: "", state: "" }), state: e.target.value };
-                            setDraft({ ...draft, cities });
-                          }} />
+                          <label className="orbit-form-label text-[12px]">UF *</label>
+                          <input
+                            className="input"
+                            value={((draft.cities as { name?: string; state?: string }[] | undefined)?.[0]?.state as string) ?? ""}
+                            onChange={(e) => {
+                              const cities = Array.isArray(draft.cities) ? [...(draft.cities as object[])] : [{ name: "", state: "" }];
+                              cities[0] = { ...(cities[0] as object), state: e.target.value };
+                              setDraft({ ...draft, cities });
+                            }}
+                          />
                         </div>
                       </div>
                       <div>
-                        <label className="text-[12px] font-semibold text-[#374151]">Data da prova (YYYY-MM-DD)</label>
-                        <input className="input mt-1" value={draft.examDate ?? ""} onChange={(e) => setDraft({ ...draft, examDate: e.target.value || null })} placeholder="2026-08-10" />
+                        <label className="orbit-form-label text-[12px]">Data da prova (YYYY-MM-DD)</label>
+                        <input
+                          className="input"
+                          value={(draft.examDate as string) ?? ""}
+                          onChange={(e) => setDraft({ ...draft, examDate: e.target.value || null })}
+                          placeholder="2026-08-10"
+                        />
                       </div>
                       <div>
-                        <label className="text-[12px] font-semibold text-[#374151]">Descrição / notas</label>
-                        <textarea className="input mt-1" rows={3} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                        <label className="orbit-form-label text-[12px]">Descrição / notas</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          value={(draft.description as string) ?? ""}
+                          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                        />
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-1">
-                        <button className="btn btn-primary" disabled={confirming} onClick={confirmCreate}>
+                        <button type="button" className="btn btn-primary rounded-2xl" disabled={confirming} onClick={confirmCreate}>
                           {confirming ? "Criando..." : "Confirmar e criar concurso"}
                         </button>
                       </div>

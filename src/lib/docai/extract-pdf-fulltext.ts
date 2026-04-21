@@ -1,6 +1,5 @@
 import type { protos } from "@google-cloud/documentai";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
-import { PDFParse } from "pdf-parse";
 import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "./process-options";
 
 /** Margem abaixo do limite típico (~30 págs.) do processamento online com imageless. */
@@ -42,6 +41,19 @@ function mergeText(chunks: string[]) {
   return chunks.map((t) => t.trim()).filter(Boolean).join("\n\n");
 }
 
+function estimatePdfPageCount(pdfBytes: Buffer): number | null {
+  // Heurística leve para evitar dependências que exigem APIs de browser (ex: DOMMatrix).
+  // Conta ocorrências de "/Type /Page" (mas não "/Type /Pages").
+  try {
+    const s = pdfBytes.toString("latin1");
+    const m = s.match(/\/Type\s*\/Page(?!s)\b/g);
+    const n = m?.length ?? 0;
+    return n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runChunked(
   client: DocumentProcessorServiceClient,
   processorName: string,
@@ -79,16 +91,7 @@ export async function extractPdfFullTextWithDocumentAi(
   pageCount: number;
   usedChunking: boolean;
 }> {
-  let pageCount = 1;
-  const parser = new PDFParse({ data: pdfBytes });
-  try {
-    const info = await parser.getInfo();
-    pageCount = Math.max(1, info.total ?? 1);
-  } catch {
-    pageCount = 1;
-  } finally {
-    await parser.destroy();
-  }
+  const pageCount = Math.max(1, estimatePdfPageCount(pdfBytes) ?? 1);
 
   if (pageCount > ONLINE_CHUNK_PAGES) {
     return runChunked(client, processorName, pdfBytes, pageCount);

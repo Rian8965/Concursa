@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db/prisma";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { ArrowRight, BookOpen, Play, Target } from "lucide-react";
+import { BookOpen, Play } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 
-interface Props { params: Promise<{ id: string }> }
+interface Props {
+  params: Promise<{ id: string }>;
+}
 
 export default async function MateriasPage({ params }: Props) {
   const { id } = await params;
@@ -30,76 +32,87 @@ export default async function MateriasPage({ params }: Props) {
     sc.competition.subjects.map(async (cs) => {
       const [total, correct] = await Promise.all([
         prisma.studentAnswer.count({ where: { studentProfileId: profile.id, question: { competitionId: id, subjectId: cs.subjectId } } }),
-        prisma.studentAnswer.count({ where: { studentProfileId: profile.id, isCorrect: true, question: { competitionId: id, subjectId: cs.subjectId } } }),
+        prisma.studentAnswer.count({
+          where: { studentProfileId: profile.id, isCorrect: true, question: { competitionId: id, subjectId: cs.subjectId } },
+        }),
       ]);
       return { ...cs, total, correct, accuracy: total > 0 ? Math.round((correct / total) * 100) : 0 };
-    })
+    }),
   );
 
   return (
-    <div style={{ maxWidth: 860 }}>
-      <div style={{ marginBottom: 28 }}>
-        <Link href={`/concursos/${id}`} style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+    <div className="orbit-stack max-w-4xl animate-fade-up">
+      <div className="space-y-2">
+        <Link href={`/concursos/${id}`} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 hover:text-violet-900">
           ← {sc.competition.name}
         </Link>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Matérias</h1>
-        <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>{subjectStats.length} matérias cadastradas para este concurso</p>
+        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-[26px]">Matérias</h1>
+        <p className="text-[14px] text-[var(--text-secondary)]">
+          {subjectStats.length} matérias cadastradas para este concurso
+        </p>
       </div>
 
       {subjectStats.length === 0 ? (
-        <div style={{ background: "#fff", border: "1.5px dashed #E5E7EB", borderRadius: 16, padding: "48px 24px", textAlign: "center" }}>
-          <BookOpen style={{ width: 32, height: 32, color: "#D1D5DB", margin: "0 auto 12px" }} />
-          <p style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>Nenhuma matéria cadastrada</p>
+        <div className="rounded-2xl border border-dashed border-black/[0.08] bg-[var(--bg-card)] px-6 py-14 text-center">
+          <BookOpen className="mx-auto mb-3 h-8 w-8 text-[var(--text-muted)]" strokeWidth={1.5} />
+          <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhuma matéria cadastrada</p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="flex flex-col gap-2.5">
           {subjectStats.map((cs) => (
-            <div key={cs.subjectId} className="card" style={{ padding: "20px 22px" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <div style={{ width: 6, height: 36, borderRadius: 4, background: cs.subject.color ?? "linear-gradient(180deg,#7C3AED,#A855F7)", flexShrink: 0 }} />
-                    <div>
-                      <p style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{cs.subject.name}</p>
-                      <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 1 }}>{cs.subject.topics.length} assuntos</p>
-                    </div>
+            <div key={cs.subjectId} className="orbit-card-premium flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={cn("h-9 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-fuchsia-500")}
+                    style={cs.subject.color ? { background: cs.subject.color } : undefined}
+                  />
+                  <div>
+                    <p className="text-[15px] font-bold text-[var(--text-primary)]">{cs.subject.name}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{cs.subject.topics.length} assuntos</p>
                   </div>
+                </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: 16 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
-                        <span>{cs.total} questões respondidas</span>
-                        <span style={{ fontWeight: 700, color: cs.accuracy >= 70 ? "#059669" : cs.accuracy >= 50 ? "#D97706" : cs.total > 0 ? "#DC2626" : "#9CA3AF" }}>
-                          {cs.total > 0 ? `${cs.accuracy}%` : "Não iniciado"}
-                        </span>
-                      </div>
-                      <Progress value={cs.accuracy} className="h-[5px]" />
-                    </div>
-                  </div>
-
-                  {cs.subject.topics.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10, marginLeft: 16 }}>
-                      {cs.subject.topics.slice(0, 5).map((t) => (
-                        <span key={t.id} style={{ fontSize: 11, background: "#F3F4F6", color: "#6B7280", padding: "2px 8px", borderRadius: 10 }}>
-                          {t.name}
-                        </span>
-                      ))}
-                      {cs.subject.topics.length > 5 && (
-                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>+{cs.subject.topics.length - 5}</span>
+                <div className="pl-3.5 sm:pl-4">
+                  <div className="mb-1 flex justify-between text-xs text-[var(--text-secondary)]">
+                    <span>{cs.total} questões respondidas</span>
+                    <span
+                      className={cn(
+                        "font-bold",
+                        cs.total === 0 && "text-[var(--text-muted)]",
+                        cs.total > 0 && cs.accuracy >= 70 && "text-emerald-600",
+                        cs.total > 0 && cs.accuracy >= 50 && cs.accuracy < 70 && "text-amber-600",
+                        cs.total > 0 && cs.accuracy < 50 && "text-red-600",
                       )}
-                    </div>
-                  )}
+                    >
+                      {cs.total > 0 ? `${cs.accuracy}%` : "Não iniciado"}
+                    </span>
+                  </div>
+                  <Progress value={cs.accuracy} className="h-1" />
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-                  <Link
-                    href={`/concursos/${id}/treino?subject=${cs.subjectId}`}
-                    className="btn btn-purple"
-                    style={{ fontSize: 12, padding: "7px 14px", gap: 5, height: "auto" }}
-                  >
-                    <Play style={{ width: 11, height: 11 }} /> Treinar
-                  </Link>
-                </div>
+                {cs.subject.topics.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pl-3.5 sm:pl-4">
+                    {cs.subject.topics.slice(0, 5).map((t) => (
+                      <span key={t.id} className="rounded-full bg-[var(--bg-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]">
+                        {t.name}
+                      </span>
+                    ))}
+                    {cs.subject.topics.length > 5 && (
+                      <span className="self-center text-[11px] text-[var(--text-muted)]">+{cs.subject.topics.length - 5}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex shrink-0 flex-col gap-1.5 sm:pt-0">
+                <Link
+                  href={`/concursos/${id}/treino?subject=${cs.subjectId}`}
+                  className="btn btn-purple inline-flex h-auto items-center justify-center gap-1.5 rounded-2xl px-3.5 py-2 text-xs font-semibold"
+                >
+                  <Play className="h-3 w-3" />
+                  Treinar
+                </Link>
               </div>
             </div>
           ))}

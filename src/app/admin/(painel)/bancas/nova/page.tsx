@@ -40,28 +40,32 @@ export default function NovaBancaPage() {
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
-      <Link href="/admin/bancas" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 16 }}>
-        <ArrowLeft style={{ width: 14, height: 14 }} /> Voltar
+    <div className="orbit-stack max-w-lg animate-fade-up">
+      <Link href="/admin/bancas" className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 hover:text-violet-900">
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Voltar
       </Link>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111827", marginBottom: 8 }}>Nova banca</h1>
-      <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 24 }}>Cadastre uma banca examinadora (CESPE, FCC, etc.).</p>
+      <div>
+        <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-primary)]">Nova banca</h1>
+        <p className="mt-1 text-[14px] text-[var(--text-secondary)]">Cadastre uma banca examinadora (CESPE, FCC, etc.).</p>
+      </div>
 
-      <form onSubmit={submit} className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      <form onSubmit={submit} className="orbit-card-premium orbit-form-stack">
         <div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nome completo *</label>
+          <label className="orbit-form-label">Nome completo *</label>
           <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
         </div>
         <div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Sigla *</label>
+          <label className="orbit-form-label">Sigla *</label>
           <input className="input" value={form.acronym} onChange={(e) => setForm({ ...form, acronym: e.target.value.toUpperCase() })} placeholder="FCC" required />
         </div>
         <div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Site</label>
+          <label className="orbit-form-label">Site</label>
           <input className="input" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://..." />
         </div>
-        <button type="submit" className="btn btn-primary" disabled={saving} style={{ alignSelf: "flex-start", marginTop: 8 }}>
-          <Save style={{ width: 14, height: 14 }} /> {saving ? "Salvando..." : "Salvar banca"}
+        <button type="submit" className="btn btn-primary mt-1 inline-flex w-fit items-center gap-2 self-start rounded-2xl" disabled={saving}>
+          <Save className="h-3.5 w-3.5" />
+          {saving ? "Salvando..." : "Salvar banca"}
         </button>
       </form>
     </div>

@@ -2,8 +2,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, XCircle, Clock, Trophy, Target, BookOpen } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, Target, BookOpen } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
 
 export default async function HistoricoPage() {
   const session = await auth();
@@ -26,57 +27,63 @@ export default async function HistoricoPage() {
     }),
   ]);
 
+  function accuracyTextClass(accuracy: number, total: number) {
+    if (total === 0) return "text-[var(--text-muted)]";
+    if (accuracy >= 70) return "text-emerald-600";
+    if (accuracy >= 50) return "text-amber-600";
+    return "text-red-600";
+  }
+
   return (
-    <div style={{ maxWidth: 900 }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Histórico</h1>
-        <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>
-          Todas as suas sessões de treino e simulados
-        </p>
+    <div className="orbit-stack max-w-4xl animate-fade-up">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-[26px]">Histórico</h1>
+        <p className="text-[14px] text-[var(--text-secondary)]">Todas as suas sessões de treino e simulados</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-        {/* Treinos */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "#EDE9FE", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <BookOpen style={{ width: 14, height: 14, color: "#7C3AED" }} />
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
+        <section>
+          <div className="mb-3.5 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100">
+              <BookOpen className="h-3.5 w-3.5 text-violet-700" />
             </div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Treinos</h2>
-            <span style={{ fontSize: 12, color: "#9CA3AF" }}>({trainingSessions.length})</span>
+            <h2 className="text-[15px] font-bold text-[var(--text-primary)]">Treinos</h2>
+            <span className="text-xs text-[var(--text-muted)]">({trainingSessions.length})</span>
           </div>
 
           {trainingSessions.length === 0 ? (
-            <div style={{ background: "#fff", border: "1.5px dashed #E5E7EB", borderRadius: 12, padding: "32px 16px", textAlign: "center" }}>
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum treino realizado ainda</p>
-              <Link href="/concursos" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, marginTop: 8, display: "inline-block", textDecoration: "none" }}>
+            <div className="rounded-xl border border-dashed border-black/[0.08] bg-[var(--bg-card)] px-4 py-10 text-center">
+              <p className="text-[13px] text-[var(--text-muted)]">Nenhum treino realizado ainda</p>
+              <Link href="/concursos" className="mt-2 inline-block text-[13px] font-semibold text-violet-700 hover:text-violet-900">
                 Iniciar treino →
               </Link>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {trainingSessions.map((ts) => {
                 const accuracy = ts.totalQuestions > 0 ? Math.round((ts.correctAnswers / ts.totalQuestions) * 100) : 0;
-                const color = accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626";
                 const mins = Math.floor((ts.timeSpentSeconds ?? 0) / 60);
                 return (
-                  <div key={ts.id} className="card" style={{ padding: "14px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color }}>
+                  <div key={ts.id} className="orbit-card-premium px-4 py-3.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className={cn("text-[13px] font-bold", accuracyTextClass(accuracy, ts.totalQuestions))}>
                         {accuracy}% de acerto
                       </span>
-                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{formatDate(ts.createdAt)}</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">{formatDate(ts.createdAt)}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <CheckCircle2 style={{ width: 11, height: 11, color: "#059669" }} /> {ts.correctAnswers} corretas
+                    <div className="flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
+                      <span className="inline-flex items-center gap-1">
+                        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
+                        {ts.correctAnswers} corretas
                       </span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <XCircle style={{ width: 11, height: 11, color: "#DC2626" }} /> {ts.totalQuestions - ts.correctAnswers} erros
+                      <span className="inline-flex items-center gap-1">
+                        <XCircle className="h-2.5 w-2.5 text-red-600" />
+                        {ts.totalQuestions - ts.correctAnswers} erros
                       </span>
                       {mins > 0 && (
-                        <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                          <Clock style={{ width: 11, height: 11 }} /> {mins}min
+                        <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
+                          <Clock className="h-2.5 w-2.5" />
+                          {mins}min
                         </span>
                       )}
                     </div>
@@ -85,48 +92,55 @@ export default async function HistoricoPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Simulados */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Target style={{ width: 14, height: 14, color: "#059669" }} />
+        <section>
+          <div className="mb-3.5 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100">
+              <Target className="h-3.5 w-3.5 text-emerald-700" />
             </div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Simulados</h2>
-            <span style={{ fontSize: 12, color: "#9CA3AF" }}>({simulatedExams.length})</span>
+            <h2 className="text-[15px] font-bold text-[var(--text-primary)]">Simulados</h2>
+            <span className="text-xs text-[var(--text-muted)]">({simulatedExams.length})</span>
           </div>
 
           {simulatedExams.length === 0 ? (
-            <div style={{ background: "#fff", border: "1.5px dashed #E5E7EB", borderRadius: 12, padding: "32px 16px", textAlign: "center" }}>
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum simulado realizado ainda</p>
-              <Link href="/concursos" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, marginTop: 8, display: "inline-block", textDecoration: "none" }}>
+            <div className="rounded-xl border border-dashed border-black/[0.08] bg-[var(--bg-card)] px-4 py-10 text-center">
+              <p className="text-[13px] text-[var(--text-muted)]">Nenhum simulado realizado ainda</p>
+              <Link href="/concursos" className="mt-2 inline-block text-[13px] font-semibold text-violet-700 hover:text-violet-900">
                 Fazer simulado →
               </Link>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {simulatedExams.map((se) => {
                 const pct = se.totalQuestions > 0 ? Math.round((se.correctAnswers / se.totalQuestions) * 100) : 0;
-                const color = pct >= 70 ? "#059669" : pct >= 50 ? "#D97706" : "#DC2626";
                 const mins = Math.floor((se.timeSpentSeconds ?? 0) / 60);
                 return (
-                  <div key={se.id} className="card" style={{ padding: "14px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color }}>{pct}%</span>
-                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{formatDate(se.createdAt)}</span>
+                  <div key={se.id} className="orbit-card-premium px-4 py-3.5">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className={cn("text-[13px] font-bold", accuracyTextClass(pct, se.totalQuestions))}>{pct}%</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">{formatDate(se.createdAt)}</span>
                     </div>
                     {se.competition && (
-                      <p style={{ fontSize: 12, color: "#7C3AED", fontWeight: 600, marginBottom: 4 }}>{se.competition.name}</p>
+                      <p className="mb-1 text-xs font-semibold text-violet-700">{se.competition.name}</p>
                     )}
-                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280" }}>
-                      <span><CheckCircle2 style={{ width: 11, height: 11, color: "#059669", display: "inline", marginRight: 3 }} />{se.correctAnswers}/{se.totalQuestions}</span>
-                      {mins > 0 && <span><Clock style={{ width: 11, height: 11, display: "inline", marginRight: 3 }} />{mins}min</span>}
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
-                        background: se.status === "COMPLETED" ? "#ECFDF5" : "#FFFBEB",
-                        color: se.status === "COMPLETED" ? "#059669" : "#D97706",
-                      }}>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-secondary)]">
+                      <span className="inline-flex items-center gap-1">
+                        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
+                        {se.correctAnswers}/{se.totalQuestions}
+                      </span>
+                      {mins > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
+                          <Clock className="h-2.5 w-2.5" />
+                          {mins}min
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                          se.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80" : "bg-amber-50 text-amber-800 ring-1 ring-amber-200/80",
+                        )}
+                      >
                         {se.status === "COMPLETED" ? "Concluído" : "Em andamento"}
                       </span>
                     </div>
@@ -135,7 +149,7 @@ export default async function HistoricoPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

@@ -36,24 +36,17 @@ export function ApostilasActions({ competitionId, competitionName }: { competiti
   }
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+    <div className="flex flex-wrap gap-2.5">
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-primary inline-flex h-11 min-h-[44px] items-center gap-2 rounded-2xl px-4"
         disabled={loading}
         onClick={() => generatePdf(28)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 8, minHeight: 44 }}
       >
-        {loading ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : <Download style={{ width: 16, height: 16 }} />}
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         Gerar PDF (28 questões)
       </button>
-      <button
-        type="button"
-        className="btn btn-ghost"
-        disabled={loading}
-        onClick={() => generatePdf(12)}
-        style={{ minHeight: 44 }}
-      >
+      <button type="button" className="btn btn-ghost h-11 min-h-[44px] rounded-2xl px-4" disabled={loading} onClick={() => generatePdf(12)}>
         Versão curta (12 questões)
       </button>
     </div>
