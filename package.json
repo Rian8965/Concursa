@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "prebuild": "prisma generate",
     "postinstall": "prisma generate",
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "node scripts/next-build.js build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",

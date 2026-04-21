@@ -13,6 +13,8 @@ type QuestionCreateBody = {
   subjectId?: string | null;
   topicId?: string | null;
   examBoardId?: string | null;
+  cityId?: string | null;
+  jobRoleId?: string | null;
   difficulty?: Difficulty;
   year?: string | number | null;
   correctAnswer: string;
@@ -48,19 +50,45 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search") ?? "";
   const competitionId = searchParams.get("competitionId") ?? undefined;
   const subjectId = searchParams.get("subjectId") ?? undefined;
+  const examBoardId = searchParams.get("examBoardId") ?? undefined;
+  const cityId = searchParams.get("cityId") ?? undefined;
+  const jobRoleId = searchParams.get("jobRoleId") ?? undefined;
+  const year = searchParams.get("year") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
 
   const where: Record<string, unknown> = {
     ...(search && { content: { contains: search, mode: "insensitive" } }),
     ...(competitionId && { competitionId }),
     ...(subjectId && { subjectId }),
+    ...(examBoardId && { examBoardId }),
+    ...(cityId && { cityId }),
+    ...(jobRoleId && { jobRoleId }),
+    ...(year && { year: parseYear(year) ?? undefined }),
     ...(status && { status }),
   };
 
   const [questions, total] = await Promise.all([
     prisma.question.findMany({
       where,
-      include: { subject: { select: { name: true } }, competition: { select: { name: true } }, alternatives: { orderBy: { order: "asc" } } },
+      include: {
+        subject: { select: { name: true } },
+        competition: { select: { name: true } },
+        examBoard: { select: { acronym: true } },
+        city: { select: { name: true, state: true } },
+        jobRole: { select: { name: true } },
+        aiMeta: {
+          select: {
+            confidence: true,
+            suggestedYear: true,
+            subject: { select: { name: true } },
+            topic: { select: { name: true } },
+            examBoard: { select: { acronym: true } },
+            city: { select: { name: true, state: true } },
+            jobRole: { select: { name: true } },
+          },
+        },
+        alternatives: { orderBy: { order: "asc" } },
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       skip: (page - 1) * limit,
@@ -88,6 +116,8 @@ export async function POST(req: NextRequest) {
     subjectId,
     topicId,
     examBoardId,
+    cityId,
+    jobRoleId,
     difficulty,
     year,
     correctAnswer,
@@ -113,6 +143,8 @@ export async function POST(req: NextRequest) {
         subjectId: optRelationId(subjectId),
         topicId: optRelationId(topicId),
         examBoardId: optRelationId(examBoardId),
+        cityId: optRelationId(cityId),
+        jobRoleId: optRelationId(jobRoleId),
         difficulty: parseDifficulty(difficulty),
         year: parseYear(year),
         correctAnswer,

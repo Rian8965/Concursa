@@ -155,7 +155,7 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: student.name, email: student.email, password: "",
-    planId: student.studentProfile?.plan ? "" : "",
+    planId: (student.studentProfile as any)?.planId ?? "",
     accessExpiresAt: student.studentProfile?.accessExpiresAt ? new Date(student.studentProfile.accessExpiresAt).toISOString().slice(0, 10) : "",
     competitionIds: [] as string[],
   });
@@ -184,7 +184,7 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
       if (res.ok) { toast.success("Aluno criado!"); onSaved(); }
       else { const d = await res.json(); toast.error(d.error ?? "Erro"); }
     } else {
-      const res = await fetch(`/api/admin/students/${student.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: form.planId, accessExpiresAt: form.accessExpiresAt || null, competitionIds: form.competitionIds }) });
+      const res = await fetch(`/api/admin/students/${student.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.name, email: form.email, password: form.password || null, planId: form.planId, accessExpiresAt: form.accessExpiresAt || null, competitionIds: form.competitionIds }) });
       if (res.ok) { toast.success("Aluno atualizado!"); onSaved(); }
       else toast.error("Erro ao atualizar");
     }
@@ -201,22 +201,20 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {isNew ? (
-            <>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nome *</label>
-                <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome completo" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Email *</label>
-                <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Senha *</label>
-                <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 8 caracteres" />
-              </div>
-            </>
-          ) : null}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nome *</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome completo" />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Email *</label>
+            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              {isNew ? "Senha *" : "Nova senha (opcional)"}
+            </label>
+            <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={isNew ? "Mínimo 8 caracteres" : "Deixe em branco para manter"} />
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>

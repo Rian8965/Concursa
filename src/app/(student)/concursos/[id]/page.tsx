@@ -239,6 +239,31 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
         </div>
       </div>
 
+      {comp.editalUrl && (
+        <div className="card" style={{ padding: "14px 16px", marginBottom: 16 }}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p style={{ fontSize: 12, fontWeight: 800, color: "#111827", letterSpacing: "-0.01em" }}>
+                Edital oficial
+              </p>
+              <p style={{ fontSize: 12.5, color: "#6B7280", marginTop: 2 }}>
+                Acesse o PDF do edital vinculado a este concurso.
+              </p>
+            </div>
+            <a
+              href={comp.editalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-purple"
+              style={{ padding: "8px 12px", fontSize: 12.5 }}
+            >
+              <Download className="h-4 w-4" />
+              Abrir edital
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Abas de navegação */}
       <div
         className="flex items-center gap-1 overflow-x-auto"

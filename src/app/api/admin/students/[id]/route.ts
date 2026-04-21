@@ -28,12 +28,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { id } = await params;
-  const { isActive, planId, accessExpiresAt, competitionIds } = await req.json();
+  const { isActive, planId, accessExpiresAt, competitionIds, name, email, password } = await req.json();
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: { ...(isActive !== undefined && { isActive }) },
-  });
+  const data: Record<string, unknown> = {
+    ...(isActive !== undefined && { isActive }),
+    ...(typeof name === "string" && name.trim() && { name: name.trim() }),
+    ...(typeof email === "string" && email.trim() && { email: email.trim() }),
+  };
+  if (typeof password === "string" && password.trim().length >= 8) {
+    const bcrypt = await import("bcryptjs");
+    const hashed = await bcrypt.hash(password.trim(), 10);
+    data.password = hashed;
+  }
+  const user = await prisma.user.update({ where: { id }, data });
 
   if (planId !== undefined || accessExpiresAt !== undefined) {
     await prisma.studentProfile.update({

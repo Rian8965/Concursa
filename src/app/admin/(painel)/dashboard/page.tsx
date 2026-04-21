@@ -13,113 +13,157 @@ import { formatDate } from "@/lib/utils/date";
 import { motion } from "framer-motion";
 
 export default async function AdminDashboardPage() {
+  // #region agent log
+  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+    body: JSON.stringify({
+      sessionId: "03dbee",
+      runId: "pre-fix",
+      hypothesisId: "H-admin-dashboard-srv",
+      location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:entry",
+      message: "admin dashboard render start",
+      data: { at: Date.now() },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role === "STUDENT") redirect("/dashboard");
 
-  const [
-    totalStudents, activeStudents,
-    totalCompetitions, activeCompetitions,
-    totalQuestions, activeQuestions,
-    pendingImports,
-    recentCompetitions, recentImports,
-    totalAnswered, correctAnswers,
-  ] = await Promise.all([
-    prisma.user.count({ where: { role: "STUDENT" } }),
-    prisma.user.count({ where: { role: "STUDENT", isActive: true } }),
-    prisma.competition.count(),
-    prisma.competition.count({ where: { status: "ACTIVE" } }),
-    prisma.question.count(),
-    prisma.question.count({ where: { status: "ACTIVE" } }),
-    prisma.pDFImport.count({ where: { status: "REVIEW_PENDING" } }),
-    prisma.competition.findMany({ take: 5, orderBy: { createdAt: "desc" }, include: { city: true, examBoard: true } }),
-    prisma.pDFImport.findMany({ take: 5, orderBy: { createdAt: "desc" } }),
-    prisma.studentAnswer.count(),
-    prisma.studentAnswer.count({ where: { isCorrect: true } }),
-  ]);
+  try {
+    const [
+      totalStudents, activeStudents,
+      totalCompetitions, activeCompetitions,
+      totalQuestions, activeQuestions,
+      pendingImports,
+      recentCompetitions, recentImports,
+      totalAnswered, correctAnswers,
+    ] = await Promise.all([
+      prisma.user.count({ where: { role: "STUDENT" } }),
+      prisma.user.count({ where: { role: "STUDENT", isActive: true } }),
+      prisma.competition.count(),
+      prisma.competition.count({ where: { status: "ACTIVE" } }),
+      prisma.question.count(),
+      prisma.question.count({ where: { status: "ACTIVE" } }),
+      prisma.pDFImport.count({ where: { status: "REVIEW_PENDING" } }),
+      prisma.competition.findMany({ take: 5, orderBy: { createdAt: "desc" }, include: { city: true, examBoard: true } }),
+      prisma.pDFImport.findMany({ take: 5, orderBy: { createdAt: "desc" } }),
+      prisma.studentAnswer.count(),
+      prisma.studentAnswer.count({ where: { isCorrect: true } }),
+    ]);
 
-  const avgAccuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
+    // #region agent log
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+      body: JSON.stringify({
+        sessionId: "03dbee",
+        runId: "pre-fix",
+        hypothesisId: "H-admin-dashboard-srv",
+        location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:afterQueries",
+        message: "admin dashboard queries ok",
+        data: {
+          totalStudents,
+          activeStudents,
+          totalCompetitions,
+          activeCompetitions,
+          activeQuestions,
+          pendingImports,
+          recentCompetitions: recentCompetitions.length,
+          recentImports: recentImports.length,
+          totalAnswered,
+          correctAnswers,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
-  return (
-    <div className="admin-dashboard-root animate-fade-up w-full max-w-none">
-      <header className="mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="orbit-kicker">Painel administrativo</p>
-          <h1 className="text-[clamp(1.9rem,3.4vw,2.45rem)] font-extrabold tracking-tight text-[#111827]">
-            Visão Geral
-          </h1>
-          <p className="mt-3 text-[14px] font-medium text-[#8B92A0]">
-            {formatDate(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy")}
-          </p>
+    const avgAccuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
+
+    return (
+      <div className="admin-dashboard-root animate-fade-up w-full max-w-none">
+        <header className="mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="orbit-kicker">Painel administrativo</p>
+            <h1 className="text-[clamp(1.9rem,3.4vw,2.45rem)] font-extrabold tracking-tight text-[#111827]">
+              Visão Geral
+            </h1>
+            <p className="mt-3 text-[14px] font-medium text-[#8B92A0]">
+              {formatDate(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy")}
+            </p>
+          </div>
+
+          <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
+            <Link
+              href="/admin/importacoes"
+              className="btn btn-primary inline-flex min-h-[48px] items-center gap-2.5 self-start px-7 text-[15px] shadow-[0_12px_36px_rgba(124,58,237,0.28)] lg:self-auto"
+            >
+              <Plus className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+              Importar PDF
+            </Link>
+          </motion.div>
+        </header>
+
+        {pendingImports > 0 && (
+          <div className="orbit-alert mb-12 items-center">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] bg-amber-100/90 text-amber-700 shadow-sm ring-1 ring-amber-200/80">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-semibold text-amber-950">
+                {pendingImports} importação{pendingImports > 1 ? "ões" : ""} aguardando revisão
+              </p>
+              <p className="mt-1 text-[14px] leading-relaxed text-amber-900/80">
+                Revise e publique as questões para disponibilizá-las aos alunos.
+              </p>
+            </div>
+            <Link
+              href="/admin/importacoes"
+              className="inline-flex flex-shrink-0 items-center gap-1.5 text-[14px] font-semibold text-amber-900 no-underline transition-colors hover:text-amber-950"
+            >
+              Revisar
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        )}
+
+        <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-7 2xl:grid-cols-4">
+          <StatsCard
+            title="Alunos"
+            value={totalStudents}
+            description={`${activeStudents} ativos`}
+            icon={<Users className="h-5 w-5" strokeWidth={2} />}
+            accent="#7C3AED"
+            highlight
+          />
+          <StatsCard
+            title="Concursos"
+            value={totalCompetitions}
+            description={`${activeCompetitions} ativos`}
+            icon={<Trophy className="h-5 w-5" strokeWidth={2} />}
+            accent="#2563EB"
+          />
+          <StatsCard
+            title="Questões"
+            value={activeQuestions}
+            description={`${totalQuestions.toLocaleString("pt-BR")} total`}
+            icon={<HelpCircle className="h-5 w-5" strokeWidth={2} />}
+            accent="#059669"
+          />
+          <StatsCard
+            title="Desempenho médio"
+            value={avgAccuracy}
+            description={`${totalAnswered.toLocaleString("pt-BR")} respostas`}
+            icon={<TrendingUp className="h-5 w-5" strokeWidth={2} />}
+            accent="#D97706"
+          />
         </div>
 
-        <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
-          <Link
-            href="/admin/importacoes"
-            className="btn btn-primary inline-flex min-h-[48px] items-center gap-2.5 self-start px-7 text-[15px] shadow-[0_12px_36px_rgba(124,58,237,0.28)] lg:self-auto"
-          >
-            <Plus className="h-5 w-5 shrink-0" strokeWidth={2.25} />
-            Importar PDF
-          </Link>
-        </motion.div>
-      </header>
-
-      {pendingImports > 0 && (
-        <div className="orbit-alert mb-12 items-center">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] bg-amber-100/90 text-amber-700 shadow-sm ring-1 ring-amber-200/80">
-            <AlertCircle className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold text-amber-950">
-              {pendingImports} importação{pendingImports > 1 ? "ões" : ""} aguardando revisão
-            </p>
-            <p className="mt-1 text-[14px] leading-relaxed text-amber-900/80">
-              Revise e publique as questões para disponibilizá-las aos alunos.
-            </p>
-          </div>
-          <Link
-            href="/admin/importacoes"
-            className="inline-flex flex-shrink-0 items-center gap-1.5 text-[14px] font-semibold text-amber-900 no-underline transition-colors hover:text-amber-950"
-          >
-            Revisar
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      )}
-
-      <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-7 2xl:grid-cols-4">
-        <StatsCard
-          title="Alunos"
-          value={totalStudents}
-          description={`${activeStudents} ativos`}
-          icon={<Users className="h-5 w-5" strokeWidth={2} />}
-          accent="#7C3AED"
-          highlight
-        />
-        <StatsCard
-          title="Concursos"
-          value={totalCompetitions}
-          description={`${activeCompetitions} ativos`}
-          icon={<Trophy className="h-5 w-5" strokeWidth={2} />}
-          accent="#2563EB"
-        />
-        <StatsCard
-          title="Questões"
-          value={activeQuestions}
-          description={`${totalQuestions.toLocaleString("pt-BR")} total`}
-          icon={<HelpCircle className="h-5 w-5" strokeWidth={2} />}
-          accent="#059669"
-        />
-        <StatsCard
-          title="Desempenho médio"
-          value={avgAccuracy}
-          description={`${totalAnswered.toLocaleString("pt-BR")} respostas`}
-          icon={<TrendingUp className="h-5 w-5" strokeWidth={2} />}
-          accent="#D97706"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:gap-10">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:gap-10">
         <section className="orbit-panel orbit-panel--dashboard-lists flex flex-col">
           <div className="orbit-panel-header items-center">
             <h2 className="text-lg font-bold tracking-tight text-[#111827]">Concursos recentes</h2>
@@ -233,7 +277,25 @@ export default async function AdminDashboardPage() {
             )}
           </div>
         </section>
+        </div>
       </div>
-    </div>
-  );
+    );
+  } catch (e) {
+    // #region agent log
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+      body: JSON.stringify({
+        sessionId: "03dbee",
+        runId: "pre-fix",
+        hypothesisId: "H-admin-dashboard-srv",
+        location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:catch",
+        message: "admin dashboard render failed",
+        data: { message: e instanceof Error ? e.message : String(e), stackTop: e instanceof Error ? (e.stack ?? "").split("\n").slice(0, 8).join("\n") : null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    throw e;
+  }
 }

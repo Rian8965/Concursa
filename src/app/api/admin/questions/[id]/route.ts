@@ -13,6 +13,8 @@ type QuestionUpdateBody = {
   subjectId?: string | null;
   topicId?: string | null;
   examBoardId?: string | null;
+  cityId?: string | null;
+  jobRoleId?: string | null;
   difficulty?: Difficulty;
   year?: string | number | null;
   correctAnswer: string;
@@ -68,6 +70,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     subjectId,
     topicId,
     examBoardId,
+    cityId,
+    jobRoleId,
     difficulty,
     year,
     correctAnswer,
@@ -100,6 +104,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           subjectId: optRelationId(subjectId),
           topicId: optRelationId(topicId),
           examBoardId: optRelationId(examBoardId),
+          cityId: optRelationId(cityId),
+          jobRoleId: optRelationId(jobRoleId),
           year: parseYear(year),
           hasImage: Boolean(hasImage && imageUrl),
           imageUrl: typeof imageUrl === "string" && imageUrl.length > 0 ? imageUrl : null,

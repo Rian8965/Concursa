@@ -147,6 +147,8 @@ model City {
   updatedAt DateTime @updatedAt
 
   competitions Competition[]
+  questions    Question[]
+  aiMetas      QuestionAiMeta[]
 
   @@map("cities")
 }
@@ -163,6 +165,7 @@ model ExamBoard {
 
   competitions Competition[]
   questions    Question[]
+  aiMetas      QuestionAiMeta[]
 
   @@map("exam_boards")
 }
@@ -181,6 +184,8 @@ model JobRole {
   competitions        CompetitionJobRole[]
   subjects            JobRoleSubject[]
   studentCompetitions StudentCompetition[]
+  questions           Question[]
+  aiMetas             QuestionAiMeta[]
 
   @@map("job_roles")
 }
@@ -257,6 +262,7 @@ model Subject {
   competitions CompetitionSubject[]
   questions    Question[]
   jobRoles     JobRoleSubject[]
+  aiMetas      QuestionAiMeta[]
 
   @@map("subjects")
 }
@@ -272,6 +278,7 @@ model Topic {
 
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
+  aiMetas   QuestionAiMeta[]
 
   @@unique([slug, subjectId])
   @@map("topics")
@@ -336,6 +343,8 @@ model Question {
   topicId        String?
   examBoardId    String?
   competitionId  String?
+  cityId         String?
+  jobRoleId      String?
   year           Int?
   difficulty     Difficulty     @default(MEDIUM)
   hasImage       Boolean        @default(false)
@@ -354,7 +363,10 @@ model Question {
   topic        Topic?      @relation(fields: [topicId], references: [id])
   examBoard    ExamBoard?  @relation(fields: [examBoardId], references: [id])
   competition  Competition? @relation(fields: [competitionId], references: [id])
+  city         City?       @relation(fields: [cityId], references: [id])
+  jobRole      JobRole?    @relation(fields: [jobRoleId], references: [id])
   pdfImport    PDFImport?  @relation(fields: [importId], references: [id])
+  aiMeta       QuestionAiMeta?
 
   alternatives      Alternative[]
   studentAnswers    StudentAnswer[]
@@ -363,6 +375,31 @@ model Question {
   usedBy            UsedQuestion[]
 
   @@map("questions")
+}
+
+model QuestionAiMeta {
+  id                 String   @id @default(cuid())
+  questionId          String   @unique
+  suggestedSubjectId  String?
+  suggestedTopicId    String?
+  suggestedExamBoardId String?
+  suggestedCityId     String?
+  suggestedJobRoleId  String?
+  suggestedYear       Int?
+  confidence          Float?
+  reasoning           String?  @db.Text
+  raw                Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  subject    Subject?  @relation(fields: [suggestedSubjectId], references: [id])
+  topic      Topic?    @relation(fields: [suggestedTopicId], references: [id])
+  examBoard  ExamBoard? @relation(fields: [suggestedExamBoardId], references: [id])
+  city       City?     @relation(fields: [suggestedCityId], references: [id])
+  jobRole    JobRole?  @relation(fields: [suggestedJobRoleId], references: [id])
+
+  @@map("question_ai_meta")
 }
 
 enum Difficulty {

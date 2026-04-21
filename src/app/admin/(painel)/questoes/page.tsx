@@ -5,12 +5,24 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Plus, Search, Edit2, Trash2, BookOpen } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, BookOpen, Filter } from "lucide-react";
 
 interface Question {
   id: string; content: string; difficulty: string; status: string; year?: number | null;
   subject?: { name: string } | null;
   competition?: { name: string } | null;
+  examBoard?: { acronym: string } | null;
+  city?: { name: string; state: string } | null;
+  jobRole?: { name: string } | null;
+  aiMeta?: {
+    confidence?: number | null;
+    suggestedYear?: number | null;
+    subject?: { name: string } | null;
+    topic?: { name: string } | null;
+    examBoard?: { acronym: string } | null;
+    city?: { name: string; state: string } | null;
+    jobRole?: { name: string } | null;
+  } | null;
 }
 
 const DIFF_LABELS: Record<string, string> = { EASY: "Fácil", MEDIUM: "Médio", HARD: "Difícil" };
@@ -24,17 +36,54 @@ export default function AdminQuestoesPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    examBoardId: "",
+    year: "",
+    cityId: "",
+    jobRoleId: "",
+    subjectId: "",
+  });
+  const [filterData, setFilterData] = useState({
+    examBoards: [] as { id: string; acronym: string; name: string }[],
+    cities: [] as { id: string; name: string; state: string }[],
+    jobRoles: [] as { id: string; name: string }[],
+    subjects: [] as { id: string; name: string }[],
+  });
 
-  const load = useCallback(async (q = "") => {
+  const load = useCallback(async (q = "", f = filters) => {
     setLoading(true);
-    const res = await fetch(`/api/admin/questions?search=${encodeURIComponent(q)}&limit=50`);
+    const sp = new URLSearchParams();
+    sp.set("search", q);
+    sp.set("limit", "50");
+    if (f.examBoardId) sp.set("examBoardId", f.examBoardId);
+    if (f.year) sp.set("year", f.year);
+    if (f.cityId) sp.set("cityId", f.cityId);
+    if (f.jobRoleId) sp.set("jobRoleId", f.jobRoleId);
+    if (f.subjectId) sp.set("subjectId", f.subjectId);
+    const res = await fetch(`/api/admin/questions?${sp.toString()}`);
     const data = await res.json();
     setQuestions(data.questions ?? []);
     setTotal(data.total ?? 0);
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    Promise.all([
+      fetch("/api/admin/exam-boards").then((r) => r.json()),
+      fetch("/api/admin/cities").then((r) => r.json()),
+      fetch("/api/admin/job-roles").then((r) => r.json()),
+      fetch("/api/admin/subjects").then((r) => r.json()),
+    ]).then(([bd, cd, jd, sd]) => {
+      setFilterData({
+        examBoards: bd.examBoards ?? [],
+        cities: cd.cities ?? [],
+        jobRoles: jd.jobRoles ?? [],
+        subjects: sd.subjects ?? [],
+      });
+    });
+  }, [load]);
 
   async function handleDelete(id: string) {
     if (!confirm("Excluir esta questão?")) return;
@@ -48,16 +97,66 @@ export default function AdminQuestoesPage() {
   return (
     <div style={{ maxWidth: 1000 }}>
       <PageHeader eyebrow="Conteúdo" title="Questões" description={`${total} questão${total !== 1 ? "ões" : ""} cadastrada${total !== 1 ? "s" : ""}`}>
-        <button onClick={() => { setEditingId(null); setShowForm(true); }} className="btn btn-primary">
-          <Plus style={{ width: 14, height: 14 }} /> Nova Questão
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => setFilterOpen((v) => !v)} className="btn btn-ghost">
+            <Filter style={{ width: 14, height: 14 }} /> Filtros
+          </button>
+          <button onClick={() => { setEditingId(null); setShowForm(true); }} className="btn btn-primary">
+            <Plus style={{ width: 14, height: 14 }} /> Nova Questão
+          </button>
+        </div>
       </PageHeader>
+
+      {filterOpen && (
+        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Banca</label>
+              <select className="input" value={filters.examBoardId} onChange={(e) => setFilters((p) => ({ ...p, examBoardId: e.target.value }))}>
+                <option value="">Todas</option>
+                {filterData.examBoards.map((b) => <option key={b.id} value={b.id}>{b.acronym}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Ano</label>
+              <input className="input" value={filters.year} onChange={(e) => setFilters((p) => ({ ...p, year: e.target.value }))} placeholder="Ex: 2024" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Cidade</label>
+              <select className="input" value={filters.cityId} onChange={(e) => setFilters((p) => ({ ...p, cityId: e.target.value }))}>
+                <option value="">Todas</option>
+                {filterData.cities.map((c) => <option key={c.id} value={c.id}>{c.name} — {c.state}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Cargo</label>
+              <select className="input" value={filters.jobRoleId} onChange={(e) => setFilters((p) => ({ ...p, jobRoleId: e.target.value }))}>
+                <option value="">Todos</option>
+                {filterData.jobRoles.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Matéria</label>
+              <select className="input" value={filters.subjectId} onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value }))}>
+                <option value="">Todas</option>
+                {filterData.subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <button className="btn btn-ghost" onClick={() => { setFilters({ examBoardId: "", year: "", cityId: "", jobRoleId: "", subjectId: "" }); load(search, { examBoardId: "", year: "", cityId: "", jobRoleId: "", subjectId: "" }); }}>
+              Limpar
+            </button>
+            <button className="btn btn-primary" onClick={() => load(search, filters)}>Aplicar</button>
+          </div>
+        </div>
+      )}
 
       <div style={{ position: "relative", marginBottom: 20 }}>
         <Search style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", width: 15, height: 15, color: "#9CA3AF" }} />
         <input className="input" style={{ paddingLeft: 42 }} placeholder="Buscar questões..."
           value={search} onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load(search)} />
+          onKeyDown={(e) => e.key === "Enter" && load(search, filters)} />
       </div>
 
       {loading ? (
@@ -84,6 +183,16 @@ export default function AdminQuestoesPage() {
                       {DIFF_LABELS[q.difficulty] ?? q.difficulty}
                     </span>
                     {q.year && <span style={{ fontSize: 11, color: "#9CA3AF", background: "#F3F4F6", padding: "2px 8px", borderRadius: 12 }}>{q.year}</span>}
+                      {!q.year && q.aiMeta?.suggestedYear && (
+                        <span style={{ fontSize: 11, color: "#92400E", background: "rgba(217,119,6,0.12)", padding: "2px 8px", borderRadius: 12, fontWeight: 700 }}>
+                          Sugere {q.aiMeta.suggestedYear}
+                        </span>
+                      )}
+                      {q.aiMeta?.confidence != null && (
+                        <span style={{ fontSize: 11, color: "#6B7280", background: "#F3F4F6", padding: "2px 8px", borderRadius: 12, fontWeight: 600 }}>
+                          IA {Math.round(q.aiMeta.confidence * 100)}%
+                        </span>
+                      )}
                     {q.status === "ACTIVE"
                       ? <span style={{ fontSize: 11, color: "#059669", background: "#ECFDF5", padding: "2px 8px", borderRadius: 12, fontWeight: 600 }}>Ativa</span>
                       : <span style={{ fontSize: 11, color: "#9CA3AF", background: "#F3F4F6", padding: "2px 8px", borderRadius: 12, fontWeight: 600 }}>{q.status}</span>}
@@ -91,13 +200,58 @@ export default function AdminQuestoesPage() {
                   <p style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.6 }}>
                     {q.content.length > 200 ? q.content.slice(0, 200) + "…" : q.content}
                   </p>
-                  {q.competition && <p style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 4 }}>{q.competition.name}</p>}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4, fontSize: 11.5, color: "#9CA3AF" }}>
+                    {q.competition && <span>{q.competition.name}</span>}
+                    {q.examBoard?.acronym && <span>· {q.examBoard.acronym}</span>}
+                    {q.city && <span>· {q.city.name}/{q.city.state}</span>}
+                    {q.jobRole?.name && <span>· {q.jobRole.name}</span>}
+                      {!q.examBoard?.acronym && q.aiMeta?.examBoard?.acronym && <span>· Sugere {q.aiMeta.examBoard.acronym}</span>}
+                      {!q.city && q.aiMeta?.city && <span>· Sugere {q.aiMeta.city.name}/{q.aiMeta.city.state}</span>}
+                      {!q.jobRole?.name && q.aiMeta?.jobRole?.name && <span>· Sugere {q.aiMeta.jobRole.name}</span>}
+                      {!q.subject && q.aiMeta?.subject?.name && <span>· Sugere {q.aiMeta.subject.name}</span>}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <button onClick={() => { setEditingId(q.id); setShowForm(true); }}
                     style={{ width: 30, height: 30, borderRadius: 8, background: "#F3F4F6", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
                     <Edit2 style={{ width: 12, height: 12 }} />
                   </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/admin/questions/${q.id}/classify`, { method: "POST" });
+                          const d = await res.json();
+                          if (!res.ok) throw new Error(d?.error ?? "Erro ao classificar");
+                          toast.success("IA sugeriu metadados");
+                          load(search, filters);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Erro ao classificar");
+                        }
+                      }}
+                      title="IA: sugerir metadados"
+                      style={{ width: 30, height: 30, borderRadius: 8, background: "#FFFBEB", border: "1px solid rgba(217,119,6,0.35)", display: "flex", alignItems: "center", justifyContent: "center", color: "#92400E", cursor: "pointer", fontFamily: "var(--font-sans)" }}
+                    >
+                      IA
+                    </button>
+                    {q.aiMeta && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/admin/questions/${q.id}/apply-ai`, { method: "POST" });
+                            const d = await res.json();
+                            if (!res.ok) throw new Error(d?.error ?? "Erro ao aplicar sugestões");
+                            toast.success("Sugestões aplicadas");
+                            load(search, filters);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Erro ao aplicar sugestões");
+                          }
+                        }}
+                        title="Aplicar sugestões da IA (preenche campos vazios)"
+                        style={{ height: 30, padding: "0 10px", borderRadius: 8, background: "#EDE9FE", border: "1px solid rgba(124,58,237,0.30)", display: "flex", alignItems: "center", justifyContent: "center", color: "#6D28D9", cursor: "pointer", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 12 }}
+                      >
+                        Aplicar
+                      </button>
+                    )}
                   <button onClick={() => handleDelete(q.id)} disabled={deleting === q.id}
                     style={{ width: 30, height: 30, borderRadius: 8, background: "#FEF2F2", border: "1px solid #FCA5A5", display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
                     <Trash2 style={{ width: 12, height: 12 }} />

@@ -35,7 +35,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     decisions?: { questionId: string; action: "approve" | "reject"; subjectId?: string; topicId?: string }[];
   };
 
-  const importRow = await prisma.pDFImport.findUnique({ where: { id }, select: { competitionId: true } });
+  const importRow = await prisma.pDFImport.findUnique({
+    where: { id },
+    select: { competitionId: true, examBoardId: true, cityId: true, jobRoleId: true, year: true },
+  });
 
   if (decisions?.length) {
     // #region agent log
@@ -104,6 +107,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             correctAnswer: iq.correctAnswer ?? "A",
             subjectId: d.subjectId || iq.suggestedSubjectId || null,
             topicId: d.topicId || iq.suggestedTopicId || null,
+            examBoardId: importRow?.examBoardId ?? null,
+            cityId: importRow?.cityId ?? null,
+            jobRoleId: importRow?.jobRoleId ?? null,
+            year: importRow?.year ?? null,
             competitionId: importRow?.competitionId ?? null,
             importId: id,
             status: "ACTIVE",
