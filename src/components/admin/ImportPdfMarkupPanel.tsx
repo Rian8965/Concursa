@@ -104,6 +104,21 @@ export function ImportPdfMarkupPanel({
 
   const pageWidth = Math.max(280, Math.min(1400, Math.floor(wrapWidth * zoom)));
 
+  const effectiveTargetQ = selectedQuestionId ?? targetQ;
+  const effectiveLinkType = linkType;
+  const computedKind: DrawMode = effectiveLinkType === "TEXT" ? "TEXT_BLOCK" : "IMAGE";
+  const computedRole = computedKind === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE";
+  const computedLabel =
+    effectiveLinkType === "TEXT"
+      ? "TEXT"
+      : effectiveLinkType === "IMAGE"
+        ? "IMAGE"
+        : effectiveLinkType === "TABLE"
+          ? "TABLE"
+          : effectiveLinkType === "GRAPH"
+            ? "GRAPH"
+            : "MIXED";
+
   const pageAssets = useMemo(() => assets.filter((a) => a.page === page), [assets, page]);
   const selectedAsset = useMemo(() => assets.find((a) => a.id === selectedAssetId) ?? null, [assets, selectedAssetId]);
   const selectedQuestionAssetIds = useMemo(() => {
@@ -192,16 +207,7 @@ export function ImportPdfMarkupPanel({
     [drawing, draggingAsset, resizingAsset],
   );
 
-  const effectiveTargetQ = selectedQuestionId ?? targetQ;
-  const effectiveLinkType = linkType;
-  const computedKind: DrawMode =
-    effectiveLinkType === "TEXT" ? "TEXT_BLOCK" : "IMAGE";
-  const computedRole = computedKind === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE";
-  const computedLabel =
-    effectiveLinkType === "TEXT" ? "TEXT" :
-    effectiveLinkType === "IMAGE" ? "IMAGE" :
-    effectiveLinkType === "TABLE" ? "TABLE" :
-    effectiveLinkType === "GRAPH" ? "GRAPH" : "MIXED";
+  // (moved up to avoid TS "used before declaration")
 
   const endDraw = useCallback(
     async (e: React.MouseEvent) => {

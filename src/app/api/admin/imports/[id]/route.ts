@@ -38,6 +38,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const importRow = await prisma.pDFImport.findUnique({ where: { id }, select: { competitionId: true } });
 
   if (decisions?.length) {
+    // #region agent log
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+      body: JSON.stringify({
+        sessionId: "03dbee",
+        runId: "pre-fix",
+        hypothesisId: "H-publish-flow",
+        location: "src/app/api/admin/imports/[id]/route.ts:PATCH",
+        message: "starting publish decisions",
+        data: { importId: id, decisions: decisions.length },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     for (const d of decisions) {
       if (d.action === "approve") {
         const iq = await prisma.importedQuestion.findUnique({ where: { id: d.questionId } });
@@ -57,6 +72,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const imageFromAsset = figLink?.importAsset?.imageDataUrl?.trim() || null;
         const finalImageUrl = imageFromAsset || iq.imageUrl || null;
         const finalHasImage = Boolean(finalImageUrl);
+
+        // #region agent log
+        fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+          body: JSON.stringify({
+            sessionId: "03dbee",
+            runId: "pre-fix",
+            hypothesisId: "H-publish-flow",
+            location: "src/app/api/admin/imports/[id]/route.ts:PATCH:approve",
+            message: "publishing imported question",
+            data: {
+              importId: id,
+              importedQuestionId: d.questionId,
+              hasSupportText: Boolean(supportText),
+              supportParts: supportParts.length,
+              hasImage: finalHasImage,
+              alternatives: alternatives.length,
+              subjectId: d.subjectId || iq.suggestedSubjectId || null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
 
         const q = await prisma.question.create({
           data: {

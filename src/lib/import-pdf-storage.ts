@@ -1,14 +1,16 @@
 import fs from "fs/promises";
 import path from "path";
 
-const DIR = path.join(process.cwd(), "private", "import-pdfs");
+function baseDir() {
+  return path.join(/*turbopackIgnore: true*/ process.cwd(), "private", "import-pdfs");
+}
 
 export function getImportPdfPath(importId: string): string {
-  return path.join(DIR, `${importId}.pdf`);
+  return path.join(baseDir(), `${importId}.pdf`);
 }
 
 export async function ensureImportPdfDir(): Promise<void> {
-  await fs.mkdir(DIR, { recursive: true });
+  await fs.mkdir(baseDir(), { recursive: true });
 }
 
 export async function saveImportPdfBuffer(importId: string, buffer: Buffer): Promise<string> {
@@ -20,7 +22,7 @@ export async function saveImportPdfBuffer(importId: string, buffer: Buffer): Pro
 
 export async function deleteImportPdfFile(storedPath: string | null | undefined): Promise<void> {
   if (!storedPath) return;
-  const full = path.join(process.cwd(), storedPath);
+  const full = path.join(/*turbopackIgnore: true*/ process.cwd(), storedPath);
   try {
     await fs.unlink(full);
   } catch {
@@ -30,7 +32,7 @@ export async function deleteImportPdfFile(storedPath: string | null | undefined)
 
 export async function readImportPdfBuffer(storedPath: string | null | undefined): Promise<Buffer | null> {
   if (!storedPath) return null;
-  const full = path.join(process.cwd(), storedPath);
+  const full = path.join(/*turbopackIgnore: true*/ process.cwd(), storedPath);
   try {
     return await fs.readFile(full);
   } catch {

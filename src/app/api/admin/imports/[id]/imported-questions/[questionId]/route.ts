@@ -65,6 +65,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
   });
 
+  // #region agent log
+  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+    body: JSON.stringify({
+      sessionId: "03dbee",
+      runId: "pre-fix",
+      hypothesisId: "H-question-edit",
+      location: "src/app/api/admin/imports/[id]/imported-questions/[questionId]/route.ts:PATCH",
+      message: "imported question patched",
+      data: {
+        importId,
+        questionId,
+        changed: {
+          content: typeof body.content === "string",
+          alternatives: Array.isArray(body.alternatives) ? body.alternatives.length : null,
+          correctAnswer: body.correctAnswer === undefined ? null : body.correctAnswer,
+          suggestedSubjectId: body.suggestedSubjectId === undefined ? null : body.suggestedSubjectId,
+          status: body.status ?? null,
+          rawText: body.rawText !== undefined,
+        },
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return NextResponse.json({ question: updated });
 }
 

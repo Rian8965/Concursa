@@ -73,6 +73,31 @@ export async function PATCH(
     },
   });
 
+  // #region agent log
+  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+    body: JSON.stringify({
+      sessionId: "03dbee",
+      runId: "pre-fix",
+      hypothesisId: "H-asset-patch",
+      location: "src/app/api/admin/imports/[id]/assets/[assetId]/route.ts:PATCH",
+      message: "asset patched",
+      data: {
+        importId: id,
+        assetId,
+        changed: {
+          scope: body.scope ?? null,
+          hasText: body.extractedText !== undefined,
+          hasImageDataUrl: body.imageDataUrl !== undefined,
+          bbox: wantsBbox ? { page: body.page ?? existing.page, bboxX: body.bboxX ?? existing.bboxX, bboxY: body.bboxY ?? existing.bboxY, bboxW: body.bboxW ?? existing.bboxW, bboxH: body.bboxH ?? existing.bboxH } : null,
+        },
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return NextResponse.json({ asset });
 }
 

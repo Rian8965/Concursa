@@ -79,6 +79,22 @@ function computeReviewWarnings(q: ImportedQ) {
   return warnings;
 }
 
+function computeReviewSuggestions(cur: ImportedQ, next?: ImportedQ) {
+  const suggestions: Array<{ kind: "split" | "merge"; reason: string }> = [];
+  const text = (cur.content ?? "").trim();
+  const matches = Array.from(text.matchAll(/\b(quest[aã]o|q\.)\s*(\d{1,3})\b/gi));
+  if (matches.length >= 2) suggestions.push({ kind: "split", reason: "Parece haver mais de uma questão no mesmo enunciado." });
+  // Heurística simples: enunciado termina “aberto” e próximo começa minúsculo ou conectivo.
+  if (next) {
+    const t = text;
+    const nt = (next.content ?? "").trim();
+    const endsOpen = t.length > 0 && !/[.!?]$/.test(t);
+    const nextLooksContinuation = /^[a-zà-ú]|^(e|ou|pois|logo|assim|portanto)\b/i.test(nt);
+    if (endsOpen && nextLooksContinuation) suggestions.push({ kind: "merge", reason: "A próxima parece continuação do enunciado." });
+  }
+  return suggestions;
+}
+
 export default function RevisaoImportacaoPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -92,6 +108,8 @@ export default function RevisaoImportacaoPage() {
   const rightRef = useRef<HTMLDivElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerLinkType, setDrawerLinkType] = useState<PdfLinkType>("TEXT");
+  const [visibleCount, setVisibleCount] = useState(60);
+  const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -269,6 +287,52 @@ export default function RevisaoImportacaoPage() {
     await refreshImport();
   }
 
+  async function splitQuestionAuto(questionId: string) {
+    const d = drafts[questionId];
+    if (!d) return;
+    const text = d.content ?? "";
+    const m = text.match(/\b(quest[aã]o|q\.)\s*\d{1,3}\b/gi);
+    if (!m || m.length < 2) {
+      toast.error("Não encontrei um marcador claro de 2ª questão para dividir automaticamente.");
+      return;
+    }
+    const marker = m[1];
+    const idx = text.toLowerCase().indexOf(marker.toLowerCase());
+    if (idx <= 0) {
+      toast.error("Não encontrei um ponto bom para dividir.");
+      return;
+    }
+    const first = text.slice(0, idx).trim();
+    const second = text.slice(idx).trim();
+    if (!first || !second) return;
+
+    await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: first }),
+    });
+
+    const cr = await fetch(`/api/admin/imports/${id}/imported-questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: second,
+        alternatives: [],
+        correctAnswer: null,
+        suggestedSubjectId: subjectMap[questionId] || null,
+        sourcePage: d.sourcePage ?? null,
+        rawText: d.rawText ?? null,
+      }),
+    });
+    if (!cr.ok) {
+      const err = await cr.json().catch(() => ({}));
+      toast.error(err.error ?? "Erro ao criar questão dividida");
+      return;
+    }
+    toast.success("Dividido automaticamente (nova questão criada)");
+    await refreshImport();
+  }
+
   async function mergeWithNext(questionId: string) {
     if (!imp) return;
     const idx = imp.importedQuestions.findIndex((q) => q.id === questionId);
@@ -333,6 +397,21 @@ export default function RevisaoImportacaoPage() {
               {saving ? "Salvando..." : <><Save className="h-4 w-4" /> Salvar revisão</>}
             </button>
           </div>
+
+          {(onlyNeedsReview ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0).length : imp.importedQuestions.length) > visibleCount && (
+            <div className="mt-3">
+              <button
+                type="button"
+                className="btn btn-ghost w-full !h-[38px] !text-[12px]"
+                onClick={() => setVisibleCount((n) => n + 60)}
+              >
+                Mostrar mais (+60)
+              </button>
+              <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">
+                Renderização incremental para melhorar performance em listas longas.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -363,13 +442,25 @@ export default function RevisaoImportacaoPage() {
               <h2 className="text-[14px] font-bold tracking-tight text-[#111827]">Questões extraídas</h2>
               <p className="mt-0.5 text-[12px] text-[#6B7280]">Edite tudo aqui. Para vincular trechos do PDF, selecione a questão e desenhe um retângulo à direita.</p>
             </div>
-            {imp.importedQuestions.length > 0 && (
-              <span className="text-[12px] font-semibold text-[#6B7280]">{imp.importedQuestions.length} itens</span>
-            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`btn !h-[34px] !text-[12px] ${onlyNeedsReview ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setOnlyNeedsReview((v) => !v)}
+                title="Filtrar apenas as que precisam revisão"
+              >
+                Só revisão
+              </button>
+              <span className="text-[12px] font-semibold text-[#6B7280]">
+                {imp.importedQuestions.length} itens
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">
-            {imp.importedQuestions.map((q, idx) => {
+            {(onlyNeedsReview ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0) : imp.importedQuestions)
+              .slice(0, visibleCount)
+              .map((q, idx) => {
           const d = decisions[q.id] ?? "pending";
           const isExpanded = expanded[q.id] ?? false;
           const isSelected = selectedQ === q.id;
@@ -379,6 +470,8 @@ export default function RevisaoImportacaoPage() {
           const linked = linkedAssetsByQuestion[q.id] ?? [];
           const warnings = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
+          const next = imp.importedQuestions[imp.importedQuestions.findIndex((x) => x.id === q.id) + 1];
+          const suggestions = computeReviewSuggestions(draft, next);
 
           return (
             <div
@@ -416,6 +509,11 @@ export default function RevisaoImportacaoPage() {
                       {warnings.length > 0 && (
                         <span className="rounded-full bg-[#DC262618] px-2 py-0.5 text-[11px] font-extrabold text-[#DC2626]">
                           Revisão recomendada
+                        </span>
+                      )}
+                      {suggestions.length > 0 && (
+                        <span className="rounded-full bg-[#D9770618] px-2 py-0.5 text-[11px] font-extrabold text-[#D97706]">
+                          Sugestão: {suggestions.map((s) => (s.kind === "split" ? "dividir" : "unir")).join(" / ")}
                         </span>
                       )}
                       {q.sourcePage != null && (
@@ -467,6 +565,28 @@ export default function RevisaoImportacaoPage() {
                               <li key={`${q.id}-w-${i}`}>{w}</li>
                             ))}
                           </ul>
+                        </div>
+                      )}
+                      {suggestions.length > 0 && (
+                        <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[12px] text-[#92400E]">
+                          <div className="font-extrabold">Sugestões</div>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                            {suggestions.map((s, i) => (
+                              <li key={`${q.id}-s-${i}`}>{s.reason}</li>
+                            ))}
+                          </ul>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {suggestions.some((s) => s.kind === "split") && (
+                              <button type="button" className="btn btn-ghost !h-[32px] !text-[12px]" onClick={() => splitQuestionAuto(q.id)}>
+                                Dividir (auto)
+                              </button>
+                            )}
+                            {suggestions.some((s) => s.kind === "merge") && (
+                              <button type="button" className="btn btn-ghost !h-[32px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
+                                Unir (sugerido)
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                       <div>
