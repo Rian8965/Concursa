@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy, Link2 } from "lucide-react";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 
 const ImportPdfMarkupPanel = dynamic(
@@ -55,6 +55,9 @@ export default function RevisaoImportacaoPage() {
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [subjectMap, setSubjectMap] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedQ, setSelectedQ] = useState<string>("");
+  const [drafts, setDrafts] = useState<Record<string, ImportedQ>>({});
+  const rightRef = useRef<HTMLDivElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +81,16 @@ export default function RevisaoImportacaoPage() {
       });
       setDecisions(initial);
       setSubjectMap(sm);
+      setSelectedQ((prev) => prev || impData.import.importedQuestions?.[0]?.id || "");
+      const ds: Record<string, ImportedQ> = {};
+      impData.import.importedQuestions.forEach((q: ImportedQ) => {
+        ds[q.id] = { ...q, alternatives: q.alternatives?.map((a) => ({ ...a })) ?? [] };
+      });
+      setDrafts(ds);
       setLoading(false);
+      // #region agent log
+      fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-review-ui',location:'revisao/page.tsx:loaded',message:'review page loaded import data',data:{importId:id,questionsCount:impData.import.importedQuestions?.length ?? 0,assetsCount:impData.import.importAssets?.length ?? 0,pdfAvailable:Boolean(impData.import.storedPdfPath)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     });
   }, [id]);
 
@@ -101,6 +113,68 @@ export default function RevisaoImportacaoPage() {
     setSaving(false);
   }
 
+  const linkedAssetsByQuestion = useMemo(() => {
+    const map: Record<string, ImportAssetDTO[]> = {};
+    const assets = imp?.importAssets ?? [];
+    for (const a of assets) {
+      for (const l of a.questionLinks ?? []) {
+        map[l.importedQuestionId] ??= [];
+        map[l.importedQuestionId].push(a);
+      }
+    }
+    return map;
+  }, [imp?.importAssets]);
+
+  async function saveQuestion(questionId: string) {
+    const d = drafts[questionId];
+    if (!d) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-save-question',location:'revisao/page.tsx:saveQuestion',message:'saving imported question edits',data:{importId:id,questionId,contentLen:d.content?.length ?? 0,alts:d.alternatives?.length ?? 0,correctAnswer:d.correctAnswer ?? null,subjectId:subjectMap[questionId] ?? ''},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: d.content,
+        alternatives: d.alternatives,
+        correctAnswer: d.correctAnswer ?? null,
+        suggestedSubjectId: subjectMap[questionId] || null,
+        sourcePage: d.sourcePage ?? null,
+        confidence: d.confidence ?? null,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Erro ao salvar questão");
+      return;
+    }
+    toast.success("Questão salva");
+    await refreshImport();
+  }
+
+  async function duplicateQuestion(questionId: string) {
+    const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}/duplicate`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Erro ao duplicar");
+      return;
+    }
+    toast.success("Questão duplicada");
+    await refreshImport();
+  }
+
+  async function deleteQuestion(questionId: string) {
+    if (!confirm("Excluir esta questão importada?")) return;
+    const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Erro ao excluir");
+      return;
+    }
+    toast.success("Questão excluída");
+    await refreshImport();
+  }
+
   if (loading || !imp) {
     return (
       <div style={{ textAlign: "center", padding: "48px 0" }}>
@@ -115,164 +189,296 @@ export default function RevisaoImportacaoPage() {
   const pending = Object.values(decisions).filter((d) => d === "pending").length;
 
   return (
-    <div style={{ maxWidth: 860 }}>
-      <div style={{ marginBottom: 24 }}>
-        <Link href="/admin/importacoes" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
-          <ArrowLeft style={{ width: 13, height: 13 }} /> Voltar
+    <div className="w-full max-w-none">
+      <div className="mb-6">
+        <Link href="/admin/importacoes" className="mb-2 inline-flex items-center gap-1 text-[13px] font-semibold text-[#7C3AED]">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar
         </Link>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>
-          Revisão: {imp.originalFilename}
-        </h1>
-        {imp.competition && <p style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, marginTop: 2 }}>{imp.competition.name}</p>}
-      </div>
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-[14px] font-bold tracking-tight text-[#111827]">PDF e regiões (texto-base / figura)</h2>
-        <p className="mb-4 max-w-3xl text-[12.5px] leading-relaxed text-[#6B7280]">
-          Desenhe retângulos sobre o PDF para marcar <strong>texto-base</strong> ou <strong>figuras</strong> vinculadas à
-          questão selecionada. Use &quot;Vincular a outra questão&quot; para reutilizar o mesmo bloco em várias questões
-          (compartilhado). Na publicação, os textos marcados viram <strong>texto de apoio</strong> e as figuras
-          complementam a imagem da questão.
-        </p>
-        <ImportPdfMarkupPanel
-          importId={id}
-          pdfAvailable={Boolean(imp.storedPdfPath)}
-          questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
-          assets={imp.importAssets ?? []}
-          onChanged={refreshImport}
-        />
-      </section>
-
-      {/* Stats + Actions */}
-      <div className="card" style={{ padding: "14px 18px", marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div style={{ display: "flex", gap: 20 }}>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: 20, fontWeight: 800, color: "#111827" }}>{imp.importedQuestions.length}</p>
-              <p style={{ fontSize: 11, color: "#9CA3AF" }}>Total</p>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: 20, fontWeight: 800, color: "#059669" }}>{approved}</p>
-              <p style={{ fontSize: 11, color: "#9CA3AF" }}>Aprovadas</p>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: 20, fontWeight: 800, color: "#DC2626" }}>{rejected}</p>
-              <p style={{ fontSize: 11, color: "#9CA3AF" }}>Rejeitadas</p>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: 20, fontWeight: 800, color: "#D97706" }}>{pending}</p>
-              <p style={{ fontSize: 11, color: "#9CA3AF" }}>Pendentes</p>
-            </div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-[22px] font-extrabold tracking-tight text-[#111827]">Revisão: {imp.originalFilename}</h1>
+            {imp.competition && <p className="mt-1 text-[13px] font-semibold text-[#7C3AED]">{imp.competition.name}</p>}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => selectAll("approve")} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#ECFDF5", border: "1px solid #6EE7B7", color: "#059669", cursor: "pointer", fontFamily: "var(--font-sans)", display: "flex", alignItems: "center", gap: 5 }}>
-              <CheckCircle2 style={{ width: 13, height: 13 }} /> Aprovar todas
+          <div className="flex items-center gap-2">
+            <button onClick={() => selectAll("approve")} className="btn !h-[34px] !px-3 !text-[12px]" style={{ background: "#ECFDF5", border: "1px solid #6EE7B7", color: "#059669" }}>
+              <CheckCircle2 className="h-4 w-4" /> Aprovar todas
             </button>
-            <button onClick={() => selectAll("reject")} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#DC2626", cursor: "pointer", fontFamily: "var(--font-sans)", display: "flex", alignItems: "center", gap: 5 }}>
-              <XCircle style={{ width: 13, height: 13 }} /> Rejeitar todas
+            <button onClick={() => selectAll("reject")} className="btn !h-[34px] !px-3 !text-[12px]" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#DC2626" }}>
+              <XCircle className="h-4 w-4" /> Rejeitar todas
             </button>
-            <button onClick={saveReview} disabled={saving} className="btn btn-primary" style={{ fontSize: 12, height: 34 }}>
-              {saving ? "Salvando..." : <><Save style={{ width: 13, height: 13 }} /> Salvar revisão</>}
+            <button onClick={saveReview} disabled={saving} className="btn btn-primary !h-[34px] !text-[12px]">
+              {saving ? "Salvando..." : <><Save className="h-4 w-4" /> Salvar revisão</>}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Questions */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {imp.importedQuestions.map((q, idx) => {
+      <div className="mb-5 grid gap-3 sm:grid-cols-4">
+        <div className="stat-widget">
+          <div className="stat-label">Total</div>
+          <div className="stat-value">{imp.importedQuestions.length}</div>
+        </div>
+        <div className="stat-widget">
+          <div className="stat-label">Aprovadas</div>
+          <div className="stat-value" style={{ color: "#059669" }}>{approved}</div>
+        </div>
+        <div className="stat-widget">
+          <div className="stat-label">Rejeitadas</div>
+          <div className="stat-value" style={{ color: "#DC2626" }}>{rejected}</div>
+        </div>
+        <div className="stat-widget">
+          <div className="stat-label">Pendentes</div>
+          <div className="stat-value" style={{ color: "#D97706" }}>{pending}</div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[440px_minmax(0,1fr)]">
+        {/* Left: questions */}
+        <div className="min-w-0">
+          <div className="mb-3 flex items-end justify-between gap-2">
+            <div>
+              <h2 className="text-[14px] font-bold tracking-tight text-[#111827]">Questões extraídas</h2>
+              <p className="mt-0.5 text-[12px] text-[#6B7280]">Edite tudo aqui. Para vincular trechos do PDF, selecione a questão e desenhe um retângulo à direita.</p>
+            </div>
+            {imp.importedQuestions.length > 0 && (
+              <span className="text-[12px] font-semibold text-[#6B7280]">{imp.importedQuestions.length} itens</span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {imp.importedQuestions.map((q, idx) => {
           const d = decisions[q.id] ?? "pending";
           const isExpanded = expanded[q.id] ?? false;
-          const borderColor = d === "approve" ? "#6EE7B7" : d === "reject" ? "#FCA5A5" : "#E5E7EB";
+          const isSelected = selectedQ === q.id;
+          const borderColor = isSelected ? "#7C3AED" : d === "approve" ? "#6EE7B7" : d === "reject" ? "#FCA5A5" : "#E5E7EB";
           const bgColor = d === "approve" ? "#ECFDF5" : d === "reject" ? "#FEF2F2" : "#FFFFFF";
+          const draft = drafts[q.id] ?? q;
+          const linked = linkedAssetsByQuestion[q.id] ?? [];
 
           return (
-            <div key={q.id} style={{ border: `1.5px solid ${borderColor}`, borderRadius: 12, background: bgColor, overflow: "hidden", transition: "all 0.15s" }}>
-              <div style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", flexShrink: 0, paddingTop: 2, width: 22 }}>
-                  {idx + 1}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.6 }}>
-                    {isExpanded ? q.content : (q.content.length > 150 ? q.content.slice(0, 150) + "…" : q.content)}
+            <div
+              key={q.id}
+              className="rounded-[14px] border bg-white shadow-sm transition"
+              style={{ borderWidth: 1.5, borderColor, background: bgColor }}
+              onMouseDown={() => {
+                setSelectedQ(q.id);
+                // #region agent log
+                fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-sync-selection',location:'revisao/page.tsx:selectQuestion',message:'selected question in review list',data:{importId:id,questionId:q.id,index:idx+1},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              }}
+            >
+              <div className="flex items-start gap-3 p-4">
+                <div className="w-[26px] shrink-0 pt-0.5 text-[11px] font-bold text-[#9CA3AF]">{idx + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-bold text-[#111827]">Questão</span>
+                      {q.confidence != null && (
+                        <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
+                          Confiança {Math.round(q.confidence * 100)}%
+                        </span>
+                      )}
+                      {linked.length > 0 && (
+                        <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-semibold text-[#374151]">
+                          {linked.length} vínculo(s)
+                        </span>
+                      )}
+                      {q.sourcePage != null && (
+                        <span className="text-[11px] font-semibold text-[#9CA3AF]">p.{q.sourcePage}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="btn !h-[30px] !px-2.5 !text-[12px]"
+                        style={{ background: d === "approve" ? "#059669" : "#F3F4F6", border: d === "approve" ? "1px solid #059669" : "1px solid #E5E7EB", color: d === "approve" ? "#fff" : "#374151" }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className="btn !h-[30px] !px-2.5 !text-[12px]"
+                        style={{ background: d === "reject" ? "#DC2626" : "#F3F4F6", border: d === "reject" ? "1px solid #DC2626" : "1px solid #E5E7EB", color: d === "reject" ? "#fff" : "#374151" }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
+                      >
+                        ✗
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost !h-[30px] !w-[30px] !p-0"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
+                        title={isExpanded ? "Recolher" : "Expandir"}
+                      >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-[13px] leading-relaxed text-[#374151]">
+                    {isExpanded ? draft.content : (draft.content.length > 160 ? draft.content.slice(0, 160) + "…" : draft.content)}
                   </p>
-                  {q.hasImage && q.imageUrl && (
-                    <div style={{ marginTop: 10 }}>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", marginBottom: 6 }}>Figura / recorte da prova</p>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={q.imageUrl}
-                        alt=""
-                        style={{ maxWidth: "100%", height: "auto", borderRadius: 8, border: "1px solid #E5E7EB" }}
-                      />
+
+                  {isExpanded && (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Enunciado</label>
+                        <textarea
+                          className="input min-h-[100px] text-[12.5px]"
+                          value={draft.content}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Alternativas</label>
+                        <div className="space-y-2">
+                          {draft.alternatives.map((alt, altIdx) => (
+                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
+                              <input
+                                className="input text-center text-[12px] font-bold"
+                                value={alt.letter}
+                                onChange={(e) => {
+                                  const v = e.target.value.toUpperCase();
+                                  setDrafts((prev) => {
+                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
+                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                  });
+                                }}
+                              />
+                              <textarea
+                                className="input min-h-[56px] text-[12.5px]"
+                                value={alt.content}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setDrafts((prev) => {
+                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
+                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                  });
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Resposta correta</label>
+                          <select
+                            className="input h-[36px] text-[12.5px]"
+                            value={draft.correctAnswer ?? ""}
+                            onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, correctAnswer: e.target.value || null } }))}
+                          >
+                            <option value="">(vazio)</option>
+                            {draft.alternatives.map((a, i) => (
+                              <option key={`${q.id}-ca-${i}`} value={a.letter}>
+                                {a.letter}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Página (opcional)</label>
+                          <input
+                            className="input h-[36px] text-[12.5px]"
+                            inputMode="numeric"
+                            value={draft.sourcePage ?? ""}
+                            onChange={(e) => {
+                              const n = e.target.value ? Number(e.target.value) : null;
+                              setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, sourcePage: Number.isFinite(n as any) ? (n as any) : null } }));
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">
+                          Matéria
+                          {(() => {
+                            const suggested = parseSuggestedSubject(q.rawText);
+                            if (!suggested) return null;
+                            const confColor = suggested.confidence === "high" ? "#059669" : suggested.confidence === "medium" ? "#D97706" : "#9CA3AF";
+                            return (
+                              <span className="ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ color: confColor, background: confColor + "18" }}>
+                                IA: {suggested.subject}{suggested.confidence === "high" ? " ✓" : ""}
+                              </span>
+                            );
+                          })()}
+                        </label>
+                        <select className="input h-[36px] text-[12.5px]" value={subjectMap[q.id] ?? ""} onChange={(e) => setSubjectMap((prev) => ({ ...prev, [q.id]: e.target.value }))}>
+                          <option value="">Automático (sugestão da IA)</option>
+                          {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button type="button" className="btn btn-purple !h-[34px] !text-[12px]" onClick={() => saveQuestion(q.id)}>
+                          <Save className="h-4 w-4" /> Salvar questão
+                        </button>
+                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => duplicateQuestion(q.id)}>
+                          <Copy className="h-4 w-4" /> Duplicar
+                        </button>
+                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => deleteQuestion(q.id)}>
+                          <Trash2 className="h-4 w-4 text-red-600" /> Excluir
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost !h-[34px] !text-[12px]"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            rightRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }}
+                        >
+                          <Link2 className="h-4 w-4" /> Vincular imagem/texto
+                        </button>
+                      </div>
                     </div>
                   )}
-                  {q.sourcePage && <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Página {q.sourcePage}</p>}
-                </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
-                    style={{ height: 30, padding: "0 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.1s", fontFamily: "var(--font-sans)", background: d === "approve" ? "#059669" : "#F3F4F6", border: d === "approve" ? "1px solid #059669" : "1px solid #E5E7EB", color: d === "approve" ? "#fff" : "#374151" }}>
-                    ✓
-                  </button>
-                  <button onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
-                    style={{ height: 30, padding: "0 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.1s", fontFamily: "var(--font-sans)", background: d === "reject" ? "#DC2626" : "#F3F4F6", border: d === "reject" ? "1px solid #DC2626" : "1px solid #E5E7EB", color: d === "reject" ? "#fff" : "#374151" }}>
-                    ✗
-                  </button>
-                  <button onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
-                    style={{ height: 30, width: 30, borderRadius: 8, cursor: "pointer", background: "#F3F4F6", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontFamily: "var(--font-sans)" }}>
-                    {isExpanded ? <ChevronUp style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 13, height: 13 }} />}
-                  </button>
                 </div>
               </div>
 
-              {isExpanded && (
-                <div style={{ padding: "0 16px 16px 50px" }}>
-                  {/* Alternatives */}
-                  {q.alternatives.map((alt, altIdx) => (
-                    <div key={`${q.id}:${alt.letter}:${altIdx}`} style={{
-                      display: "flex", gap: 8, padding: "6px 10px", borderRadius: 8, marginBottom: 4,
-                      background: alt.letter === q.correctAnswer ? "#ECFDF5" : "#F9FAFB",
-                      border: `1px solid ${alt.letter === q.correctAnswer ? "#6EE7B7" : "#E5E7EB"}`,
-                    }}>
-                      <span style={{ fontWeight: 700, fontSize: 12, color: alt.letter === q.correctAnswer ? "#059669" : "#6B7280", flexShrink: 0 }}>{alt.letter}</span>
-                      <span style={{ fontSize: 12.5, color: "#374151" }}>{alt.content}</span>
-                    </div>
-                  ))}
-
-                  {/* Subject override */}
-                  <div style={{ marginTop: 10 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
-                      Matéria
-                      {(() => {
-                        const suggested = parseSuggestedSubject(q.rawText);
-                        if (!suggested) return null;
-                        const confColor = suggested.confidence === "high" ? "#059669" : suggested.confidence === "medium" ? "#D97706" : "#9CA3AF";
-                        return (
-                          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: confColor, background: confColor + "18", padding: "2px 8px", borderRadius: 20 }}>
-                            IA: {suggested.subject}
-                            {suggested.confidence === "high" ? " ✓" : ""}
-                          </span>
-                        );
-                      })()}
-                    </label>
-                    <select className="input" style={{ fontSize: 12, height: 34 }} value={subjectMap[q.id] ?? ""} onChange={(e) => setSubjectMap((prev) => ({ ...prev, [q.id]: e.target.value }))}>
-                      <option value="">Automático (sugestão da IA)</option>
-                      {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
+
+            {imp.importedQuestions.length === 0 && (
+              <div className="rounded-[16px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
+                <AlertCircle className="mx-auto mb-2 h-7 w-7 text-[#D1D5DB]" />
+                <p className="text-[14px] text-[#6B7280]">Nenhuma questão extraída nesta importação</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: PDF */}
+        <div ref={rightRef} className="min-w-0">
+          <div className="sticky top-[18px] space-y-3">
+            <div className="rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
+              <h2 className="text-[14px] font-bold tracking-tight text-[#111827]">PDF e regiões (texto-base / figura)</h2>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-[#6B7280]">
+                Questão selecionada: <strong>{imp.importedQuestions.findIndex((q) => q.id === selectedQ) >= 0 ? `Questão ${imp.importedQuestions.findIndex((q) => q.id === selectedQ) + 1}` : "—"}</strong>.
+                Desenhe retângulos para marcar texto-base/figura e vincular à questão alvo.
+              </p>
+            </div>
+            <ImportPdfMarkupPanel
+              importId={id}
+              pdfAvailable={Boolean(imp.storedPdfPath)}
+              questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
+              assets={imp.importAssets ?? []}
+              onChanged={refreshImport}
+              selectedQuestionId={selectedQ}
+              onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
+            />
+          </div>
+        </div>
       </div>
 
-      {imp.importedQuestions.length === 0 && (
-        <div style={{ background: "#fff", border: "1.5px dashed #E5E7EB", borderRadius: 16, padding: "48px 24px", textAlign: "center" }}>
-          <AlertCircle style={{ width: 28, height: 28, color: "#D1D5DB", margin: "0 auto 10px" }} />
-          <p style={{ fontSize: 14, color: "#6B7280" }}>Nenhuma questão extraída nesta importação</p>
-        </div>
-      )}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

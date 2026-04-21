@@ -33,6 +33,8 @@ type Props = {
   questions: QOpt[];
   assets: ImportAssetDTO[];
   onChanged: () => Promise<void> | void;
+  selectedQuestionId?: string;
+  onSelectedQuestionIdChange?: (id: string) => void;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -43,7 +45,15 @@ function normRect(ax: number, ay: number, bx: number, by: number) {
   return { x, y, w, h };
 }
 
-export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets, onChanged }: Props) {
+export function ImportPdfMarkupPanel({
+  importId,
+  pdfAvailable,
+  questions,
+  assets,
+  onChanged,
+  selectedQuestionId,
+  onSelectedQuestionIdChange,
+}: Props) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [mode, setMode] = useState<DrawMode>(null);
@@ -51,18 +61,28 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
   const [drawing, setDrawing] = useState<{ ax: number; ay: number } | null>(null);
   const [preview, setPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const pageWrapRef = useRef<HTMLDivElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingText, setEditingText] = useState<Record<string, string>>({});
 
   const pdfUrl = `/api/admin/imports/${importId}/pdf`;
 
-  const [pageWidth, setPageWidth] = useState(720);
+  const [wrapWidth, setWrapWidth] = useState(720);
+  const [zoom, setZoom] = useState(1);
   useEffect(() => {
-    const r = () => setPageWidth(Math.min(720, Math.max(280, window.innerWidth - 100)));
-    r();
-    window.addEventListener("resize", r);
-    return () => window.removeEventListener("resize", r);
+    const el = pageWrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      if (Number.isFinite(w) && w > 0) setWrapWidth(Math.max(280, Math.min(1200, Math.floor(w))));
+    };
+    measure();
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
+
+  const pageWidth = Math.max(280, Math.min(1400, Math.floor(wrapWidth * zoom)));
 
   const pageAssets = useMemo(() => assets.filter((a) => a.page === page), [assets, page]);
 
@@ -89,6 +109,8 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
     [drawing],
   );
 
+  const effectiveTargetQ = selectedQuestionId ?? targetQ;
+
   const endDraw = useCallback(
     async (e: React.MouseEvent) => {
       if (!drawing || !overlayRef.current || !mode) return;
@@ -99,10 +121,13 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
       setDrawing(null);
       setPreview(null);
       if (box.w < 0.008 || box.h < 0.008) return;
-      if (!targetQ) return;
+      if (!effectiveTargetQ) return;
 
       setBusy(true);
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-link-flow',location:'ImportPdfMarkupPanel.tsx:endDraw',message:'creating asset+link from selection',data:{importId,page,mode,targetQuestionId:effectiveTargetQ,bbox:{x:box.x,y:box.y,w:box.w,h:box.h}},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const res = await fetch(`/api/admin/imports/${importId}/assets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -126,7 +151,7 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            importedQuestionId: targetQ,
+            importedQuestionId: effectiveTargetQ,
             importAssetId: assetId,
             role,
           }),
@@ -143,7 +168,7 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
         setBusy(false);
       }
     },
-    [drawing, mode, page, importId, targetQ, onChanged],
+    [drawing, mode, page, importId, effectiveTargetQ, onChanged],
   );
 
   const patchAssetText = async (assetId: string, extractedText: string) => {
@@ -207,6 +232,12 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
     setTargetQ((prev) => (prev && questions.some((q) => q.id === prev) ? prev : questions[0].id));
   }, [questions]);
 
+  useEffect(() => {
+    if (!selectedQuestionId) return;
+    if (!questions.some((q) => q.id === selectedQuestionId)) return;
+    setTargetQ(selectedQuestionId);
+  }, [selectedQuestionId, questions]);
+
   const addExtraLink = async () => {
     if (!linkExtra.assetId || !linkExtra.qid) return;
     setBusy(true);
@@ -248,8 +279,15 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Questão alvo</span>
           <select
             className="input max-w-[220px] py-1.5 text-[13px]"
-            value={targetQ}
-            onChange={(e) => setTargetQ(e.target.value)}
+            value={effectiveTargetQ}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTargetQ(v);
+              onSelectedQuestionIdChange?.(v);
+              // #region agent log
+              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-sync-selection',location:'ImportPdfMarkupPanel.tsx:selectTarget',message:'changed target question in PDF panel',data:{importId,targetQuestionId:v},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+            }}
           >
             {questions.map((q) => (
               <option key={q.id} value={q.id}>
@@ -295,11 +333,37 @@ export function ImportPdfMarkupPanel({ importId, pdfAvailable, questions, assets
             >
               →
             </button>
+            <span className="mx-1 h-4 w-px bg-[#E5E7EB]" />
+            <button
+              type="button"
+              className="btn btn-ghost !py-1 !text-[12px]"
+              onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+              title="Zoom -"
+            >
+              −
+            </button>
+            <span className="text-[12px] text-[#6B7280]">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className="btn btn-ghost !py-1 !text-[12px]"
+              onClick={() => setZoom((z) => Math.min(2.0, Math.round((z + 0.1) * 10) / 10))}
+              title="Zoom +"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost !py-1 !text-[12px]"
+              onClick={() => setZoom(1)}
+              title="Ajustar à largura"
+            >
+              Ajustar
+            </button>
           </div>
           {busy && <Loader2 className="h-4 w-4 animate-spin text-[#7C3AED]" />}
         </div>
 
-        <div className="relative overflow-auto rounded-[12px] border border-[#E5E7EB] bg-[#F3F4F6]">
+        <div ref={pageWrapRef} className="relative overflow-auto rounded-[12px] border border-[#E5E7EB] bg-[#F3F4F6]">
           <Document
             file={pdfUrl}
             loading={<div className="flex justify-center p-12 text-[13px] text-[#6B7280]">Carregando PDF…</div>}
