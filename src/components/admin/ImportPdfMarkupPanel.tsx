@@ -89,6 +89,7 @@ export function ImportPdfMarkupPanel({
   const [wrapWidth, setWrapWidth] = useState(720);
   const [zoom, setZoom] = useState(1);
   const [showAllRegions, setShowAllRegions] = useState(false);
+  const [pdfLoadError, setPdfLoadError] = useState<string>("");
   useEffect(() => {
     const el = pageWrapRef.current;
     if (!el) return;
@@ -549,12 +550,29 @@ export function ImportPdfMarkupPanel({
         </div>
 
         <div ref={pageWrapRef} className="relative overflow-auto rounded-[12px] border border-[#E5E7EB] bg-[#F3F4F6]">
-          <Document
-            file={pdfUrl}
-            loading={<div className="flex justify-center p-12 text-[13px] text-[#6B7280]">Carregando PDF…</div>}
-            onLoadSuccess={({ numPages: n }) => setNumPages(n)}
-            onLoadError={() => {}}
-          >
+          {pdfLoadError ? (
+            <div className="rounded-[12px] border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-[12.5px] text-[#7F1D1D]">
+              <div className="font-extrabold">Falha ao carregar o PDF</div>
+              <div className="mt-1 break-words">{pdfLoadError}</div>
+              <div className="mt-2">
+                <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => setPdfLoadError("")}>
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Document
+              file={pdfUrl}
+              loading={<div className="flex justify-center p-12 text-[13px] text-[#6B7280]">Carregando PDF…</div>}
+              onLoadSuccess={({ numPages: n }) => setNumPages(n)}
+              onLoadError={(e) => {
+                const msg = e instanceof Error ? e.message : String(e);
+                setPdfLoadError(msg || "Erro desconhecido");
+                // #region agent log
+                fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-pdf-load',location:'ImportPdfMarkupPanel.tsx:Document:onLoadError',message:'react-pdf failed to load',data:{importId,error:msg},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              }}
+            >
             <div className="relative inline-block">
               <Page pageNumber={page} width={pageWidth} renderTextLayer renderAnnotationLayer />
               <div
@@ -651,7 +669,8 @@ export function ImportPdfMarkupPanel({
                 )}
               </div>
             </div>
-          </Document>
+            </Document>
+          )}
         </div>
       </div>
   );
