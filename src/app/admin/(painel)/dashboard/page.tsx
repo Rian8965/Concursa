@@ -10,6 +10,7 @@ import {
   ArrowRight, Plus,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
+import { motion } from "framer-motion";
 
 export default async function AdminDashboardPage() {
   const session = await auth();
@@ -52,13 +53,15 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
 
-        <Link
-          href="/admin/importacoes"
-          className="btn btn-primary inline-flex min-h-[48px] items-center gap-2.5 self-start px-7 text-[15px] shadow-[0_12px_36px_rgba(124,58,237,0.28)] lg:self-auto"
-        >
-          <Plus className="h-5 w-5 shrink-0" strokeWidth={2.25} />
-          Importar PDF
-        </Link>
+        <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
+          <Link
+            href="/admin/importacoes"
+            className="btn btn-primary inline-flex min-h-[48px] items-center gap-2.5 self-start px-7 text-[15px] shadow-[0_12px_36px_rgba(124,58,237,0.28)] lg:self-auto"
+          >
+            <Plus className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+            Importar PDF
+          </Link>
+        </motion.div>
       </header>
 
       {pendingImports > 0 && (
@@ -91,6 +94,7 @@ export default async function AdminDashboardPage() {
           description={`${activeStudents} ativos`}
           icon={<Users className="h-5 w-5" strokeWidth={2} />}
           accent="#7C3AED"
+          highlight
         />
         <StatsCard
           title="Concursos"
@@ -101,14 +105,14 @@ export default async function AdminDashboardPage() {
         />
         <StatsCard
           title="Questões"
-          value={activeQuestions.toLocaleString("pt-BR")}
+          value={activeQuestions}
           description={`${totalQuestions.toLocaleString("pt-BR")} total`}
           icon={<HelpCircle className="h-5 w-5" strokeWidth={2} />}
           accent="#059669"
         />
         <StatsCard
           title="Desempenho médio"
-          value={`${avgAccuracy}%`}
+          value={avgAccuracy}
           description={`${totalAnswered.toLocaleString("pt-BR")} respostas`}
           icon={<TrendingUp className="h-5 w-5" strokeWidth={2} />}
           accent="#D97706"

@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils/cn";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { motion } from "framer-motion";
+import { CountUp } from "@/components/shared/CountUp";
 
 interface StatsCardProps {
   title: string;
@@ -8,6 +10,7 @@ interface StatsCardProps {
   icon?: React.ReactNode;
   trend?: { value: number; label: string };
   accent?: string;
+  highlight?: boolean;
   className?: string;
 }
 
@@ -18,12 +21,23 @@ export function StatsCard({
   icon,
   trend,
   accent = "#7C3AED",
+  highlight = false,
   className,
 }: StatsCardProps) {
   const trendPositive = (trend?.value ?? 0) >= 0;
+  const numericValue = typeof value === "number" ? value : Number.isFinite(Number(value)) ? Number(value) : null;
 
   return (
-    <div className={cn("stat-widget group", className)}>
+    <motion.div
+      whileHover={{ y: -2, scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ duration: 0.18 }}
+      className={cn("stat-widget group relative overflow-hidden", className)}
+      style={{
+        background: highlight ? "linear-gradient(180deg, rgba(124,58,237,0.08) 0%, rgba(255,255,255,1) 64%)" : undefined,
+        borderColor: highlight ? "rgba(124,58,237,0.18)" : undefined,
+      }}
+    >
       <div
         className="absolute left-0 right-0 top-0 h-[3px] opacity-95"
         style={{
@@ -42,7 +56,7 @@ export function StatsCard({
           <p
             className="mt-3 text-[clamp(1.85rem,3.2vw,2.65rem)] font-extrabold leading-none tracking-tight text-[#111827]"
           >
-            {value}
+            {numericValue != null ? <CountUp value={numericValue} /> : value}
           </p>
           {description && (
             <p className="mt-2.5 text-[13.5px] leading-snug text-[#5B6472]">{description}</p>
@@ -82,6 +96,6 @@ export function StatsCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

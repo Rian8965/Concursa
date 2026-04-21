@@ -11,6 +11,7 @@ import {
   Play, BarChart3, CheckCircle2, TrendingUp,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
+import { motion } from "framer-motion";
 
 export default async function StudentDashboardPage() {
   const session = await auth();
@@ -54,160 +55,87 @@ export default async function StudentDashboardPage() {
     : null;
 
   return (
-    <div className="animate-fade-up" style={{ maxWidth: 1080 }}>
-
-      {/* ── Header ── */}
-      <div
-        className="flex items-start justify-between"
-        style={{ marginBottom: 32 }}
-      >
-        <div>
-          <p
-            style={{
-              fontSize: 12,
-              color: "#9CA3AF",
-              fontWeight: 600,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              marginBottom: 4,
-            }}
-          >
-            {greeting}
-          </p>
-          <h1
-            style={{
-              fontSize: 28,
-              fontWeight: 800,
-              color: "#111827",
-              letterSpacing: "-0.04em",
-              lineHeight: 1.1,
-            }}
-          >
+    <div className="animate-fade-up w-full max-w-[1120px]">
+      <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="orbit-kicker">{greeting}</p>
+          <h1 className="text-[clamp(1.8rem,3.1vw,2.35rem)] font-extrabold tracking-tight text-[#111827]">
             {firstName}
           </h1>
-          <p style={{ fontSize: 13.5, color: "#9CA3AF", marginTop: 4 }}>
+          <p className="mt-2 text-[13.5px] font-medium text-[#8B92A0]">
             {formatDate(now, "EEEE, dd 'de' MMMM")}
           </p>
         </div>
 
         {daysLeft !== null && mainCompetition?.competition?.examDate && (
-          <div
-            style={{
-              background: "#FAF5FF",
-              border: "1px solid #E9D5FF",
-              borderRadius: 16,
-              padding: "14px 22px",
-              textAlign: "center",
-              minWidth: 120,
-            }}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="relative overflow-hidden rounded-[18px] border border-[rgba(217,119,6,0.22)] bg-amber-50/70 px-5 py-3.5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset,0_10px_30px_rgba(217,119,6,0.10)]"
           >
-            <p
-              style={{
-                fontSize: 34,
-                fontWeight: 800,
-                color: "#7C3AED",
-                lineHeight: 1,
-                letterSpacing: "-0.04em",
-              }}
-            >
-              {daysLeft}
-            </p>
-            <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, fontWeight: 500 }}>
-              {daysLeft === 1 ? "dia para a prova" : "dias para a prova"}
-            </p>
-          </div>
+            <div className="absolute inset-0 opacity-[0.22]" style={{ background: "radial-gradient(600px 150px at 30% 10%, rgba(217,119,6,0.25), transparent 60%)" }} />
+            <div className="relative text-center">
+              <p className="text-[34px] font-extrabold leading-none tracking-tight text-amber-950">
+                {daysLeft}
+              </p>
+              <p className="mt-1 text-[11.5px] font-semibold text-amber-900/70">
+                {daysLeft === 1 ? "dia para a prova" : "dias para a prova"}
+              </p>
+            </div>
+          </motion.div>
         )}
+      </header>
+
+      <div className="mb-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <StatsCard
+          title="Respondidas"
+          value={totalAnswered}
+          description="questões no total"
+          icon={<BookOpen className="h-4 w-4" />}
+          accent="#7C3AED"
+          highlight
+        />
+        <StatsCard
+          title="Taxa de acerto"
+          value={accuracy}
+          description={`${correctAnswers.toLocaleString("pt-BR")} acertos`}
+          icon={<Target className="h-4 w-4" />}
+          accent={accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626"}
+        />
+        <StatsCard
+          title="Treinos"
+          value={trainingSessions}
+          description="sessões realizadas"
+          icon={<Zap className="h-4 w-4" />}
+          accent="#7C3AED"
+        />
+        <StatsCard
+          title="Simulados"
+          value={simulatedExams}
+          description="concluídos"
+          icon={<Trophy className="h-4 w-4" />}
+          accent="#059669"
+        />
       </div>
 
-      {/* ── Stats ── */}
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 32 }}
-      >
-        <div className="animate-fade-up delay-1">
-          <StatsCard
-            title="Respondidas"
-            value={totalAnswered.toLocaleString("pt-BR")}
-            description="questões no total"
-            icon={<BookOpen style={{ width: 16, height: 16 }} />}
-            accent="#7C3AED"
-          />
-        </div>
-        <div className="animate-fade-up delay-2">
-          <StatsCard
-            title="Taxa de Acerto"
-            value={`${accuracy}%`}
-            description={`${correctAnswers} acertos`}
-            icon={<Target style={{ width: 16, height: 16 }} />}
-            accent={accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626"}
-          />
-        </div>
-        <div className="animate-fade-up delay-3">
-          <StatsCard
-            title="Treinos"
-            value={trainingSessions}
-            description="sessões realizadas"
-            icon={<Zap style={{ width: 16, height: 16 }} />}
-            accent="#7C3AED"
-          />
-        </div>
-        <div className="animate-fade-up delay-4">
-          <StatsCard
-            title="Simulados"
-            value={simulatedExams}
-            description="concluídos"
-            icon={<Trophy style={{ width: 16, height: 16 }} />}
-            accent="#059669"
-          />
-        </div>
-      </div>
-
-      {/* ── Grid principal ── */}
-      <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 290px" }}>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
 
         {/* ── Coluna esquerda: Concursos ── */}
         <div>
-          <div
-            className="flex items-center justify-between"
-            style={{ marginBottom: 14 }}
-          >
-            <h2
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: "#111827",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Meus Concursos
-            </h2>
-            <Link
-              href="/concursos"
-              className="flex items-center gap-1"
-              style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none" }}
-            >
-              Ver todos <ArrowRight style={{ width: 13, height: 13 }} />
+          <div className="mb-3.5 flex items-center justify-between">
+            <h2 className="text-[15px] font-bold tracking-tight text-[#111827]">Meus concursos</h2>
+            <Link href="/concursos" className="orbit-link inline-flex items-center gap-1.5">
+              Ver todos <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="flex flex-col gap-3">
             {profile?.studentCompetitions.length === 0 ? (
-              <div
-                style={{
-                  background: "#FFFFFF",
-                  border: "1.5px dashed #E5E7EB",
-                  borderRadius: 16,
-                  padding: "40px 24px",
-                  textAlign: "center",
-                }}
-              >
-                <Trophy style={{ width: 32, height: 32, color: "#D1D5DB", margin: "0 auto 12px" }} />
-                <p style={{ fontSize: 14, color: "#374151", fontWeight: 600 }}>
-                  Nenhum concurso vinculado ainda
-                </p>
-                <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>
-                  Aguarde o administrador configurar seu acesso
-                </p>
+              <div className="rounded-[18px] border border-dashed border-black/[0.12] bg-white px-6 py-10 text-center shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)]">
+                <Trophy className="mx-auto mb-3 h-9 w-9 text-[#D1D5DB]" />
+                <p className="text-[14px] font-semibold text-[#374151]">Nenhum concurso vinculado ainda</p>
+                <p className="mt-1 text-[13px] text-[#9CA3AF]">Aguarde o administrador configurar seu acesso</p>
               </div>
             ) : (
               profile?.studentCompetitions.map((sc, i) => {
@@ -218,18 +146,16 @@ export default async function StudentDashboardPage() {
                 const pct = days !== null ? Math.min(100, ((365 - days) / 365) * 100) : 0;
 
                 return (
-                  <div
-                    key={sc.id}
-                    className="animate-fade-up"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <div
-                      className="card card-interactive"
-                      style={{ padding: "20px 22px" }}
+                  <motion.div key={sc.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: i * 0.03 }}>
+                    <motion.div
+                      whileHover={{ y: -2, scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      transition={{ duration: 0.18 }}
+                      className="rounded-[18px] border border-black/[0.07] bg-white px-6 py-5 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)]"
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 10 }}>
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-2.5 flex flex-wrap gap-1.5">
                             <Badge variant={comp.status === "ACTIVE" ? "active" : "upcoming"}>
                               {comp.status === "ACTIVE" ? "Ativo" : "Em breve"}
                             </Badge>
@@ -241,47 +167,31 @@ export default async function StudentDashboardPage() {
                             )}
                           </div>
 
-                          <p
-                            style={{
-                              fontSize: 15,
-                              fontWeight: 700,
-                              color: "#111827",
-                              letterSpacing: "-0.02em",
-                            }}
-                          >
+                          <p className="truncate text-[15px] font-bold tracking-tight text-[#111827]">
                             {comp.name}
                           </p>
 
-                          <div
-                            className="flex flex-wrap items-center gap-x-4 gap-y-1"
-                            style={{ marginTop: 6 }}
-                          >
-                            <span style={{ fontSize: 12.5, color: "#6B7280" }}>
-                              📍 {comp.city.name}, {comp.city.state}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[#6B7280]">
+                            <span className="inline-flex items-center gap-1">
+                              <span aria-hidden>📍</span> {comp.city.name}, {comp.city.state}
                             </span>
                             {sc.jobRole && (
-                              <span style={{ fontSize: 12.5, color: "#6B7280" }}>
-                                💼 {sc.jobRole.name}
+                              <span className="inline-flex items-center gap-1">
+                                <span aria-hidden>💼</span> {sc.jobRole.name}
                               </span>
                             )}
                             {comp.examDate && (
-                              <span
-                                className="flex items-center gap-1"
-                                style={{ fontSize: 12.5, color: "#6B7280" }}
-                              >
-                                <Calendar style={{ width: 11, height: 11 }} />
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
                                 {formatDate(comp.examDate)}
                               </span>
                             )}
                           </div>
 
                           {days !== null && days > 0 && (
-                            <div style={{ marginTop: 12 }}>
-                              <span
-                                className="flex items-center gap-1"
-                                style={{ fontSize: 11.5, color: "#7C3AED", fontWeight: 600, marginBottom: 6 }}
-                              >
-                                <Clock style={{ width: 10, height: 10 }} />
+                            <div className="mt-3">
+                              <span className="mb-1.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#7C3AED]">
+                                <Clock className="h-3 w-3" />
                                 {formatCountdown(comp.examDate!)}
                               </span>
                               <Progress value={pct} className="h-[3px]" />
@@ -291,15 +201,14 @@ export default async function StudentDashboardPage() {
 
                         <Link
                           href={`/concursos/${comp.id}`}
-                          className="btn btn-purple flex-shrink-0"
-                          style={{ fontSize: 12.5, padding: "7px 14px", gap: 6 }}
+                          className="btn btn-purple flex-shrink-0 !px-4 !py-2 text-[12.5px]"
                         >
                           Estudar
-                          <ArrowRight style={{ width: 12, height: 12 }} />
+                          <ArrowRight className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                    </div>
-                  </div>
+                    </motion.div>
+                  </motion.div>
                 );
               })
             )}
@@ -307,22 +216,12 @@ export default async function StudentDashboardPage() {
         </div>
 
         {/* ── Coluna direita: Ações ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="flex flex-col gap-6">
 
           {/* Ações rápidas */}
           <div>
-            <h3
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#111827",
-                letterSpacing: "-0.02em",
-                marginBottom: 12,
-              }}
-            >
-              Estudar agora
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <h3 className="mb-3 text-[14px] font-bold tracking-tight text-[#111827]">Estudar agora</h3>
+            <div className="flex flex-col gap-2">
               {[
                 {
                   icon: Play,
@@ -359,81 +258,55 @@ export default async function StudentDashboardPage() {
                   accent: "#D97706",
                 },
               ].map((action) => (
-                <Link
-                  key={action.label}
-                  href={action.href}
-                  className="hover-action flex items-center gap-3"
-                  style={{
-                    padding: "11px 14px",
-                    borderRadius: 12,
-                    background: "#FFFFFF",
-                    border: "1px solid #E5E7EB",
-                    textDecoration: "none",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 9,
-                      background: `${action.accent}12`,
-                      border: `1px solid ${action.accent}22`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
+                <motion.div key={action.label} whileHover={{ y: -1, scale: 1.01 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
+                  <Link
+                    href={action.href}
+                    className="flex items-center gap-3 rounded-[14px] border border-black/[0.07] bg-white px-4 py-3 no-underline shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_26px_rgba(17,24,39,0.04)] transition-colors hover:bg-[#FBFAFF]"
                   >
-                    <action.icon style={{ width: 14, height: 14, color: action.accent }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "#111827", lineHeight: 1 }}>
-                      {action.label}
-                    </p>
-                    <p style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                      {action.desc}
-                    </p>
-                  </div>
-                  <ArrowRight style={{ width: 12, height: 12, color: "#D1D5DB" }} />
-                </Link>
+                    <div
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px]"
+                      style={{
+                        background: `${action.accent}12`,
+                        border: `1px solid ${action.accent}22`,
+                      }}
+                    >
+                      <action.icon className="h-4 w-4" style={{ color: action.accent }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold leading-none text-[#111827]">{action.label}</p>
+                      <p className="mt-1 text-[11.5px] text-[#9CA3AF]">{action.desc}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-[#D1D5DB]" />
+                  </Link>
+                </motion.div>
               ))}
             </div>
           </div>
 
           {/* Card do plano */}
           {profile?.plan && (
-            <div
-              style={{
-                borderRadius: 16,
-                padding: "18px 20px",
-                background: "linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)",
-                boxShadow: "0 4px 16px rgba(124,58,237,0.25)",
-              }}
+            <motion.div
+              whileHover={{ y: -2, scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              transition={{ duration: 0.18 }}
+              className="relative overflow-hidden rounded-[18px] border border-[rgba(124,58,237,0.25)] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-5 py-4 shadow-[0_14px_42px_rgba(124,58,237,0.25)]"
             >
-              <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                <Zap style={{ width: 12, height: 12, color: "rgba(255,255,255,0.7)" }} />
-                <p
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.65)",
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Seu plano
-                </p>
+              <div className="absolute inset-0 opacity-[0.25]" style={{ background: "radial-gradient(700px 240px at 25% 10%, rgba(255,255,255,0.35), transparent 60%)" }} />
+              <div className="relative">
+                <div className="mb-1 flex items-center gap-2">
+                  <Zap className="h-3 w-3 text-white/75" />
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.10em] text-white/70">
+                    Seu plano
+                  </p>
+                </div>
+                <p className="text-[16px] font-extrabold tracking-tight text-white">{profile.plan.name}</p>
+                {profile.accessExpiresAt && (
+                  <p className="mt-1 text-[11.5px] font-medium text-white/60">
+                    Válido até {formatDate(profile.accessExpiresAt)}
+                  </p>
+                )}
               </div>
-              <p style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em" }}>
-                {profile.plan.name}
-              </p>
-              {profile.accessExpiresAt && (
-                <p style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
-                  Válido até {formatDate(profile.accessExpiresAt)}
-                </p>
-              )}
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
