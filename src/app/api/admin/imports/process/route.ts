@@ -275,12 +275,13 @@ export async function POST(req: NextRequest) {
         "Você é um extrator de provas de concurso.",
         "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
         "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia?, instructions? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
+        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
         "REGRAS:",
         "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
-        "- meta: SEMPRE tente preencher banca, concurso, materia, cargo, ano (número 4 dígitos se visível), city (cidade/UF) a partir do cabeçalho, capa, rodapé ou primeira página do caderno no OCR. Se não houver evidência, omita o campo ou use null.",
+        "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria (ex.: 'LÍNGUA PORTUGUESA', 'RACIOCÍNIO LÓGICO', 'Conhecimentos Específicos — Informática'). Para CADA questão, preencha o campo 'materia' com a matéria vigente: repita a última matéria anunciada no OCR até aparecer outra seção. Não confunda com o enunciado da questão.",
+        "- meta: preencha banca, concurso, cargo, ano (4 dígitos se visível), city (cidade/UF) a partir da capa/cabeçalho global. meta.materia pode resumir a matéria predominante ou ficar omitido se só existir matéria por questão.",
         "- NÃO cole texto-base dentro do enunciado. Se houver 'texto-base' compartilhado por várias questões, crie um item em baseTexts e aponte baseTextId nas questões relacionadas.",
-        "- NÃO associe automaticamente texto introdutório geral à primeira questão. Se for instrução geral (ex: 'Leia o texto', 'Assinale'), coloque em meta.instructions.",
+        "- Ignore blocos que sejam só instruções gerais da prova (comandos para o candidato); não os coloquem em meta nem como enunciado de questão.",
         "- Se um texto-base vale claramente para um intervalo de questões (ex: 1 a 3), inclua appliesToQuestionNumbers no baseText.",
         "- Ignorar redação/discursivas: seções como 'Redação', 'Discursiva', 'Escreva um texto...' NÃO devem virar questions nem baseTexts.",
         "- Manter a ordem correta das questões.",
@@ -319,6 +320,7 @@ export async function POST(req: NextRequest) {
               ? yearHint
               : undefined,
       };
+      delete (mergedMeta as { instructions?: unknown }).instructions;
 
       const baseMap = new Map<string, string>();
       const baseApplies = new Map<string, number[]>();
@@ -410,6 +412,8 @@ export async function POST(req: NextRequest) {
         const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
         const statement = String(q?.statement ?? q?.content ?? "").trim();
         const commentary = typeof q?.commentary === "string" ? q.commentary.trim() : null;
+        const materiaQuestao =
+          typeof q?.materia === "string" && q.materia.trim() ? q.materia.trim() : null;
 
         const altsRaw = Array.isArray(q?.alternatives) ? q.alternatives : [];
         const alternatives = normalizeAlternatives(
@@ -450,6 +454,7 @@ export async function POST(req: NextRequest) {
               statement,
               commentary,
               meta: mergedMeta,
+              materia: materiaQuestao ?? undefined,
               answerSource: resolved.answerSource,
               gabaritoMatchNumber: resolved.gabaritoMatchNumber ?? undefined,
             }),

@@ -147,6 +147,7 @@ export function ImportIdentifyAlternativesDrawer({
               onChanged={() => {}}
               selectedQuestionId={selectedQuestionId}
               onSelectedQuestionIdChange={onSelectedQuestionIdChange}
+              layout="pdfOnly"
               uiMode="selector"
               onBoxSelected={async ({ page, bbox }) => {
                 setBusy(true);

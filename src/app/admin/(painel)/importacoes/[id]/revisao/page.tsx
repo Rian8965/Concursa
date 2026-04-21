@@ -31,7 +31,6 @@ type AiMetaBlock = {
   banca?: string | null;
   cargo?: string | null;
   materia?: string | null;
-  instructions?: string | null;
 };
 
 type AnswerSourceKind = "gabarito" | "llm" | "manual" | null;
@@ -64,18 +63,19 @@ function mergeRawTextPatch(rawText: string | null | undefined, patch: Record<str
 function parseAiMeta(rawText?: string | null): {
   number?: number | null;
   commentary?: string | null;
-  instructions?: string | null;
   meta?: AiMetaBlock | null;
+  /** Matéria da seção no PDF (anunciada antes do bloco de questões). */
+  materia?: string | null;
 } | null {
   if (!rawText) return null;
   try {
-    const parsed = JSON.parse(rawText) as { number?: unknown; commentary?: unknown; meta?: AiMetaBlock };
+    const parsed = JSON.parse(rawText) as { number?: unknown; commentary?: unknown; meta?: AiMetaBlock; materia?: unknown };
     const m = parsed.meta && typeof parsed.meta === "object" ? parsed.meta : null;
     return {
       number: typeof parsed.number === "number" ? parsed.number : null,
       commentary: typeof parsed.commentary === "string" ? parsed.commentary : null,
-      instructions: typeof m?.instructions === "string" ? m.instructions : null,
       meta: m,
+      materia: typeof parsed.materia === "string" ? parsed.materia.trim() : null,
     };
   } catch {
     return null;
@@ -101,6 +101,8 @@ function buildImportMetaDisplay(
     jobRole?: { name: string } | null;
   },
   ai?: AiMetaBlock | null,
+  /** Matéria inferida para esta questão (seção no PDF antes do bloco). Tem prioridade sobre cadastro/meta global. */
+  materiaDaQuestao?: string | null,
 ): ImportMetaRow {
   const examBoardLabel = imp.examBoard
     ? [imp.examBoard.acronym, imp.examBoard.name].filter(Boolean).join(" · ")
@@ -108,10 +110,16 @@ function buildImportMetaDisplay(
   const cityLabel = imp.city ? `${imp.city.name} · ${imp.city.state}` : "";
   const yearStr = imp.year != null ? String(imp.year) : "";
   const anoAi = ai?.ano != null && ai.ano !== "" ? String(ai.ano) : "";
+  const sec = materiaDaQuestao?.trim();
+  const materiaLinha =
+    sec ||
+    imp.subject?.name?.trim() ||
+    (typeof ai?.materia === "string" ? ai.materia.trim() : "") ||
+    "";
 
   return {
     banca: examBoardLabel || (typeof ai?.banca === "string" ? ai.banca.trim() : "") || "",
-    materia: imp.subject?.name?.trim() || (typeof ai?.materia === "string" ? ai.materia.trim() : "") || "",
+    materia: materiaLinha,
     concurso: imp.competition?.name?.trim() || (typeof ai?.concurso === "string" ? ai.concurso.trim() : "") || "",
     cargo: imp.jobRole?.name?.trim() || (typeof ai?.cargo === "string" ? ai.cargo.trim() : "") || "",
     ano: yearStr || anoAi,
@@ -500,7 +508,15 @@ export default function RevisaoImportacaoPage() {
       }
     }
     if (!aiMeta) aiMeta = parseAiMeta(imp.importedQuestions[0]?.rawText)?.meta ?? null;
-    return buildImportMetaDisplay(imp, aiMeta);
+    let materiaSec: string | null = null;
+    for (const q of imp.importedQuestions) {
+      const m = parseAiMeta(q.rawText)?.materia;
+      if (m) {
+        materiaSec = m;
+        break;
+      }
+    }
+    return buildImportMetaDisplay(imp, aiMeta, materiaSec);
   }, [imp]);
 
   const filteredQuestions = useMemo(() => {
@@ -517,9 +533,17 @@ export default function RevisaoImportacaoPage() {
       const ai = parseAiMeta(d.rawText);
       const num = ai?.number != null ? String(ai.number) : "";
       const m = ai?.meta;
-      const rowHay = m
-        ? `${m.banca ?? ""} ${m.materia ?? ""} ${m.concurso ?? ""} ${m.cargo ?? ""} ${m.ano ?? ""} ${m.city ?? ""}`.toLowerCase()
-        : "";
+      const rowHay = [
+        ai?.materia ?? "",
+        m?.banca ?? "",
+        m?.materia ?? "",
+        m?.concurso ?? "",
+        m?.cargo ?? "",
+        m?.ano ?? "",
+        m?.city ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
       const hay = `${idx + 1} ${num} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
@@ -642,7 +666,7 @@ export default function RevisaoImportacaoPage() {
           const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
-          const questionContext = buildImportMetaDisplay(imp, aiMeta?.meta ?? null);
+          const questionContext = buildImportMetaDisplay(imp, aiMeta?.meta ?? null, aiMeta?.materia ?? null);
           const metaFields = [
             { key: "Banca", value: questionContext.banca },
             { key: "Concurso", value: questionContext.concurso },
@@ -793,7 +817,9 @@ export default function RevisaoImportacaoPage() {
                 <div className="border-t border-black/[0.06] bg-white/60 px-5 py-8 sm:px-8 sm:py-10">
                   <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
                     <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados da questão</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">Cadastro + inferência da IA. Campos vazios aparecem como “—”.</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Cadastro + inferência da IA. Matéria: título de seção no PDF (costuma vir antes do bloco de questões da disciplina). Campos vazios: “—”.
+                    </p>
                     <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                       {metaFields.map(({ key, value }) => {
                         const show = value?.trim();
@@ -827,15 +853,6 @@ export default function RevisaoImportacaoPage() {
                       </ul>
                     </div>
                   )}
-
-                  {aiMeta?.instructions ? (
-                    <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/90 p-5 text-sm text-slate-800 shadow-sm sm:p-6">
-                      <div className="text-xs font-extrabold uppercase tracking-wider text-slate-600">Instruções da prova (IA)</div>
-                      <div className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
-                        {aiMeta.instructions}
-                      </div>
-                    </div>
-                  ) : null}
 
                   <div className="flex flex-col gap-10 xl:flex-row xl:items-start xl:gap-12">
                     <div className="min-w-0 flex-1 space-y-10">

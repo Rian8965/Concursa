@@ -151,7 +151,7 @@ export function ImportPdfMarkupPanel({
   const startDraw = useCallback(
     (e: React.MouseEvent) => {
       if (!overlayRef.current) return;
-      if (uiMode !== "linker" && !mode) return;
+      if (uiMode !== "linker" && uiMode !== "selector" && !mode) return;
       const r = overlayRef.current.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
       const y = (e.clientY - r.top) / r.height;
@@ -277,7 +277,8 @@ export function ImportPdfMarkupPanel({
       }
 
       const effectiveMode = uiMode === "linker" ? computedKind : mode;
-      if (!drawing || !overlayRef.current || !effectiveMode) return;
+      if (!drawing || !overlayRef.current) return;
+      if (uiMode !== "selector" && !effectiveMode) return;
       const r = overlayRef.current.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
       const y = (e.clientY - r.top) / r.height;
@@ -582,7 +583,30 @@ export function ImportPdfMarkupPanel({
                   <span className="text-sm font-semibold">Carregando PDF…</span>
                 </div>
               }
-              onLoadSuccess={({ numPages: n }) => setNumPages(n)}
+              onLoadSuccess={({ numPages: n }) => {
+                setNumPages(n);
+                // #region agent log
+                requestAnimationFrame(() => {
+                  const wrap = pageWrapRef.current;
+                  const strip = wrap?.querySelector("[data-pdf-strip]");
+                  const w = wrap?.getBoundingClientRect().width ?? 0;
+                  const sw = strip?.getBoundingClientRect().width ?? 0;
+                  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+                    body: JSON.stringify({
+                      sessionId: "03dbee",
+                      runId: "post-fix",
+                      hypothesisId: "H-center",
+                      location: "ImportPdfMarkupPanel.tsx:Document:onLoadSuccess",
+                      message: "pdf viewport vs page strip width (centering check)",
+                      data: { importId, viewportClientW: w, pdfPageElW: sw, slack: Math.max(0, w - sw) },
+                      timestamp: Date.now(),
+                    }),
+                  }).catch(() => {});
+                });
+                // #endregion
+              }}
               onLoadError={(e) => {
                 const msg = e instanceof Error ? e.message : String(e);
                 setPdfLoadError(msg || "Erro desconhecido");
@@ -591,12 +615,13 @@ export function ImportPdfMarkupPanel({
                 // #endregion
               }}
             >
-            <div className="relative inline-block">
+            <div className="flex w-full min-w-0 justify-center px-2 py-2" data-pdf-page-wrap>
+              <div className="relative inline-block shrink-0" data-pdf-strip>
               <Page pageNumber={page} width={pageWidth} renderTextLayer renderAnnotationLayer />
               <div
                 ref={overlayRef}
                 className="absolute inset-0 z-20 cursor-crosshair"
-                style={{ pointerEvents: (uiMode === "linker" ? true : Boolean(mode)) ? "auto" : "none" }}
+                style={{ pointerEvents: (uiMode === "linker" || uiMode === "selector" ? true : Boolean(mode)) ? "auto" : "none" }}
                 onMouseDown={startDraw}
                 onMouseMove={moveDraw}
                 onMouseUp={endDraw}
@@ -685,6 +710,7 @@ export function ImportPdfMarkupPanel({
                     ))}
                   </>
                 )}
+              </div>
               </div>
             </div>
             </Document>
