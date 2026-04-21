@@ -90,6 +90,14 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
         lastErr = `Gemini error (${res.status}): ${t.slice(0, 800)}`;
         // 404/NOT_FOUND normalmente é modelo inválido; tenta o próximo
         if (res.status === 404 || t.includes("NOT_FOUND")) continue;
+        // Alguns modelos exigem tool-use (Computer Use) e retornam INVALID_ARGUMENT.
+        // Nesses casos, tentamos automaticamente outro modelo compatível.
+        if (
+          res.status === 400 &&
+          (t.includes("Computer Use") || t.includes("computer-use") || t.includes("requires the use of the Computer Use tool"))
+        ) {
+          continue;
+        }
         throw new Error(lastErr);
       }
 
@@ -112,6 +120,12 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         lastErr = `Gemini error (${res.status}): ${t.slice(0, 800)}`;
+        if (
+          res.status === 400 &&
+          (t.includes("Computer Use") || t.includes("computer-use") || t.includes("requires the use of the Computer Use tool"))
+        ) {
+          continue;
+        }
         continue;
       }
       const data = (await res.json()) as any;
