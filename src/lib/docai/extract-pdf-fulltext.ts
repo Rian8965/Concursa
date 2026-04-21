@@ -1,6 +1,6 @@
 import type { protos } from "@google-cloud/documentai";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
-import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "./process-options";
+import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS, DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "./process-options";
 
 /** Margem abaixo do limite típico (~30 págs.) do processamento online com imageless. */
 const ONLINE_CHUNK_PAGES = 24;
@@ -28,6 +28,7 @@ async function processRange(
   const [res] = await client.processDocument({
     name: processorName,
     rawDocument: { content: pdfBytes.toString("base64"), mimeType: "application/pdf" },
+    imagelessMode: true,
     processOptions: {
       ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS,
       fromStart,
@@ -93,6 +94,22 @@ export async function extractPdfFullTextWithDocumentAi(
 }> {
   const pageCount = Math.max(1, estimatePdfPageCount(pdfBytes) ?? 1);
 
+  // #region agent log
+  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+    body: JSON.stringify({
+      sessionId: "03dbee",
+      runId: "imageless-fix",
+      hypothesisId: "H-imageless-flag",
+      location: "extract-pdf-fulltext.ts:extractPdfFullTextWithDocumentAi",
+      message: "docai extract path",
+      data: { pageCount, willChunkFirst: pageCount > ONLINE_CHUNK_PAGES, imagelessMode: true },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   if (pageCount > ONLINE_CHUNK_PAGES) {
     return runChunked(client, processorName, pdfBytes, pageCount);
   }
@@ -101,7 +118,7 @@ export async function extractPdfFullTextWithDocumentAi(
     const [res] = await client.processDocument({
       name: processorName,
       rawDocument: { content: pdfBytes.toString("base64"), mimeType: "application/pdf" },
-      processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
+      ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
     });
     return { document: res.document ?? {}, pageCount, usedChunking: false };
   } catch (e) {

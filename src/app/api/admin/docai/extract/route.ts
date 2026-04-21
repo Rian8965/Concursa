@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
-import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "@/lib/docai/process-options";
+import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 
 export const runtime = "nodejs";
 
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
       content: bytes.toString("base64"),
       mimeType: "application/pdf",
     },
-    processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
+    ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
   });
 
   const text = result.document?.text ?? "";

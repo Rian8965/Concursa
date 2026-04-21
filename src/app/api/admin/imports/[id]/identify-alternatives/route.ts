@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { readImportPdfBuffer } from "@/lib/import-pdf-storage";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
-import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "@/lib/docai/process-options";
+import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 
 export const runtime = "nodejs";
 
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const [result] = await client.processDocument({
     name,
     rawDocument: { content: pdf.toString("base64"), mimeType: "application/pdf" },
-    processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
+    ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
   });
 
   const fullText = result.document?.text ?? "";
