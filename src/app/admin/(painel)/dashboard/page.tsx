@@ -10,7 +10,6 @@ import {
   ArrowRight, Plus,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
-import { motion } from "framer-motion";
 
 export default async function AdminDashboardPage() {
   // #region agent log
@@ -97,7 +96,7 @@ export default async function AdminDashboardPage() {
             </p>
           </div>
 
-          <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
+          <div className="transition-transform hover:-translate-y-px active:scale-[0.99]">
             <Link
               href="/admin/importacoes"
               className="btn btn-primary inline-flex min-h-[48px] items-center gap-2.5 self-start px-7 text-[15px] shadow-[0_12px_36px_rgba(124,58,237,0.28)] lg:self-auto"
@@ -105,7 +104,7 @@ export default async function AdminDashboardPage() {
               <Plus className="h-5 w-5 shrink-0" strokeWidth={2.25} />
               Importar PDF
             </Link>
-          </motion.div>
+          </div>
         </header>
 
         {pendingImports > 0 && (

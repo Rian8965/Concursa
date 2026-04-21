@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils/cn";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { motion } from "framer-motion";

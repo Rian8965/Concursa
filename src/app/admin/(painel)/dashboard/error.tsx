@@ -10,6 +10,12 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
+    console.error("[admin/dashboard] error boundary", {
+      name: error?.name,
+      message: error?.message,
+      digest: (error as Error & { digest?: string })?.digest,
+      stack: error?.stack,
+    });
     // #region agent log
     fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
       method: "POST",

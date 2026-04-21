@@ -11,7 +11,6 @@ import {
   Play, BarChart3, CheckCircle2, TrendingUp,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
-import { motion } from "framer-motion";
 
 export default async function StudentDashboardPage() {
   const session = await auth();
@@ -68,10 +67,7 @@ export default async function StudentDashboardPage() {
         </div>
 
         {daysLeft !== null && mainCompetition?.competition?.examDate && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
+          <div
             className="relative overflow-hidden rounded-[18px] border border-[rgba(217,119,6,0.22)] bg-amber-50/70 px-5 py-3.5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset,0_10px_30px_rgba(217,119,6,0.10)]"
           >
             <div className="absolute inset-0 opacity-[0.22]" style={{ background: "radial-gradient(600px 150px at 30% 10%, rgba(217,119,6,0.25), transparent 60%)" }} />
@@ -83,7 +79,7 @@ export default async function StudentDashboardPage() {
                 {daysLeft === 1 ? "dia para a prova" : "dias para a prova"}
               </p>
             </div>
-          </motion.div>
+          </div>
         )}
       </header>
 
@@ -146,13 +142,8 @@ export default async function StudentDashboardPage() {
                 const pct = days !== null ? Math.min(100, ((365 - days) / 365) * 100) : 0;
 
                 return (
-                  <motion.div key={sc.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: i * 0.03 }}>
-                    <motion.div
-                      whileHover={{ y: -2, scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      transition={{ duration: 0.18 }}
-                      className="rounded-[18px] border border-black/[0.07] bg-white px-6 py-5 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)]"
-                    >
+                  <div key={sc.id} className="animate-fade-up" style={{ animationDelay: `${i * 40}ms` }}>
+                    <div className="rounded-[18px] border border-black/[0.07] bg-white px-6 py-5 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)] transition-transform hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(17,24,39,0.07)] active:scale-[0.99]">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="mb-2.5 flex flex-wrap gap-1.5">
@@ -207,8 +198,8 @@ export default async function StudentDashboardPage() {
                           <ArrowRight className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                    </motion.div>
-                  </motion.div>
+                    </div>
+                  </div>
                 );
               })
             )}
@@ -258,7 +249,7 @@ export default async function StudentDashboardPage() {
                   accent: "#D97706",
                 },
               ].map((action) => (
-                <motion.div key={action.label} whileHover={{ y: -1, scale: 1.01 }} whileTap={{ scale: 0.99 }} transition={{ duration: 0.18 }}>
+                <div key={action.label} className="transition-transform hover:-translate-y-px active:scale-[0.99]">
                   <Link
                     href={action.href}
                     className="flex items-center gap-3 rounded-[14px] border border-black/[0.07] bg-white px-4 py-3 no-underline shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_26px_rgba(17,24,39,0.04)] transition-colors hover:bg-[#FBFAFF]"
@@ -278,18 +269,15 @@ export default async function StudentDashboardPage() {
                     </div>
                     <ArrowRight className="h-4 w-4 text-[#D1D5DB]" />
                   </Link>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
 
           {/* Card do plano */}
           {profile?.plan && (
-            <motion.div
-              whileHover={{ y: -2, scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              transition={{ duration: 0.18 }}
-              className="relative overflow-hidden rounded-[18px] border border-[rgba(124,58,237,0.25)] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-5 py-4 shadow-[0_14px_42px_rgba(124,58,237,0.25)]"
+            <div
+              className="relative overflow-hidden rounded-[18px] border border-[rgba(124,58,237,0.25)] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-5 py-4 shadow-[0_14px_42px_rgba(124,58,237,0.25)] transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
             >
               <div className="absolute inset-0 opacity-[0.25]" style={{ background: "radial-gradient(700px 240px at 25% 10%, rgba(255,255,255,0.35), transparent 60%)" }} />
               <div className="relative">
@@ -306,7 +294,7 @@ export default async function StudentDashboardPage() {
                   </p>
                 )}
               </div>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>

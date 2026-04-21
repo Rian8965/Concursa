@@ -4,6 +4,7 @@ import { saveImportPdfBuffer } from "@/lib/import-pdf-storage";
 import { NextRequest, NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
+import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "@/lib/docai/process-options";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
@@ -167,6 +168,7 @@ export async function POST(req: NextRequest) {
         const [res] = await client.processDocument({
           name,
           rawDocument: { content: buf.toString("base64"), mimeType: "application/pdf" },
+          processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
         });
         docaiRes = res;
       } catch (e) {

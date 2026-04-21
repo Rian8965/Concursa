@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import type { protos } from "@google-cloud/documentai";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
 import { runLlmJson } from "@/lib/ai/llm";
+import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS } from "@/lib/docai/process-options";
 
 export const runtime = "nodejs";
 
@@ -69,10 +71,60 @@ export async function POST(req: Request) {
 
   const client = new DocumentProcessorServiceClient({ apiEndpoint: `${location}-documentai.googleapis.com` });
   const name = client.processorPath(projectId, location, processorId);
-  const [result] = await client.processDocument({
-    name,
-    rawDocument: { content: bytes.toString("base64"), mimeType: "application/pdf" },
-  });
+
+  let result: protos.google.cloud.documentai.v1.IProcessResponse;
+  try {
+    const [res] = await client.processDocument({
+      name,
+      rawDocument: { content: bytes.toString("base64"), mimeType: "application/pdf" },
+      processOptions: { ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS },
+    });
+    result = res;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    // #region agent log
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+      body: JSON.stringify({
+        sessionId: "03dbee",
+        runId: "post-fix",
+        hypothesisId: "H-docai-process",
+        location: "src/app/api/admin/competitions/edital/parse/route.ts:processDocument:catch",
+        message: "Document AI processDocument failed",
+        data: { messageHead: message.slice(0, 500) },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (/exceed the limit|INVALID_ARGUMENT|pages in non-imageless/i.test(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "Este PDF tem muitas páginas para o processamento online. Tente um PDF com até 30 páginas ou divida o arquivo em partes menores.",
+        },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({ error: `Falha ao ler o PDF (Document AI): ${message}`.slice(0, 900) }, { status: 502 });
+  }
+
+  const pageCount = result.document?.pages?.length ?? null;
+  // #region agent log
+  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+    body: JSON.stringify({
+      sessionId: "03dbee",
+      runId: "post-fix",
+      hypothesisId: "H-docai-process",
+      location: "src/app/api/admin/competitions/edital/parse/route.ts:processDocument:ok",
+      message: "Document AI ok",
+      data: { pageCount, textChars: (result.document?.text ?? "").length },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   const fullText = (result.document?.text ?? "").trim();
   const excerpt = fullText.slice(0, 20000);
