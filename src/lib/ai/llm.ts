@@ -62,12 +62,20 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
   if (provider === "gemini") {
     const apiKey = requiredEnv("GEMINI_API_KEY");
     const requestedModel = (process.env.GEMINI_MODEL ?? "gemini-2.0-flash").trim();
+    const attemptLog: Array<{ model: string; status: number; note: string }> = [];
+
+    const isComputerUseModelName = (m: string) => {
+      const s = m.toLowerCase();
+      return s.includes("computer") || s.includes("computer-use") || s.includes("cu-");
+    };
     const candidates = [
       requestedModel,
       "gemini-2.0-flash",
       "gemini-1.5-pro-latest",
       "gemini-1.5-flash-latest",
-    ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    ]
+      .filter((m, i, arr) => m && arr.indexOf(m) === i)
+      .filter((m) => !isComputerUseModelName(m));
 
     const body = JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
@@ -88,6 +96,7 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         lastErr = `Gemini error (${res.status}): ${t.slice(0, 800)}`;
+        attemptLog.push({ model, status: res.status, note: t.slice(0, 200) });
         // 404/NOT_FOUND normalmente é modelo inválido; tenta o próximo
         if (res.status === 404 || t.includes("NOT_FOUND")) continue;
         // Alguns modelos exigem tool-use (Computer Use) e retornam INVALID_ARGUMENT.
@@ -96,6 +105,7 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
           res.status === 400 &&
           (t.includes("Computer Use") || t.includes("computer-use") || t.includes("requires the use of the Computer Use tool"))
         ) {
+          console.warn("[llm] Gemini model requires Computer Use tool; skipping.", { model, status: res.status });
           continue;
         }
         throw new Error(lastErr);
@@ -111,8 +121,8 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
     }
 
     // Fallback robusto: descobre modelos disponíveis e tenta os primeiros.
-    const discovered = await listGeminiModels(apiKey);
-    for (const model of discovered.slice(0, 6)) {
+    const discovered = (await listGeminiModels(apiKey)).filter((m) => !isComputerUseModelName(m));
+    for (const model of discovered.slice(0, 12)) {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body },
@@ -120,10 +130,12 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         lastErr = `Gemini error (${res.status}): ${t.slice(0, 800)}`;
+        attemptLog.push({ model, status: res.status, note: t.slice(0, 200) });
         if (
           res.status === 400 &&
           (t.includes("Computer Use") || t.includes("computer-use") || t.includes("requires the use of the Computer Use tool"))
         ) {
+          console.warn("[llm] Gemini discovered model requires Computer Use; skipping.", { model, status: res.status });
           continue;
         }
         continue;
@@ -136,6 +148,7 @@ export async function runLlmJson(system: string, user: string): Promise<LlmResul
       return { provider, model, jsonText };
     }
 
+    console.error("[llm] Gemini failed after attempts", { requestedModel, attempts: attemptLog.slice(0, 20) });
     throw new Error(
       lastErr ||
         `Gemini error: model '${requestedModel}' not found and no listModels fallback succeeded`,

@@ -1,20 +1,20 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import Link from "next/link";
-import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy } from "lucide-react";
+import { Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy } from "lucide-react";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportLinkDrawer } from "@/components/admin/ImportLinkDrawer";
 import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdentifyAlternativesDrawer";
+import { TopBar } from "@/components/admin/review/TopBar";
+import { StatsRow } from "@/components/admin/review/StatsRow";
+import { SidebarQuestoes } from "@/components/admin/review/SidebarQuestoes";
+import { VisualizadorPDF } from "@/components/admin/review/VisualizadorPDF";
+import { PainelDireito } from "@/components/admin/review/PainelDireito";
 
-const ImportPdfMarkupPanel = dynamic(
-  () => import("@/components/admin/ImportPdfMarkupPanel").then((m) => m.ImportPdfMarkupPanel),
-  { ssr: false, loading: () => <p className="text-[13px] text-[#6B7280]">Carregando visualizador de PDF…</p> },
-);
+// PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
 interface ImportedQ {
   id: string; content: string; alternatives: { letter: string; content: string }[];
@@ -112,6 +112,7 @@ export default function RevisaoImportacaoPage() {
   const [altDrawerOpen, setAltDrawerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(60);
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -402,460 +403,119 @@ export default function RevisaoImportacaoPage() {
   const rejected = Object.values(decisions).filter((d) => d === "reject").length;
   const pending = Object.values(decisions).filter((d) => d === "pending").length;
 
+  const qopts = imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }));
+  const filteredQuestions = useMemo(() => {
+    const base = onlyNeedsReview
+      ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0)
+      : imp.importedQuestions;
+    const s = search.trim().toLowerCase();
+    if (!s) return base;
+    return base.filter((q, idx) => {
+      const d = drafts[q.id] ?? q;
+      const ai = parseAiMeta(d.rawText);
+      const num = ai?.number != null ? String(ai.number) : "";
+      const hay = `${idx + 1} ${num} ${d.content ?? ""}`.toLowerCase();
+      return hay.includes(s);
+    });
+  }, [onlyNeedsReview, imp.importedQuestions, drafts, search]);
+
   return (
     <div className="w-full max-w-none">
-      <div className="mb-6">
-        <Link href="/admin/importacoes" className="mb-2 inline-flex items-center gap-1 text-[13px] font-semibold text-[#7C3AED]">
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar
-        </Link>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-[22px] font-extrabold tracking-tight text-[#111827]">Revisão: {imp.originalFilename}</h1>
-              <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">
-                UI v2
-              </span>
-            </div>
-            {imp.competition && <p className="mt-1 text-[13px] font-semibold text-[#7C3AED]">{imp.competition.name}</p>}
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => selectAll("approve")} className="btn !h-[34px] !px-3 !text-[12px]" style={{ background: "#ECFDF5", border: "1px solid #6EE7B7", color: "#059669" }}>
-              <CheckCircle2 className="h-4 w-4" /> Aprovar todas
-            </button>
-            <button onClick={() => selectAll("reject")} className="btn !h-[34px] !px-3 !text-[12px]" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#DC2626" }}>
-              <XCircle className="h-4 w-4" /> Rejeitar todas
-            </button>
-            <button onClick={saveReview} disabled={saving} className="btn btn-primary !h-[34px] !text-[12px]">
-              {saving ? "Salvando..." : <><Save className="h-4 w-4" /> Salvar revisão</>}
-            </button>
-          </div>
+      <div className="mb-4">
+        <TopBar
+          title={`Revisão: ${imp.originalFilename}`}
+          subtitle={imp.competition?.name ?? null}
+          onApproveAll={() => selectAll("approve")}
+          onRejectAll={() => selectAll("reject")}
+          onSave={saveReview}
+          saving={saving}
+        />
+      </div>
 
-          {(onlyNeedsReview ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0).length : imp.importedQuestions.length) > visibleCount && (
+      <div className="mb-4">
+        <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_320px]">
+        <div className="min-w-0">
+          <SidebarQuestoes
+            items={filteredQuestions.slice(0, visibleCount).map((q) => {
+              const draft = drafts[q.id] ?? q;
+              const warnings = computeReviewWarnings(draft);
+              const ai = parseAiMeta(draft.rawText);
+              return {
+                id: q.id,
+                title: `Questão ${imp.importedQuestions.findIndex((x) => x.id === q.id) + 1}${ai?.number != null ? ` · Nº ${ai.number}` : ""}`,
+                preview: String(draft.content ?? "").slice(0, 140) + (String(draft.content ?? "").length > 140 ? "…" : ""),
+                badge: warnings.length ? { text: "Revisão recomendada", tone: "danger" } : undefined,
+                confidencePct: q.confidence != null ? Math.round(q.confidence * 100) : null,
+                decision: decisions[q.id] ?? "pending",
+              };
+            })}
+            activeId={selectedQ}
+            onActiveChange={setSelectedQ}
+            search={search}
+            onSearchChange={setSearch}
+            onlyNeedsReview={onlyNeedsReview}
+            onOnlyNeedsReviewChange={setOnlyNeedsReview}
+            onDecisionChange={(qid, next) => setDecisions((prev) => ({ ...prev, [qid]: next }))}
+          />
+
+          {filteredQuestions.length > visibleCount && (
             <div className="mt-3">
-              <button
-                type="button"
-                className="btn btn-ghost w-full !h-[38px] !text-[12px]"
-                onClick={() => setVisibleCount((n) => n + 60)}
-              >
+              <button type="button" className="btn btn-ghost w-full !h-[38px] !text-[12px]" onClick={() => setVisibleCount((n) => n + 60)}>
                 Mostrar mais (+60)
               </button>
-              <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">
-                Renderização incremental para melhorar performance em listas longas.
-              </p>
+              <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">Renderização incremental para listas longas.</p>
             </div>
           )}
         </div>
-      </div>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-4">
-        <div className="stat-widget">
-          <div className="stat-label">Total</div>
-          <div className="stat-value">{imp.importedQuestions.length}</div>
-        </div>
-        <div className="stat-widget">
-          <div className="stat-label">Aprovadas</div>
-          <div className="stat-value" style={{ color: "#059669" }}>{approved}</div>
-        </div>
-        <div className="stat-widget">
-          <div className="stat-label">Rejeitadas</div>
-          <div className="stat-value" style={{ color: "#DC2626" }}>{rejected}</div>
-        </div>
-        <div className="stat-widget">
-          <div className="stat-label">Pendentes</div>
-          <div className="stat-value" style={{ color: "#D97706" }}>{pending}</div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[440px_minmax(0,1fr)]">
-        {/* Left: questions */}
         <div className="min-w-0">
-          <div className="mb-3 flex items-end justify-between gap-2">
-            <div>
-              <h2 className="text-[14px] font-bold tracking-tight text-[#111827]">Questões extraídas</h2>
-              <p className="mt-0.5 text-[12px] text-[#6B7280]">Edite tudo aqui. Para vincular trechos do PDF, selecione a questão e desenhe um retângulo à direita.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className={`btn !h-[34px] !text-[12px] ${onlyNeedsReview ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => setOnlyNeedsReview((v) => !v)}
-                title="Filtrar apenas as que precisam revisão"
-              >
-                Só revisão
-              </button>
-              <span className="text-[12px] font-semibold text-[#6B7280]">
-                {imp.importedQuestions.length} itens
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            {(onlyNeedsReview ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0) : imp.importedQuestions)
-              .slice(0, visibleCount)
-              .map((q, idx) => {
-          const d = decisions[q.id] ?? "pending";
-          const isExpanded = expanded[q.id] ?? false;
-          const isSelected = selectedQ === q.id;
-          const borderColor = isSelected ? "#7C3AED" : d === "approve" ? "#6EE7B7" : d === "reject" ? "#FCA5A5" : "#E5E7EB";
-          const bgColor = d === "approve" ? "#ECFDF5" : d === "reject" ? "#FEF2F2" : "#FFFFFF";
-          const draft = drafts[q.id] ?? q;
-          const linked = linkedAssetsByQuestion[q.id] ?? [];
-          const warnings = computeReviewWarnings(draft);
-          const aiMeta = parseAiMeta(draft.rawText);
-          const next = imp.importedQuestions[imp.importedQuestions.findIndex((x) => x.id === q.id) + 1];
-          const suggestions = computeReviewSuggestions(draft, next);
-
-          return (
-            <div
-              key={q.id}
-              className="rounded-[14px] border bg-white shadow-sm transition"
-              style={{ borderWidth: 1.5, borderColor, background: bgColor }}
-              onMouseDown={() => {
-                setSelectedQ(q.id);
-                // #region agent log
-                fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-sync-selection',location:'revisao/page.tsx:selectQuestion',message:'selected question in review list',data:{importId:id,questionId:q.id,index:idx+1},timestamp:Date.now()})}).catch(()=>{});
-                // #endregion
-              }}
-            >
-              <div className="flex items-start gap-3 p-4">
-                <div className="w-[26px] shrink-0 pt-0.5 text-[11px] font-bold text-[#9CA3AF]">{idx + 1}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-bold text-[#111827]">Questão</span>
-                      {aiMeta?.number != null && (
-                        <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-extrabold text-[#111827]">
-                          Nº {aiMeta.number}
-                        </span>
-                      )}
-                      {q.confidence != null && (
-                        <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
-                          Confiança {Math.round(q.confidence * 100)}%
-                        </span>
-                      )}
-                      {linked.length > 0 && (
-                        <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-semibold text-[#374151]">
-                          {linked.length} vínculo(s)
-                        </span>
-                      )}
-                      {warnings.length > 0 && (
-                        <span className="rounded-full bg-[#DC262618] px-2 py-0.5 text-[11px] font-extrabold text-[#DC2626]">
-                          Revisão recomendada
-                        </span>
-                      )}
-                      {suggestions.length > 0 && (
-                        <span className="rounded-full bg-[#D9770618] px-2 py-0.5 text-[11px] font-extrabold text-[#D97706]">
-                          Sugestão: {suggestions.map((s) => (s.kind === "split" ? "dividir" : "unir")).join(" / ")}
-                        </span>
-                      )}
-                      {q.sourcePage != null && (
-                        <span className="text-[11px] font-semibold text-[#9CA3AF]">p.{q.sourcePage}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="btn !h-[30px] !px-2.5 !text-[12px]"
-                        style={{ background: d === "approve" ? "#059669" : "#F3F4F6", border: d === "approve" ? "1px solid #059669" : "1px solid #E5E7EB", color: d === "approve" ? "#fff" : "#374151" }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
-                      >
-                        ✓
-                      </button>
-                      <button
-                        type="button"
-                        className="btn !h-[30px] !px-2.5 !text-[12px]"
-                        style={{ background: d === "reject" ? "#DC2626" : "#F3F4F6", border: d === "reject" ? "1px solid #DC2626" : "1px solid #E5E7EB", color: d === "reject" ? "#fff" : "#374151" }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
-                      >
-                        ✗
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost !h-[30px] !w-[30px] !p-0"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
-                        title={isExpanded ? "Recolher" : "Expandir"}
-                      >
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="mt-2 text-[13px] leading-relaxed text-[#374151]">
-                    {isExpanded ? draft.content : (draft.content.length > 160 ? draft.content.slice(0, 160) + "…" : draft.content)}
-                  </p>
-
-                  {isExpanded && (
-                    <div className="mt-3 space-y-3">
-                      {warnings.length > 0 && (
-                        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[12px] text-[#7F1D1D]">
-                          <div className="font-extrabold">Pontos de atenção</div>
-                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                            {warnings.map((w, i) => (
-                              <li key={`${q.id}-w-${i}`}>{w}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {suggestions.length > 0 && (
-                        <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[12px] text-[#92400E]">
-                          <div className="font-extrabold">Sugestões</div>
-                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                            {suggestions.map((s, i) => (
-                              <li key={`${q.id}-s-${i}`}>{s.reason}</li>
-                            ))}
-                          </ul>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {suggestions.some((s) => s.kind === "split") && (
-                              <button type="button" className="btn btn-ghost !h-[32px] !text-[12px]" onClick={() => splitQuestionAuto(q.id)}>
-                                Dividir (auto)
-                              </button>
-                            )}
-                            {suggestions.some((s) => s.kind === "merge") && (
-                              <button type="button" className="btn btn-ghost !h-[32px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
-                                Unir (sugerido)
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Enunciado</label>
-                        <textarea
-                          className="input min-h-[100px] text-[12.5px]"
-                          value={draft.content}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Alternativas</label>
-                        <div className="space-y-2">
-                          {draft.alternatives.map((alt, altIdx) => (
-                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
-                              <input
-                                className="input text-center text-[12px] font-bold"
-                                value={alt.letter}
-                                onChange={(e) => {
-                                  const v = e.target.value.toUpperCase();
-                                  setDrafts((prev) => {
-                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
-                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                  });
-                                }}
-                              />
-                              <textarea
-                                className="input min-h-[56px] text-[12.5px]"
-                                value={alt.content}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setDrafts((prev) => {
-                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
-                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                  });
-                                }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Resposta correta</label>
-                          <select
-                            className="input h-[36px] text-[12.5px]"
-                            value={draft.correctAnswer ?? ""}
-                            onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, correctAnswer: e.target.value || null } }))}
-                          >
-                            <option value="">(vazio)</option>
-                            {draft.alternatives.map((a, i) => (
-                              <option key={`${q.id}-ca-${i}`} value={a.letter}>
-                                {a.letter}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Página (opcional)</label>
-                          <input
-                            className="input h-[36px] text-[12.5px]"
-                            inputMode="numeric"
-                            value={draft.sourcePage ?? ""}
-                            onChange={(e) => {
-                              const n = e.target.value ? Number(e.target.value) : null;
-                              setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, sourcePage: Number.isFinite(n as any) ? (n as any) : null } }));
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">
-                          Matéria
-                          {(() => {
-                            const suggested = parseSuggestedSubject(q.rawText);
-                            if (!suggested) return null;
-                            const confColor = suggested.confidence === "high" ? "#059669" : suggested.confidence === "medium" ? "#D97706" : "#9CA3AF";
-                            return (
-                              <span className="ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ color: confColor, background: confColor + "18" }}>
-                                IA: {suggested.subject}{suggested.confidence === "high" ? " ✓" : ""}
-                              </span>
-                            );
-                          })()}
-                        </label>
-                        <select className="input h-[36px] text-[12.5px]" value={subjectMap[q.id] ?? ""} onChange={(e) => setSubjectMap((prev) => ({ ...prev, [q.id]: e.target.value }))}>
-                          <option value="">Automático (sugestão da IA)</option>
-                          {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button type="button" className="btn btn-purple !h-[34px] !text-[12px]" onClick={() => saveQuestion(q.id)}>
-                          <Save className="h-4 w-4" /> Salvar questão
-                        </button>
-                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => duplicateQuestion(q.id)}>
-                          <Copy className="h-4 w-4" /> Duplicar
-                        </button>
-                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => splitQuestion(q.id)}>
-                          Dividir
-                        </button>
-                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
-                          Unir com próxima
-                        </button>
-                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => markNeedsReview(q.id)}>
-                          Marcar p/ revisão
-                        </button>
-                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => deleteQuestion(q.id)}>
-                          <Trash2 className="h-4 w-4 text-red-600" /> Excluir
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost !h-[34px] !text-[12px]"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setDrawerLinkType("TEXT");
-                            setDrawerOpen(true);
-                          }}
-                        >
-                          Vincular texto
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost !h-[34px] !text-[12px]"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setDrawerLinkType("IMAGE");
-                            setDrawerOpen(true);
-                          }}
-                        >
-                          Vincular imagem
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost !h-[34px] !text-[12px]"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setAltDrawerOpen(true);
-                          }}
-                        >
-                          Identificar alternativas
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Comentário/explicação (opcional)</label>
-                        <textarea
-                          className="input min-h-[80px] text-[12.5px]"
-                          value={aiMeta?.commentary ?? ""}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            setDrafts((prev) => {
-                              const cur = prev[q.id] ?? draft;
-                              let rawObj: any = {};
-                              try { rawObj = cur.rawText ? JSON.parse(cur.rawText) : {}; } catch { rawObj = {}; }
-                              rawObj.commentary = next;
-                              return { ...prev, [q.id]: { ...cur, rawText: JSON.stringify(rawObj) } };
-                            });
-                          }}
-                          placeholder="Ex: justificativa do gabarito, observações..."
-                        />
-                        <p className="mt-1 text-[11px] text-[#9CA3AF]">
-                          (O salvamento do comentário será persistido junto ao JSON `rawText` por enquanto.)
-                        </p>
-                      </div>
-
-                      {linked.length > 0 && (
-                        <div className="rounded-xl border border-[#E5E7EB] bg-[#FAFAFC] p-3">
-                          <div className="text-[12px] font-extrabold text-[#111827]">Vínculos desta questão</div>
-                          <div className="mt-2 space-y-2">
-                            {linked.slice(0, 4).map((a) => (
-                              <div key={`${q.id}-lk-${a.id}`} className="rounded-lg border border-[#E5E7EB] bg-white p-2 text-[12px]">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="font-semibold text-[#374151]">
-                                    {a.kind === "IMAGE" ? "Figura" : "Texto-base"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
-                                  </div>
-                                  <div className="text-[11px] font-semibold text-[#9CA3AF]">{a.label ?? ""}</div>
-                                </div>
-                                {a.kind === "TEXT_BLOCK" && a.extractedText && (
-                                  <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11.5px] text-[#4B5563]">
-                                    {a.extractedText}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            {linked.length > 4 && (
-                              <div className="text-[11px] font-semibold text-[#6B7280]">
-                                +{linked.length - 4} vínculo(s) (veja todos na coluna do PDF)
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          );
-        })}
-
-            {imp.importedQuestions.length === 0 && (
-              <div className="rounded-[16px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
-                <AlertCircle className="mx-auto mb-2 h-7 w-7 text-[#D1D5DB]" />
-                <p className="text-[14px] text-[#6B7280]">Nenhuma questão extraída nesta importação</p>
-              </div>
-            )}
-          </div>
+          <VisualizadorPDF
+            importId={id}
+            pdfAvailable={Boolean(imp.storedPdfPath)}
+            questions={qopts}
+            assets={imp.importAssets ?? []}
+            selectedQuestionId={selectedQ}
+            onSelectedQuestionIdChange={setSelectedQ}
+            onChanged={refreshImport}
+          />
         </div>
 
-        {/* Right: PDF */}
-        <div ref={rightRef} className="min-w-0">
-          <div className="sticky top-[18px] space-y-3">
-            <div className="rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
-              <h2 className="text-[14px] font-bold tracking-tight text-[#111827]">PDF e regiões (texto-base / figura)</h2>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-[#6B7280]">
-                Questão selecionada: <strong>{imp.importedQuestions.findIndex((q) => q.id === selectedQ) >= 0 ? `Questão ${imp.importedQuestions.findIndex((q) => q.id === selectedQ) + 1}` : "—"}</strong>.
-                Desenhe retângulos para marcar texto-base/figura e vincular à questão alvo.
-              </p>
-            </div>
-            <ImportPdfMarkupPanel
-              importId={id}
-              pdfAvailable={Boolean(imp.storedPdfPath)}
-              questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
-              assets={imp.importAssets ?? []}
-              onChanged={refreshImport}
-              selectedQuestionId={selectedQ}
-              onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
-            />
-          </div>
+        <div className="min-w-0">
+          <PainelDireito
+            importId={id}
+            questions={qopts}
+            assets={imp.importAssets ?? []}
+            selectedQuestionId={selectedQ}
+            onChanged={refreshImport}
+          />
         </div>
       </div>
+
+      {/* Mantém o editor detalhado atual abaixo (por enquanto), para não perder funcionalidade durante a reestruturação.
+          Na próxima iteração, ele vira painel de edição no lado direito (aba "Conteúdo"). */}
+      <div className="mt-6 rounded-[16px] border border-[#E5E7EB] bg-white p-4">
+        <div className="mb-2 text-[12px] font-extrabold text-[#111827]">Editor detalhado (temporário)</div>
+        <div className="text-[12px] text-[#6B7280]">
+          Este bloco será migrado para o painel direito em abas (Conteúdo / Vínculos) na próxima etapa.
+        </div>
+      </div>
+
+      <div className="hidden">
+        {imp.importedQuestions.slice(0, 1).map(() => null)}
+      </div>
+
+      {imp.importedQuestions.length === 0 && (
+        <div className="mt-6 rounded-[16px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
+          <AlertCircle className="mx-auto mb-2 h-7 w-7 text-[#D1D5DB]" />
+          <p className="text-[14px] text-[#6B7280]">Nenhuma questão extraída nesta importação</p>
+        </div>
+      )}
+
+      {/* drawers continuam abaixo */}
+      <div className="mt-0">{/* espaço reservado */}</div>
 
       <ImportLinkDrawer
         open={drawerOpen}

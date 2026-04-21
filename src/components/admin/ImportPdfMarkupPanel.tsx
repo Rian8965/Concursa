@@ -40,6 +40,7 @@ type Props = {
   uiMode?: "review" | "linker" | "selector";
   linkType?: PdfLinkType;
   onBoxSelected?: (sel: { page: number; bbox: { x: number; y: number; w: number; h: number } }) => Promise<void> | void;
+  layout?: "workspace" | "pdfOnly";
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -61,6 +62,7 @@ export function ImportPdfMarkupPanel({
   uiMode = "review",
   linkType = "TEXT",
   onBoxSelected,
+  layout = "workspace",
 }: Props) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -439,9 +441,8 @@ export function ImportPdfMarkupPanel({
     );
   }
 
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="min-w-0 rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
+  const pdfCard = (
+    <div className="min-w-0 rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Questão alvo</span>
           <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">PDF v2</span>
@@ -653,6 +654,13 @@ export function ImportPdfMarkupPanel({
           </Document>
         </div>
       </div>
+  );
+
+  if (layout === "pdfOnly") return pdfCard;
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      {pdfCard}
 
       {uiMode === "review" && (
       <div className="flex flex-col gap-4">
