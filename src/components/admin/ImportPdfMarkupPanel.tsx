@@ -41,6 +41,7 @@ type Props = {
   linkType?: PdfLinkType;
   onBoxSelected?: (sel: { page: number; bbox: { x: number; y: number; w: number; h: number } }) => Promise<void> | void;
   layout?: "workspace" | "pdfOnly";
+  onLinkCreated?: (info: { assetId: string; role: "SUPPORT_TEXT" | "FIGURE"; page: number }) => void;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -63,6 +64,7 @@ export function ImportPdfMarkupPanel({
   linkType = "TEXT",
   onBoxSelected,
   layout = "workspace",
+  onLinkCreated,
 }: Props) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -331,6 +333,7 @@ export function ImportPdfMarkupPanel({
           throw new Error(err.error ?? "Erro ao vincular");
         }
         await onChanged();
+        onLinkCreated?.({ assetId, role, page });
       } catch (err) {
         console.error(err);
         alert(err instanceof Error ? err.message : "Erro");
@@ -338,7 +341,7 @@ export function ImportPdfMarkupPanel({
         setBusy(false);
       }
     },
-    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged, onBoxSelected],
+    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged, onBoxSelected, onLinkCreated],
   );
 
   const patchAssetText = async (assetId: string, extractedText: string) => {

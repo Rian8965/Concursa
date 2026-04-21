@@ -10,9 +10,6 @@ import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdentifyAlternativesDrawer";
 import { TopBar } from "@/components/admin/review/TopBar";
 import { StatsRow } from "@/components/admin/review/StatsRow";
-import { SidebarQuestoes } from "@/components/admin/review/SidebarQuestoes";
-import { VisualizadorPDF } from "@/components/admin/review/VisualizadorPDF";
-import { PainelDireito } from "@/components/admin/review/PainelDireito";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
@@ -444,63 +441,271 @@ export default function RevisaoImportacaoPage() {
         <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_320px]">
-        <div className="min-w-0">
-          <SidebarQuestoes
-            items={filteredQuestions.slice(0, visibleCount).map((q) => {
-              const draft = drafts[q.id] ?? q;
-              const warnings = computeReviewWarnings(draft);
-              const ai = parseAiMeta(draft.rawText);
-              return {
-                id: q.id,
-                title: `Questão ${imp.importedQuestions.findIndex((x) => x.id === q.id) + 1}${ai?.number != null ? ` · Nº ${ai.number}` : ""}`,
-                preview: String(draft.content ?? "").slice(0, 140) + (String(draft.content ?? "").length > 140 ? "…" : ""),
-                badge: warnings.length ? { text: "Revisão recomendada", tone: "danger" } : undefined,
-                confidencePct: q.confidence != null ? Math.round(q.confidence * 100) : null,
-                decision: decisions[q.id] ?? "pending",
-              };
-            })}
-            activeId={selectedQ}
-            onActiveChange={setSelectedQ}
-            search={search}
-            onSearchChange={setSearch}
-            onlyNeedsReview={onlyNeedsReview}
-            onOnlyNeedsReviewChange={setOnlyNeedsReview}
-            onDecisionChange={(qid, next) => setDecisions((prev) => ({ ...prev, [qid]: next }))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-[#E5E7EB] bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input h-[36px] w-[320px] max-w-full text-[12.5px]"
+            placeholder="Buscar (texto, nº)…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-
-          {filteredQuestions.length > visibleCount && (
-            <div className="mt-3">
-              <button type="button" className="btn btn-ghost w-full !h-[38px] !text-[12px]" onClick={() => setVisibleCount((n) => n + 60)}>
-                Mostrar mais (+60)
-              </button>
-              <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">Renderização incremental para listas longas.</p>
-            </div>
-          )}
+          <button
+            type="button"
+            className={`btn !h-[36px] !text-[12px] ${onlyNeedsReview ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setOnlyNeedsReview((v) => !v)}
+          >
+            Só revisão recomendada
+          </button>
         </div>
-
-        <div className="min-w-0">
-          <VisualizadorPDF
-            importId={id}
-            pdfAvailable={Boolean(imp.storedPdfPath)}
-            questions={qopts}
-            assets={imp.importAssets ?? []}
-            selectedQuestionId={selectedQ}
-            onSelectedQuestionIdChange={setSelectedQ}
-            onChanged={refreshImport}
-          />
-        </div>
-
-        <div className="min-w-0">
-          <PainelDireito
-            importId={id}
-            questions={qopts}
-            assets={imp.importAssets ?? []}
-            selectedQuestionId={selectedQ}
-            onChanged={refreshImport}
-          />
+        <div className="text-[12px] font-semibold text-[#6B7280]">
+          {filteredQuestions.length} questões
         </div>
       </div>
+
+      <div className="space-y-3">
+        {filteredQuestions.slice(0, visibleCount).map((q, idx) => {
+          const d = decisions[q.id] ?? "pending";
+          const isExpanded = expanded[q.id] ?? false;
+          const draft = drafts[q.id] ?? q;
+          const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
+          const warnings = computeReviewWarnings(draft);
+          const aiMeta = parseAiMeta(draft.rawText);
+          const cardBorder =
+            d === "approve" ? "#6EE7B7" : d === "reject" ? "#FCA5A5" : warnings.length ? "#FDE68A" : "#E5E7EB";
+
+          return (
+            <div key={q.id} className="rounded-[18px] border bg-white" style={{ borderColor: cardBorder }}>
+              <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-[13px] font-extrabold text-[#111827]"
+                      onClick={() => {
+                        setSelectedQ(q.id);
+                        setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
+                      }}
+                    >
+                      Questão {imp.importedQuestions.findIndex((x) => x.id === q.id) + 1}
+                      {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
+                    </button>
+                    {warnings.length > 0 && (
+                      <span className="rounded-full bg-[#D9770618] px-2 py-0.5 text-[11px] font-extrabold text-[#D97706]">
+                        Revisão recomendada
+                      </span>
+                    )}
+                    {q.confidence != null && (
+                      <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
+                        Confiança {Math.round(q.confidence * 100)}%
+                      </span>
+                    )}
+                    {linkedAssets.length > 0 && (
+                      <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-semibold text-[#374151]">
+                        {linkedAssets.length} vínculo(s)
+                      </span>
+                    )}
+                  </div>
+
+                  {!isExpanded && (
+                    <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#374151]">
+                      {draft.content}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn !h-[34px] !px-3 !text-[12px]"
+                    style={{ background: d === "approve" ? "#059669" : "#F3F4F6", border: "1px solid #E5E7EB", color: d === "approve" ? "#fff" : "#374151" }}
+                    onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
+                    title="Aprovar"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn !h-[34px] !px-3 !text-[12px]"
+                    style={{ background: d === "reject" ? "#DC2626" : "#F3F4F6", border: "1px solid #E5E7EB", color: d === "reject" ? "#fff" : "#374151" }}
+                    onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
+                    title="Rejeitar"
+                  >
+                    ✗
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost !h-[34px] !text-[12px]"
+                    onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
+                    title={isExpanded ? "Recolher" : "Editar"}
+                  >
+                    {isExpanded ? "Recolher" : "Editar"}
+                  </button>
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div className="border-t border-[#E5E7EB] p-4">
+                  {warnings.length > 0 && (
+                    <div className="mb-3 rounded-[14px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[12px] text-[#92400E]">
+                      <div className="font-extrabold">Pontos de atenção</div>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {warnings.map((w, i) => (
+                          <li key={`${q.id}-w-${i}`}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="min-w-0 space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Enunciado</label>
+                        <textarea
+                          className="input min-h-[160px] text-[12.5px]"
+                          value={draft.content}
+                          onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Alternativas</label>
+                        <div className="space-y-2">
+                          {draft.alternatives.map((alt, altIdx) => (
+                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
+                              <input
+                                className="input text-center text-[12px] font-bold"
+                                value={alt.letter}
+                                onChange={(e) => {
+                                  const v = e.target.value.toUpperCase();
+                                  setDrafts((prev) => {
+                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
+                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                  });
+                                }}
+                              />
+                              <textarea
+                                className="input min-h-[60px] text-[12.5px]"
+                                value={alt.content}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setDrafts((prev) => {
+                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
+                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                  });
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="rounded-[16px] border border-[#E5E7EB] bg-[#FAFAFC] p-3">
+                        <div className="text-[12px] font-extrabold text-[#111827]">Ações</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" className="btn btn-purple !h-[34px] !text-[12px]" onClick={() => saveQuestion(q.id)}>
+                            <Save className="h-4 w-4" /> Salvar questão
+                          </button>
+                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => duplicateQuestion(q.id)}>
+                            <Copy className="h-4 w-4" /> Duplicar
+                          </button>
+                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => splitQuestionAuto(q.id)}>
+                            Dividir (auto)
+                          </button>
+                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
+                            Unir c/ próxima
+                          </button>
+                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => markNeedsReview(q.id)}>
+                            Marcar p/ revisão
+                          </button>
+                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => deleteQuestion(q.id)}>
+                            <Trash2 className="h-4 w-4 text-red-600" /> Excluir
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[16px] border border-[#E5E7EB] bg-white p-3">
+                        <div className="text-[12px] font-extrabold text-[#111827]">Vínculos</div>
+                        <div className="mt-2 space-y-2">
+                          {linkedAssets.length === 0 ? (
+                            <div className="text-[12px] text-[#6B7280]">Nenhum vínculo ainda.</div>
+                          ) : (
+                            linkedAssets.map((a) => (
+                              <div key={a.id} className="rounded-[14px] border border-[#E5E7EB] bg-[#FAFAFC] p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-[12px] font-semibold text-[#374151]">
+                                    {a.kind === "IMAGE" ? "Figura" : "Texto"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
+                                  </div>
+                                  <div className="text-[11px] font-semibold text-[#9CA3AF]">{a.label ?? ""}</div>
+                                </div>
+                                {a.kind === "TEXT_BLOCK" && a.extractedText ? (
+                                  <div className="mt-1 whitespace-pre-wrap text-[11.5px] text-[#4B5563]">
+                                    {a.extractedText}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-ghost !h-[34px] !text-[12px]"
+                            onClick={() => {
+                              setSelectedQ(q.id);
+                              setDrawerLinkType("TEXT");
+                              setDrawerOpen(true);
+                            }}
+                          >
+                            Adicionar vínculo (texto)
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost !h-[34px] !text-[12px]"
+                            onClick={() => {
+                              setSelectedQ(q.id);
+                              setDrawerLinkType("IMAGE");
+                              setDrawerOpen(true);
+                            }}
+                          >
+                            Adicionar vínculo (imagem)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[16px] border border-[#E5E7EB] bg-white p-3">
+                        <div className="text-[12px] font-extrabold text-[#111827]">IA</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-ghost !h-[34px] !text-[12px]"
+                            onClick={() => {
+                              setSelectedQ(q.id);
+                              setAltDrawerOpen(true);
+                            }}
+                          >
+                            Identificar alternativas
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {filteredQuestions.length > visibleCount && (
+        <div className="mt-3">
+          <button type="button" className="btn btn-ghost w-full !h-[38px] !text-[12px]" onClick={() => setVisibleCount((n) => n + 60)}>
+            Mostrar mais (+60)
+          </button>
+          <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">Renderização incremental para listas longas.</p>
+        </div>
+      )}
 
       {/* Mantém o editor detalhado atual abaixo (por enquanto), para não perder funcionalidade durante a reestruturação.
           Na próxima iteração, ele vira painel de edição no lado direito (aba "Conteúdo"). */}

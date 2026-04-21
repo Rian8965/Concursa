@@ -89,6 +89,8 @@ export function ImportLinkDrawer({
             onSelectedQuestionIdChange={onSelectedQuestionIdChange}
             uiMode="linker"
             linkType={linkType}
+            layout="pdfOnly"
+            onLinkCreated={() => onClose()}
           />
         </div>
       </div>
