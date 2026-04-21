@@ -394,24 +394,19 @@ export default function RevisaoImportacaoPage() {
     await refreshImport();
   }
 
-  if (loading || !imp) {
-    return (
-      <div style={{ textAlign: "center", padding: "48px 0" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
+  // Hooks devem rodar em toda renderização. Não colocar useMemo abaixo de early-return.
+  const approved = useMemo(() => Object.values(decisions).filter((d) => d === "approve").length, [decisions]);
+  const rejected = useMemo(() => Object.values(decisions).filter((d) => d === "reject").length, [decisions]);
+  const pending = useMemo(() => Object.values(decisions).filter((d) => d === "pending").length, [decisions]);
 
-  const approved = Object.values(decisions).filter((d) => d === "approve").length;
-  const rejected = Object.values(decisions).filter((d) => d === "reject").length;
-  const pending = Object.values(decisions).filter((d) => d === "pending").length;
+  const qopts = useMemo(() => {
+    const qs = imp?.importedQuestions ?? [];
+    return qs.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }));
+  }, [imp?.importedQuestions]);
 
-  const qopts = imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }));
   const filteredQuestions = useMemo(() => {
-    const base = onlyNeedsReview
-      ? imp.importedQuestions.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0)
-      : imp.importedQuestions;
+    const all = imp?.importedQuestions ?? [];
+    const base = onlyNeedsReview ? all.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0) : all;
     const s = search.trim().toLowerCase();
     if (!s) return base;
     return base.filter((q, idx) => {
@@ -421,7 +416,16 @@ export default function RevisaoImportacaoPage() {
       const hay = `${idx + 1} ${num} ${d.content ?? ""}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, imp.importedQuestions, drafts, search]);
+  }, [onlyNeedsReview, imp?.importedQuestions, drafts, search]);
+
+  if (loading || !imp) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 0" }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-none">
