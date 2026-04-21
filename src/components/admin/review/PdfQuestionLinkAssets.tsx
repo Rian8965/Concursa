@@ -92,15 +92,15 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
 
   return (
     <>
-      <div className="rounded-2xl border border-violet-100/90 bg-gradient-to-b from-white via-white to-violet-50/30 p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)] sm:p-5">
-        <div className="flex flex-col gap-1 border-b border-black/[0.06] pb-4">
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Vínculos ao PDF</h3>
+      <div className="rounded-2xl border border-violet-100/90 bg-gradient-to-b from-white via-white to-violet-50/30 p-5 shadow-[0_1px_0_rgba(0,0,0,0.04)] sm:p-6">
+        <div className="flex flex-col gap-2 border-b border-black/[0.06] pb-5">
+          <h3 className="text-sm font-extrabold tracking-tight text-[var(--text-primary)]">Vínculos ao PDF</h3>
           <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-            Textos e figuras ligados a esta questão. Edite o OCR quando necessário; o vínculo com a questão é mantido.
+            Textos e figuras desta questão. Editar o texto não remove o vínculo.
           </p>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-5 space-y-5">
           {assets.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-black/[0.12] bg-slate-50/80 px-4 py-6 text-center text-sm text-[var(--text-muted)]">
               Nenhum vínculo ainda. Use os botões abaixo para marcar trechos no PDF.
@@ -243,17 +243,17 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
           )}
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:gap-3">
+        <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"
-            className="btn btn-primary inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-md"
+            className="btn btn-primary inline-flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-md"
             onClick={onOpenLinkText}
           >
             <FileText className="h-4 w-4 shrink-0" /> Vincular texto no PDF
           </button>
           <button
             type="button"
-            className="btn inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-violet-300 bg-violet-50 px-4 text-sm font-extrabold text-violet-900 shadow-sm hover:bg-violet-100/90"
+            className="btn inline-flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-violet-300 bg-violet-50 px-4 text-sm font-extrabold text-violet-900 shadow-sm hover:bg-violet-100/90"
             onClick={onOpenLinkImage}
           >
             <ImageIcon className="h-4 w-4 shrink-0" /> Vincular imagem no PDF

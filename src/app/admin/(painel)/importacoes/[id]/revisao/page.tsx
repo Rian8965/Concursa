@@ -643,14 +643,13 @@ export default function RevisaoImportacaoPage() {
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
           const questionContext = buildImportMetaDisplay(imp, aiMeta?.meta ?? null);
-          const contextRows = [
-            ["Banca", questionContext.banca],
-            ["Matéria", questionContext.materia],
-            ["Concurso", questionContext.concurso],
-            ["Cargo", questionContext.cargo],
-            ["Ano", questionContext.ano],
-            ["Cidade / UF", questionContext.cidade],
-          ].filter((entry): entry is [string, string] => Boolean(entry[1] && String(entry[1]).trim()));
+          const metaFields = [
+            { key: "Banca", value: questionContext.banca },
+            { key: "Concurso", value: questionContext.concurso },
+            { key: "Ano", value: questionContext.ano },
+            { key: "Matéria", value: questionContext.materia },
+            { key: "Cargo", value: questionContext.cargo },
+          ];
 
           return (
             <article
@@ -663,25 +662,36 @@ export default function RevisaoImportacaoPage() {
                 d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
               )}
             >
-              <div className="grid gap-4 border-b border-black/[0.06] p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-6">
-                <div className="min-w-0 space-y-3">
-                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
-                    <span className="inline-flex h-9 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl bg-violet-600 px-2 text-sm font-black text-white shadow-md">
-                      {qi}
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-2.5">
-                      <button
-                        type="button"
-                        className="w-full break-words text-left text-base font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline"
-                        onClick={() => {
-                          setSelectedQ(q.id);
-                          setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
-                        }}
-                      >
-                        Questão {qi}
-                        {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
-                      </button>
-                      <div className="flex flex-wrap items-center gap-2">
+              <div className="border-b border-black/[0.06] bg-gradient-to-b from-slate-50/40 to-transparent p-5 sm:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className="flex flex-wrap items-start gap-3">
+                      <span className="inline-flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center rounded-2xl bg-violet-600 px-3 text-base font-black text-white shadow-md">
+                        {qi}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <button
+                          type="button"
+                          className="w-full break-words text-left text-lg font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline sm:text-xl"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
+                          }}
+                        >
+                          Questão {qi}
+                          {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1",
+                            d === "approve" && "bg-emerald-100 text-emerald-900 ring-emerald-200/90",
+                            d === "reject" && "bg-red-100 text-red-900 ring-red-200/90",
+                            d === "pending" && "bg-slate-100 text-slate-800 ring-slate-200/90",
+                          )}
+                        >
+                          {d === "approve" ? "Aprovada na revisão" : d === "reject" ? "Rejeitada" : "Pendente de decisão"}
+                        </span>
                         {warnings.length > 0 && (
                           <span className="inline-flex max-w-full items-center rounded-full bg-amber-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200/80 whitespace-normal">
                             Revisão recomendada
@@ -777,27 +787,40 @@ export default function RevisaoImportacaoPage() {
                   </button>
                 </div>
               </div>
+              </div>
 
               {isExpanded && (
-                <div className="border-t border-black/[0.06] bg-white/60 px-5 py-6 sm:px-6 sm:py-7">
-                  {contextRows.length > 0 && (
-                    <div className="mb-6 rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/80 to-white p-4 shadow-sm sm:p-5">
-                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-violet-900/80">Contexto da questão</h3>
-                      <dl className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                        {contextRows.map(([k, v]) => (
-                          <div key={`${q.id}-ctx-${k}`} className="min-w-0">
-                            <dt className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{k}</dt>
-                            <dd className="mt-0.5 break-words text-sm font-semibold text-[var(--text-primary)]">{v}</dd>
+                <div className="border-t border-black/[0.06] bg-white/60 px-5 py-8 sm:px-8 sm:py-10">
+                  <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
+                    <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados da questão</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">Cadastro + inferência da IA. Campos vazios aparecem como “—”.</p>
+                    <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                      {metaFields.map(({ key, value }) => {
+                        const show = value?.trim();
+                        return (
+                          <div
+                            key={`${q.id}-meta-${key}`}
+                            className="flex min-h-[4.25rem] min-w-0 flex-col justify-center rounded-xl border border-black/[0.06] bg-white/90 px-4 py-3 shadow-sm"
+                          >
+                            <dt className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">{key}</dt>
+                            <dd
+                              className={cn(
+                                "mt-1.5 break-words text-sm font-semibold leading-snug",
+                                show ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]",
+                              )}
+                            >
+                              {show || "—"}
+                            </dd>
                           </div>
-                        ))}
-                      </dl>
-                    </div>
-                  )}
+                        );
+                      })}
+                    </dl>
+                  </div>
 
                   {warnings.length > 0 && (
-                    <div className="mb-6 rounded-2xl border border-amber-200/90 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm sm:p-5">
-                      <div className="text-sm font-extrabold tracking-tight">Pontos de atenção</div>
-                      <ul className="mt-3 list-disc space-y-2 break-words pl-5 leading-relaxed">
+                    <div className="mb-8 rounded-2xl border border-amber-200/90 bg-amber-50 p-5 text-sm text-amber-950 shadow-sm sm:p-6">
+                      <div className="text-base font-extrabold tracking-tight">Pontos de atenção</div>
+                      <ul className="mt-4 list-disc space-y-2.5 break-words pl-5 leading-relaxed">
                         {warnings.map((w, i) => (
                           <li key={`${q.id}-w-${i}`}>{w}</li>
                         ))}
@@ -806,83 +829,52 @@ export default function RevisaoImportacaoPage() {
                   )}
 
                   {aiMeta?.instructions ? (
-                    <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-800 shadow-sm sm:p-5">
+                    <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/90 p-5 text-sm text-slate-800 shadow-sm sm:p-6">
                       <div className="text-xs font-extrabold uppercase tracking-wider text-slate-600">Instruções da prova (IA)</div>
-                      <p className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{aiMeta.instructions}</p>
+                      <div className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
+                        {aiMeta.instructions}
+                      </div>
                     </div>
                   ) : null}
 
-                  <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-                    <div className="min-w-0 space-y-6">
-                      <div className="orbit-form-stack gap-3">
-                        <label className="orbit-form-label">Enunciado</label>
+                  <div className="flex flex-col gap-10 xl:flex-row xl:items-start xl:gap-12">
+                    <div className="min-w-0 flex-1 space-y-10">
+                      <section className="space-y-4">
+                        <label className="orbit-form-label text-base">Enunciado</label>
                         <textarea
-                          className="input min-h-[200px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
+                          className="input min-h-[220px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
                           value={draft.content}
                           onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))}
                         />
-                      </div>
+                      </section>
 
-                      <div className="orbit-form-stack gap-3">
-                        <div className="flex flex-wrap items-end justify-between gap-2">
-                          <label className="orbit-form-label mb-0">Alternativas</label>
+                      <section className="space-y-5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                          <div>
+                            <h3 className="text-base font-extrabold tracking-tight text-[var(--text-primary)]">Alternativas</h3>
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">Marque a opção correta ao lado de cada letra. O cartão da alternativa correta fica destacado.</p>
+                          </div>
                           {draft.correctAnswer ? (
-                            <span className="text-xs font-bold text-emerald-800">
-                              Correta: <span className="tabular-nums">{draft.correctAnswer}</span>
-                              {ansMeta.answerSource === "gabarito" ? " · do gabarito" : ansMeta.answerSource === "llm" ? " · inferida pela IA" : ansMeta.answerSource === "manual" ? " · manual" : ""}
+                            <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 ring-1 ring-emerald-200/80">
+                              Resposta: <span className="tabular-nums">{draft.correctAnswer}</span>
+                              {ansMeta.answerSource === "gabarito"
+                                ? " · gabarito"
+                                : ansMeta.answerSource === "llm"
+                                  ? " · IA"
+                                  : ansMeta.answerSource === "manual"
+                                    ? " · manual"
+                                    : ""}
                             </span>
                           ) : null}
                         </div>
 
                         {!draft.correctAnswer && (
-                          <div className="rounded-2xl border border-rose-200/90 bg-rose-50/90 px-4 py-3 text-sm font-semibold leading-snug text-rose-950 shadow-sm">
-                            Nenhuma resposta foi identificada no gabarito para esta questão. Selecione a alternativa correta abaixo (será salva como resposta manual).
+                          <div className="rounded-2xl border border-rose-200/90 bg-rose-50/90 px-4 py-3.5 text-sm font-medium leading-snug text-rose-950 shadow-sm">
+                            Nenhuma resposta automática para esta questão. Marque a alternativa correta nos cartões abaixo (fica registrado como manual).
                           </div>
                         )}
 
-                        <fieldset className="min-w-0 rounded-2xl border border-black/[0.06] bg-white/90 p-4 shadow-sm">
-                          <legend className="float-left w-full px-0 text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">
-                            Marcar resposta correta
-                          </legend>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {draft.alternatives.map((alt) => {
-                              const letter = String(alt.letter ?? "").trim().toUpperCase().slice(0, 1);
-                              const sel = draft.correctAnswer?.toUpperCase() === letter;
-                              return (
-                                <label
-                                  key={`${q.id}-corr-${letter}`}
-                                  className={cn(
-                                    "inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-bold transition-colors",
-                                    sel
-                                      ? "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm ring-1 ring-emerald-300/80"
-                                      : "border-black/[0.08] bg-white text-[var(--text-secondary)] hover:bg-slate-50",
-                                  )}
-                                >
-                                  <input
-                                    type="radio"
-                                    className="h-4 w-4 accent-emerald-600"
-                                    name={`correct-${q.id}`}
-                                    checked={sel}
-                                    onChange={() => {
-                                      setDrafts((prev) => {
-                                        const cur = prev[q.id];
-                                        if (!cur) return prev;
-                                        const rawText = mergeRawTextPatch(cur.rawText, {
-                                          answerSource: "manual",
-                                          gabaritoMatchNumber: null,
-                                        });
-                                        return { ...prev, [q.id]: { ...cur, correctAnswer: letter, rawText } };
-                                      });
-                                    }}
-                                  />
-                                  {letter}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </fieldset>
-
-                        <div className="space-y-4">
+                        <div className="space-y-5">
                           {draft.alternatives.map((alt, altIdx) => {
                             const letter = String(alt.letter ?? "").trim().toUpperCase().slice(0, 1);
                             const isCorrect = draft.correctAnswer?.toUpperCase() === letter;
@@ -890,87 +882,131 @@ export default function RevisaoImportacaoPage() {
                               <div
                                 key={`${q.id}:${alt.letter}:${altIdx}`}
                                 className={cn(
-                                  "grid grid-cols-[52px_minmax(0,1fr)] gap-3 rounded-2xl sm:gap-4",
-                                  isCorrect && "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-white",
+                                  "rounded-2xl border bg-white p-4 shadow-sm transition-shadow sm:p-5",
+                                  isCorrect
+                                    ? "border-emerald-300/90 ring-1 ring-emerald-200/70"
+                                    : "border-black/[0.07]",
                                 )}
                               >
-                                <input
-                                  className="input w-full min-w-0 shrink-0 text-center text-sm font-bold"
-                                  value={alt.letter}
-                                  onChange={(e) => {
-                                    const v = e.target.value.toUpperCase();
-                                    setDrafts((prev) => {
-                                      const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
-                                      return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                    });
-                                  }}
-                                />
-                                <textarea
-                                  className={cn(
-                                    "input min-h-[80px] w-full min-w-0 resize-y break-words text-sm leading-relaxed",
-                                    isCorrect && "border-emerald-300/80 bg-emerald-50/40",
-                                  )}
-                                  value={alt.content}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setDrafts((prev) => {
-                                      const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
-                                      return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                    });
-                                  }}
-                                />
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
+                                  <div className="flex shrink-0 flex-row items-center gap-4 lg:w-44 lg:flex-col lg:items-stretch lg:justify-center lg:gap-3">
+                                    <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-black/[0.06] bg-slate-50/80 px-3 py-2.5 lg:w-full lg:justify-center">
+                                      <input
+                                        type="radio"
+                                        className="h-4 w-4 shrink-0 accent-emerald-600"
+                                        name={`correct-${q.id}`}
+                                        checked={isCorrect}
+                                        onChange={() => {
+                                          setDrafts((prev) => {
+                                            const cur = prev[q.id];
+                                            if (!cur) return prev;
+                                            const rawText = mergeRawTextPatch(cur.rawText, {
+                                              answerSource: "manual",
+                                              gabaritoMatchNumber: null,
+                                            });
+                                            return { ...prev, [q.id]: { ...cur, correctAnswer: letter, rawText } };
+                                          });
+                                        }}
+                                      />
+                                      <span className="text-xs font-extrabold uppercase tracking-wide text-[var(--text-muted)]">Correta</span>
+                                    </label>
+                                    <div className="flex flex-1 flex-col gap-1 lg:flex-initial">
+                                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Letra</span>
+                                      <input
+                                        className="input h-11 w-14 text-center text-base font-black"
+                                        value={alt.letter}
+                                        onChange={(e) => {
+                                          const v = e.target.value.toUpperCase();
+                                          setDrafts((prev) => {
+                                            const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
+                                            return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Texto da alternativa</span>
+                                    <textarea
+                                      className="input min-h-[100px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
+                                      value={alt.content}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        setDrafts((prev) => {
+                                          const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
+                                          return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
-                      </div>
+                      </section>
+
+                      <section className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/90 to-white p-5 shadow-md sm:p-6">
+                        <h3 className="text-sm font-extrabold tracking-tight text-violet-900">Extrair alternativas com IA</h3>
+                        <p className="mt-2 max-w-prose text-sm leading-relaxed text-violet-900/85">
+                          Selecione no PDF o bloco onde estão as alternativas (A–E) para preencher ou corrigir os textos automaticamente.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-primary mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl px-5 text-sm font-extrabold shadow-md sm:w-auto"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setAltDrawerOpen(true);
+                          }}
+                        >
+                          Identificar alternativas no PDF
+                        </button>
+                      </section>
                     </div>
 
-                    <div className="flex min-w-0 flex-col gap-5 lg:sticky lg:top-4 lg:self-start">
-                      <div className="rounded-2xl border border-black/[0.06] bg-slate-50/90 p-4 shadow-sm sm:p-5">
-                        <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ações principais</h3>
-                        <div className="mt-4 flex flex-col gap-2.5">
+                    <aside className="w-full shrink-0 space-y-8 xl:sticky xl:top-6 xl:w-[400px] xl:max-w-[400px] xl:self-start">
+                      <div className="rounded-2xl border border-black/[0.08] bg-slate-50/95 p-5 shadow-sm sm:p-6">
+                        <h3 className="text-sm font-extrabold tracking-tight text-[var(--text-primary)]">Ações da questão</h3>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Salve antes de sair. Ferramentas alteram esta importação.</p>
+                        <div className="mt-5 flex flex-col gap-3">
                           <button
                             type="button"
-                            className="btn btn-primary inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-bold shadow-md"
+                            className="btn btn-primary inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-md"
                             onClick={() => saveQuestion(q.id)}
                           >
                             <Save className="h-4 w-4 shrink-0" /> Salvar questão
                           </button>
-                        </div>
-                        <h4 className="mt-5 text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ferramentas</h4>
-                        <div className="mt-2 flex flex-col gap-2">
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
                             onClick={() => duplicateQuestion(q.id)}
                           >
                             <Copy className="h-4 w-4 shrink-0" /> Duplicar
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
                             onClick={() => splitQuestionAuto(q.id)}
                           >
                             Dividir (auto)
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
                             onClick={() => mergeWithNext(q.id)}
                           >
-                            Unir c/ próxima
+                            Unir com a próxima
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
                             onClick={() => markNeedsReview(q.id)}
                           >
-                            Marcar p/ revisão
+                            Marcar para revisão
                           </button>
                           <button
                             type="button"
-                            className="btn inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-bold text-red-800 hover:bg-red-100/80"
+                            className="btn inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-800 hover:bg-red-100/80"
                             onClick={() => deleteQuestion(q.id)}
                           >
                             <Trash2 className="h-4 w-4 shrink-0" /> Excluir
@@ -994,22 +1030,7 @@ export default function RevisaoImportacaoPage() {
                           setDrawerOpen(true);
                         }}
                       />
-
-                      <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 shadow-sm sm:p-5">
-                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-violet-800">IA</h3>
-                        <p className="mt-1 text-xs leading-relaxed text-violet-900/80">Selecione no PDF o bloco das alternativas para extrair A–E automaticamente.</p>
-                        <button
-                          type="button"
-                          className="btn btn-primary mt-4 inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl text-sm font-bold shadow-md"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setAltDrawerOpen(true);
-                          }}
-                        >
-                          Identificar alternativas
-                        </button>
-                      </div>
-                    </div>
+                    </aside>
                   </div>
                 </div>
               )}
