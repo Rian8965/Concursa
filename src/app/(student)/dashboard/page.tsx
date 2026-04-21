@@ -115,23 +115,25 @@ export default async function StudentDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] lg:gap-10">
 
         {/* ── Coluna esquerda: Concursos ── */}
-        <div>
-          <div className="mb-3.5 flex items-center justify-between">
-            <h2 className="text-[15px] font-bold tracking-tight text-[#111827]">Meus concursos</h2>
-            <Link href="/concursos" className="orbit-link inline-flex items-center gap-1.5">
+        <section className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-bold tracking-tight text-[var(--text-primary)] sm:text-[17px]">Meus concursos</h2>
+            <Link href="/concursos" className="orbit-link inline-flex shrink-0 items-center gap-1.5 text-sm">
               Ver todos <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {profile?.studentCompetitions.length === 0 ? (
-              <div className="rounded-[18px] border border-dashed border-black/[0.12] bg-white px-6 py-10 text-center shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)]">
-                <Trophy className="mx-auto mb-3 h-9 w-9 text-[#D1D5DB]" />
-                <p className="text-[14px] font-semibold text-[#374151]">Nenhum concurso vinculado ainda</p>
-                <p className="mt-1 text-[13px] text-[#9CA3AF]">Aguarde o administrador configurar seu acesso</p>
+              <div className="rounded-[var(--r-3xl)] border border-dashed border-black/[0.12] bg-gradient-to-b from-white to-slate-50/80 px-6 py-10 text-center shadow-[var(--shadow-card)] sm:px-8 sm:py-12">
+                <Trophy className="mx-auto mb-4 h-10 w-10 text-[var(--text-muted)]" strokeWidth={1.25} />
+                <p className="text-[15px] font-semibold leading-snug text-[var(--text-primary)]">Nenhum concurso vinculado ainda</p>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--text-muted)]">
+                  Aguarde o administrador configurar seu acesso
+                </p>
               </div>
             ) : (
               profile?.studentCompetitions.map((sc, i) => {
@@ -143,8 +145,8 @@ export default async function StudentDashboardPage() {
 
                 return (
                   <div key={sc.id} className="animate-fade-up" style={{ animationDelay: `${i * 40}ms` }}>
-                    <div className="rounded-[18px] border border-black/[0.07] bg-white px-6 py-5 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_28px_rgba(17,24,39,0.05)] transition-transform hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(17,24,39,0.07)] active:scale-[0.99]">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="rounded-2xl border border-black/[0.07] bg-white px-5 py-5 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-float)] sm:px-6 sm:py-6">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="mb-2.5 flex flex-wrap gap-1.5">
                             <Badge variant={comp.status === "ACTIVE" ? "active" : "upcoming"}>
@@ -158,7 +160,7 @@ export default async function StudentDashboardPage() {
                             )}
                           </div>
 
-                          <p className="truncate text-[15px] font-bold tracking-tight text-[#111827]">
+                          <p className="break-words text-[15px] font-bold leading-snug tracking-tight text-[var(--text-primary)] sm:text-base">
                             {comp.name}
                           </p>
 
@@ -192,7 +194,7 @@ export default async function StudentDashboardPage() {
 
                         <Link
                           href={`/concursos/${comp.id}`}
-                          className="btn btn-purple flex-shrink-0 !px-4 !py-2 text-[12.5px]"
+                          className="btn btn-purple w-full shrink-0 justify-center sm:w-auto sm:justify-center !px-5 !py-2.5 text-[13px] font-bold"
                         >
                           Estudar
                           <ArrowRight className="h-3.5 w-3.5" />
@@ -204,15 +206,13 @@ export default async function StudentDashboardPage() {
               })
             )}
           </div>
-        </div>
+        </section>
 
-        {/* ── Coluna direita: Ações ── */}
-        <div className="flex flex-col gap-6">
-
-          {/* Ações rápidas */}
+        {/* ── Coluna direita: Ações + plano ── */}
+        <aside className="flex w-full min-w-0 flex-col gap-8 lg:max-w-none">
           <div>
-            <h3 className="mb-3 text-[14px] font-bold tracking-tight text-[#111827]">Estudar agora</h3>
-            <div className="flex flex-col gap-2">
+            <h3 className="mb-4 text-base font-bold tracking-tight text-[var(--text-primary)] sm:text-[17px]">Estudar agora</h3>
+            <div className="flex flex-col gap-3">
               {[
                 {
                   icon: Play,
@@ -249,54 +249,54 @@ export default async function StudentDashboardPage() {
                   accent: "#D97706",
                 },
               ].map((action) => (
-                <div key={action.label} className="transition-transform hover:-translate-y-px active:scale-[0.99]">
+                <div key={action.label}>
                   <Link
                     href={action.href}
-                    className="flex items-center gap-3 rounded-[14px] border border-black/[0.07] bg-white px-4 py-3 no-underline shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_26px_rgba(17,24,39,0.04)] transition-colors hover:bg-[#FBFAFF]"
+                    className="group flex min-h-[4.5rem] items-center gap-4 rounded-2xl border border-black/[0.07] bg-white px-4 py-3.5 no-underline shadow-[var(--shadow-sm)] transition-all hover:border-violet-200 hover:bg-violet-50/40 hover:shadow-md active:scale-[0.99] sm:px-5 sm:py-4"
                   >
                     <div
-                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px]"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
                       style={{
-                        background: `${action.accent}12`,
-                        border: `1px solid ${action.accent}22`,
+                        background: `${action.accent}14`,
+                        border: `1px solid ${action.accent}28`,
                       }}
                     >
-                      <action.icon className="h-4 w-4" style={{ color: action.accent }} />
+                      <action.icon className="h-[18px] w-[18px]" style={{ color: action.accent }} aria-hidden />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold leading-none text-[#111827]">{action.label}</p>
-                      <p className="mt-1 text-[11.5px] text-[#9CA3AF]">{action.desc}</p>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <p className="text-[14px] font-semibold leading-snug text-[var(--text-primary)]">{action.label}</p>
+                      <p className="mt-1 text-[13px] leading-snug text-[var(--text-muted)]">{action.desc}</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-[#D1D5DB]" />
+                    <ArrowRight className="h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" aria-hidden />
                   </Link>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Card do plano */}
           {profile?.plan && (
-            <div
-              className="relative overflow-hidden rounded-[18px] border border-[rgba(124,58,237,0.25)] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-5 py-4 shadow-[0_14px_42px_rgba(124,58,237,0.25)] transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
-            >
-              <div className="absolute inset-0 opacity-[0.25]" style={{ background: "radial-gradient(700px 240px at 25% 10%, rgba(255,255,255,0.35), transparent 60%)" }} />
-              <div className="relative">
-                <div className="mb-1 flex items-center gap-2">
-                  <Zap className="h-3 w-3 text-white/75" />
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.10em] text-white/70">
-                    Seu plano
-                  </p>
+            <div className="relative isolate rounded-2xl border border-white/25 bg-gradient-to-br from-violet-600 via-violet-600 to-fuchsia-500 px-5 py-5 shadow-[0_16px_40px_rgba(124,58,237,0.28)] sm:px-6 sm:py-6">
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+                <div
+                  className="absolute inset-0 opacity-[0.28]"
+                  style={{ background: "radial-gradient(720px 280px at 20% 0%, rgba(255,255,255,0.45), transparent 55%)" }}
+                />
+              </div>
+              <div className="relative z-[1] space-y-2">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-white/85" aria-hidden />
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/80">Seu plano</p>
                 </div>
-                <p className="text-[16px] font-extrabold tracking-tight text-white">{profile.plan.name}</p>
+                <p className="break-words text-lg font-extrabold leading-snug tracking-tight text-white sm:text-xl">{profile.plan.name}</p>
                 {profile.accessExpiresAt && (
-                  <p className="mt-1 text-[11.5px] font-medium text-white/60">
+                  <p className="pt-0.5 text-[13px] font-medium leading-snug text-white/75">
                     Válido até {formatDate(profile.accessExpiresAt)}
                   </p>
                 )}
               </div>
             </div>
           )}
-        </div>
+        </aside>
       </div>
     </div>
   );

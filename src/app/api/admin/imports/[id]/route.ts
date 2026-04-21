@@ -23,7 +23,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!imp) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
-  return NextResponse.json({ import: imp });
+
+  const [examBoard, subject, city, jobRole] = await Promise.all([
+    imp.examBoardId ? prisma.examBoard.findUnique({ where: { id: imp.examBoardId }, select: { name: true, acronym: true } }) : null,
+    imp.subjectId ? prisma.subject.findUnique({ where: { id: imp.subjectId }, select: { name: true } }) : null,
+    imp.cityId ? prisma.city.findUnique({ where: { id: imp.cityId }, select: { name: true, state: true } }) : null,
+    imp.jobRoleId ? prisma.jobRole.findUnique({ where: { id: imp.jobRoleId }, select: { name: true } }) : null,
+  ]);
+
+  return NextResponse.json({
+    import: {
+      ...imp,
+      examBoard,
+      subject,
+      city,
+      jobRole,
+    },
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

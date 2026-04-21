@@ -15,7 +15,7 @@ function StatCard({
   valueClass: string;
 }) {
   return (
-    <div className="rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white to-[#fafafd] px-4 py-4 shadow-sm sm:px-5 sm:py-4">
+    <div className="min-w-0 rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white to-[#fafafd] px-4 py-4 shadow-sm sm:px-5 sm:py-4">
       <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
       <div className={`mt-2 text-2xl font-extrabold tabular-nums tracking-tight ${valueClass}`}>{value}</div>
     </div>

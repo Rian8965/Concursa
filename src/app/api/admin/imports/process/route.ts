@@ -5,6 +5,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
+import {
+  extractGabaritoSectionFromProvaFullText,
+  parseGabaritoMap,
+  resolveCorrectAnswerForImportedQuestion,
+} from "@/lib/import/gabarito";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
@@ -138,6 +143,13 @@ export async function POST(req: NextRequest) {
       concurso = comp.name;
       cidade = `${comp.city.name} - ${comp.city.state}`;
       banca = comp.examBoard?.acronym;
+      await prisma.pDFImport.update({
+        where: { id: pdfImport.id },
+        data: {
+          examBoardId: comp.examBoardId ?? undefined,
+          cityId: comp.cityId ?? undefined,
+        },
+      });
     }
   }
 
@@ -213,6 +225,32 @@ export async function POST(req: NextRequest) {
       }
 
       const fullText = docaiRes.document?.text ?? "";
+
+      async function docaiExtractPdfText(pdfBuf: Buffer): Promise<string> {
+        const [res] = await client.processDocument({
+          name,
+          rawDocument: { content: pdfBuf.toString("base64"), mimeType: "application/pdf" },
+          ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
+        });
+        return res.document?.text ?? "";
+      }
+
+      let gabaritoOcrText = "";
+      if (gabaritoFile && gabaritoFile.size > 0) {
+        try {
+          const gBuf = Buffer.from(await gabaritoFile.arrayBuffer());
+          gabaritoOcrText = (await docaiExtractPdfText(gBuf)).trim();
+        } catch (e) {
+          console.warn("[import] OCR do gabarito falhou; seguindo sem texto do arquivo.", e);
+        }
+      }
+      if (!gabaritoOcrText && gabaritoNoMesmoPdf && fullText.trim()) {
+        gabaritoOcrText = extractGabaritoSectionFromProvaFullText(fullText).trim();
+      }
+
+      const gabaritoMap = parseGabaritoMap(gabaritoOcrText);
+      const gabaritoOcrForLlm = gabaritoOcrText.length > 100_000 ? gabaritoOcrText.slice(0, 100_000) : gabaritoOcrText;
+
       const doc = docaiRes.document as unknown as {
         pages?: Array<{ pageNumber?: number; paragraphs?: Array<{ layout?: DocaiLayout }> }>;
       } | undefined;
@@ -237,8 +275,10 @@ export async function POST(req: NextRequest) {
         "Você é um extrator de provas de concurso.",
         "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
         "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-        "{ meta: { city?, concurso?, ano?, banca?, cargo?, materia?, instructions? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
+        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia?, instructions? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
         "REGRAS:",
+        "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
+        "- meta: SEMPRE tente preencher banca, concurso, materia, cargo, ano (número 4 dígitos se visível), city (cidade/UF) a partir do cabeçalho, capa, rodapé ou primeira página do caderno no OCR. Se não houver evidência, omita o campo ou use null.",
         "- NÃO cole texto-base dentro do enunciado. Se houver 'texto-base' compartilhado por várias questões, crie um item em baseTexts e aponte baseTextId nas questões relacionadas.",
         "- NÃO associe automaticamente texto introdutório geral à primeira questão. Se for instrução geral (ex: 'Leia o texto', 'Assinale'), coloque em meta.instructions.",
         "- Se um texto-base vale claramente para um intervalo de questões (ex: 1 a 3), inclua appliesToQuestionNumbers no baseText.",
@@ -251,8 +291,11 @@ export async function POST(req: NextRequest) {
 
       const user = [
         "Extraia a prova abaixo em JSON.",
-        "TEXTO:",
+        "TEXTO DA PROVA:",
         combined,
+        gabaritoOcrForLlm
+          ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter; formato comum: número + letra A–E):\n${gabaritoOcrForLlm}\n`
+          : "",
       ].join("\n\n");
 
       const llm = await runLlmJson(system, user);
@@ -260,6 +303,22 @@ export async function POST(req: NextRequest) {
 
       const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
       const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+
+      const yearHint = pdfImport.year;
+      const aiMetaRaw = parsed?.meta && typeof parsed.meta === "object" ? { ...parsed.meta } : {};
+      const mergedMeta = {
+        ...aiMetaRaw,
+        concurso: aiMetaRaw.concurso ?? concurso ?? undefined,
+        city: aiMetaRaw.city ?? cidade ?? undefined,
+        banca: aiMetaRaw.banca ?? banca ?? undefined,
+        materia: aiMetaRaw.materia ?? materia ?? undefined,
+        ano:
+          aiMetaRaw.ano != null && aiMetaRaw.ano !== ""
+            ? aiMetaRaw.ano
+            : yearHint != null
+              ? yearHint
+              : undefined,
+      };
 
       const baseMap = new Map<string, string>();
       const baseApplies = new Map<string, number[]>();
@@ -360,9 +419,17 @@ export async function POST(req: NextRequest) {
           })),
         );
 
-        const correctAnswer = q?.correctAnswerLetter
+        const letterFromLlm = q?.correctAnswerLetter
           ? String(q.correctAnswerLetter).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1)
           : (q?.correct_answer ? String(q.correct_answer).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1) : null);
+
+        const resolved = resolveCorrectAnswerForImportedQuestion({
+          questionNumber: number,
+          alternatives,
+          letterFromLlm: letterFromLlm || null,
+          gabaritoMap,
+        });
+        const correctAnswer = resolved.correctAnswer;
 
         const confidence = computeHeuristicConfidence({ statement, alternatives, correctAnswer, number: number ?? undefined });
 
@@ -377,7 +444,15 @@ export async function POST(req: NextRequest) {
             sourcePosition: idx + 1,
             hasImage: false,
             imageUrl: null,
-            rawText: JSON.stringify({ number, baseTextId, statement, commentary, meta: parsed?.meta ?? null }),
+            rawText: JSON.stringify({
+              number,
+              baseTextId,
+              statement,
+              commentary,
+              meta: mergedMeta,
+              answerSource: resolved.answerSource,
+              gabaritoMatchNumber: resolved.gabaritoMatchNumber ?? undefined,
+            }),
             confidence,
             status: "PENDING_REVIEW" as const,
           },
@@ -429,6 +504,12 @@ export async function POST(req: NextRequest) {
             model: llm.model,
             inferredMeta: parsed?.meta ?? null,
             baseTexts: baseMap.size,
+            gabarito: {
+              separateFile: Boolean(gabaritoFile?.size),
+              samePdfFlag: gabaritoNoMesmoPdf,
+              ocrChars: gabaritoOcrText.length,
+              mapSize: gabaritoMap.size,
+            },
           }),
           originalFilenameGabarito: gabaritoFile?.name ?? null,
           gabaritoInSamePdf: gabaritoNoMesmoPdf,

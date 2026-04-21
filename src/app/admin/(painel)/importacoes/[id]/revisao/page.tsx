@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Save, AlertCircle, Trash2, Copy, Check, X, Pencil } from "lucide-react";
@@ -11,6 +11,7 @@ import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdentifyAlternativesDrawer";
 import { TopBar } from "@/components/admin/review/TopBar";
 import { StatsRow } from "@/components/admin/review/StatsRow";
+import { PdfQuestionLinkAssets } from "@/components/admin/review/PdfQuestionLinkAssets";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
@@ -23,18 +24,99 @@ interface ImportedQ {
   imageUrl?: string | null;
 }
 
-function parseAiMeta(rawText?: string | null): { number?: number | null; commentary?: string | null; instructions?: string | null } | null {
+type AiMetaBlock = {
+  city?: string | null;
+  concurso?: string | null;
+  ano?: number | string | null;
+  banca?: string | null;
+  cargo?: string | null;
+  materia?: string | null;
+  instructions?: string | null;
+};
+
+type AnswerSourceKind = "gabarito" | "llm" | "manual" | null;
+
+function parseAnswerMeta(rawText?: string | null): {
+  answerSource?: AnswerSourceKind;
+  gabaritoMatchNumber?: number | null;
+} {
+  if (!rawText) return {};
+  try {
+    const p = JSON.parse(rawText) as { answerSource?: AnswerSourceKind; gabaritoMatchNumber?: unknown };
+    return {
+      answerSource: p.answerSource ?? null,
+      gabaritoMatchNumber: typeof p.gabaritoMatchNumber === "number" ? p.gabaritoMatchNumber : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function mergeRawTextPatch(rawText: string | null | undefined, patch: Record<string, unknown>) {
+  try {
+    const o = rawText?.trim() ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+    return JSON.stringify({ ...o, ...patch });
+  } catch {
+    return JSON.stringify(patch);
+  }
+}
+
+function parseAiMeta(rawText?: string | null): {
+  number?: number | null;
+  commentary?: string | null;
+  instructions?: string | null;
+  meta?: AiMetaBlock | null;
+} | null {
   if (!rawText) return null;
   try {
-    const parsed = JSON.parse(rawText);
+    const parsed = JSON.parse(rawText) as { number?: unknown; commentary?: unknown; meta?: AiMetaBlock };
+    const m = parsed.meta && typeof parsed.meta === "object" ? parsed.meta : null;
     return {
       number: typeof parsed.number === "number" ? parsed.number : null,
       commentary: typeof parsed.commentary === "string" ? parsed.commentary : null,
-      instructions: typeof parsed.meta?.instructions === "string" ? parsed.meta.instructions : null,
+      instructions: typeof m?.instructions === "string" ? m.instructions : null,
+      meta: m,
     };
   } catch {
     return null;
   }
+}
+
+type ImportMetaRow = {
+  banca: string;
+  materia: string;
+  concurso: string;
+  cargo: string;
+  ano: string;
+  cidade: string;
+};
+
+function buildImportMetaDisplay(
+  imp: {
+    competition?: { name: string } | null;
+    year?: number | null;
+    examBoard?: { name: string; acronym: string } | null;
+    subject?: { name: string } | null;
+    city?: { name: string; state: string } | null;
+    jobRole?: { name: string } | null;
+  },
+  ai?: AiMetaBlock | null,
+): ImportMetaRow {
+  const examBoardLabel = imp.examBoard
+    ? [imp.examBoard.acronym, imp.examBoard.name].filter(Boolean).join(" · ")
+    : "";
+  const cityLabel = imp.city ? `${imp.city.name} · ${imp.city.state}` : "";
+  const yearStr = imp.year != null ? String(imp.year) : "";
+  const anoAi = ai?.ano != null && ai.ano !== "" ? String(ai.ano) : "";
+
+  return {
+    banca: examBoardLabel || (typeof ai?.banca === "string" ? ai.banca.trim() : "") || "",
+    materia: imp.subject?.name?.trim() || (typeof ai?.materia === "string" ? ai.materia.trim() : "") || "",
+    concurso: imp.competition?.name?.trim() || (typeof ai?.concurso === "string" ? ai.concurso.trim() : "") || "",
+    cargo: imp.jobRole?.name?.trim() || (typeof ai?.cargo === "string" ? ai.cargo.trim() : "") || "",
+    ano: yearStr || anoAi,
+    cidade: cityLabel || (typeof ai?.city === "string" ? ai.city.trim() : "") || "",
+  };
 }
 
 function parseSuggestedSubject(rawText?: string | null): { subject: string; confidence: string; alternatives: string[] } | null {
@@ -55,7 +137,12 @@ interface ImportData {
   status: string;
   totalExtracted: number;
   storedPdfPath?: string | null;
+  year?: number | null;
   competition?: { name: string } | null;
+  examBoard?: { name: string; acronym: string } | null;
+  subject?: { name: string } | null;
+  city?: { name: string; state: string } | null;
+  jobRole?: { name: string } | null;
   importedQuestions: ImportedQ[];
   importAssets?: ImportAssetDTO[];
 }
@@ -402,19 +489,69 @@ export default function RevisaoImportacaoPage() {
     return qs.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }));
   }, [imp?.importedQuestions]);
 
+  const globalMetaDisplay = useMemo(() => {
+    if (!imp) return null;
+    let aiMeta: AiMetaBlock | null = null;
+    for (const q of imp.importedQuestions) {
+      const p = parseAiMeta(q.rawText)?.meta;
+      if (p && (p.banca || p.materia || p.concurso || p.cargo || p.ano != null || p.city)) {
+        aiMeta = p;
+        break;
+      }
+    }
+    if (!aiMeta) aiMeta = parseAiMeta(imp.importedQuestions[0]?.rawText)?.meta ?? null;
+    return buildImportMetaDisplay(imp, aiMeta);
+  }, [imp]);
+
   const filteredQuestions = useMemo(() => {
     const all = imp?.importedQuestions ?? [];
     const base = onlyNeedsReview ? all.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0) : all;
     const s = search.trim().toLowerCase();
     if (!s) return base;
+    const gm = globalMetaDisplay;
+    const metaHay = gm
+      ? `${gm.banca} ${gm.materia} ${gm.concurso} ${gm.cargo} ${gm.ano} ${gm.cidade}`.toLowerCase()
+      : "";
     return base.filter((q, idx) => {
       const d = drafts[q.id] ?? q;
       const ai = parseAiMeta(d.rawText);
       const num = ai?.number != null ? String(ai.number) : "";
-      const hay = `${idx + 1} ${num} ${d.content ?? ""}`.toLowerCase();
+      const m = ai?.meta;
+      const rowHay = m
+        ? `${m.banca ?? ""} ${m.materia ?? ""} ${m.concurso ?? ""} ${m.cargo ?? ""} ${m.ano ?? ""} ${m.city ?? ""}`.toLowerCase()
+        : "";
+      const hay = `${idx + 1} ${num} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, imp?.importedQuestions, drafts, search]);
+  }, [onlyNeedsReview, imp?.importedQuestions, drafts, search, globalMetaDisplay]);
+
+  useLayoutEffect(() => {
+    if (!imp || loading) return;
+    const post = (hypothesisId: string, label: string, node: Element | null) => {
+      if (!node || !(node instanceof HTMLElement)) return;
+      const clientW = node.clientWidth;
+      const scrollW = node.scrollWidth;
+      const clientH = node.clientHeight;
+      const scrollH = node.scrollHeight;
+      // #region agent log
+      fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
+        body: JSON.stringify({
+          sessionId: "03dbee",
+          runId: "layout-probe",
+          hypothesisId,
+          location: "revisao/page.tsx:useLayoutEffect",
+          message: `overflow probe ${label}`,
+          data: { importId: imp.id, clientW, scrollW, overflowX: scrollW > clientW + 1, clientH, scrollH, overflowY: scrollH > clientH + 1 },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    };
+    post("H-overflow-topbar", "topbar", document.querySelector("[data-review-topbar]"));
+    post("H-overflow-card", "first-card", document.querySelector("[data-review-card]"));
+  }, [imp?.id, loading, filteredQuestions.length]);
 
   if (loading || !imp) {
     return (
@@ -432,7 +569,9 @@ export default function RevisaoImportacaoPage() {
     <div className="orbit-stack mx-auto w-full max-w-6xl pb-10">
       <TopBar
         title={`Revisão: ${imp.originalFilename}`}
-        subtitle={imp.competition?.name ?? null}
+        subtitle={
+          [imp.competition?.name, imp.year != null ? String(imp.year) : null].filter(Boolean).join(" · ") || null
+        }
         onApproveAll={() => selectAll("approve")}
         onRejectAll={() => selectAll("reject")}
         onSave={saveReview}
@@ -463,6 +602,35 @@ export default function RevisaoImportacaoPage() {
         <p className="shrink-0 text-sm font-bold tabular-nums text-[var(--text-muted)]">{filteredQuestions.length} questões</p>
       </div>
 
+      {globalMetaDisplay &&
+        (() => {
+          const rows = [
+            ["Banca", globalMetaDisplay.banca],
+            ["Matéria", globalMetaDisplay.materia],
+            ["Concurso", globalMetaDisplay.concurso],
+            ["Cargo", globalMetaDisplay.cargo],
+            ["Ano", globalMetaDisplay.ano],
+            ["Cidade / UF", globalMetaDisplay.cidade],
+          ].filter((entry): entry is [string, string] => Boolean(entry[1] && String(entry[1]).trim()));
+          if (!rows.length) return null;
+          return (
+            <div className="orbit-card-premium !py-5 sm:!py-6">
+              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Referências do PDF</h2>
+              <p className="mt-1 max-w-prose text-xs leading-relaxed text-[var(--text-muted)]">
+                Preenchido pelo cadastro da importação e/ou inferido pela IA a partir do texto do PDF (quando disponível).
+              </p>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {rows.map(([k, v]) => (
+                  <div key={k} className="min-w-0 rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white to-[#fafafd] px-4 py-3.5 shadow-sm">
+                    <dt className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{k}</dt>
+                    <dd className="mt-1.5 break-words text-sm font-semibold leading-snug text-[var(--text-primary)]">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          );
+        })()}
+
       <div className="flex flex-col gap-5">
         {filteredQuestions.slice(0, visibleCount).map((q) => {
           const d = decisions[q.id] ?? "pending";
@@ -472,59 +640,101 @@ export default function RevisaoImportacaoPage() {
           const warnings = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
           const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
+          const isFirstVisible = filteredQuestions[0]?.id === q.id;
+          const ansMeta = parseAnswerMeta(draft.rawText);
+          const questionContext = buildImportMetaDisplay(imp, aiMeta?.meta ?? null);
+          const contextRows = [
+            ["Banca", questionContext.banca],
+            ["Matéria", questionContext.materia],
+            ["Concurso", questionContext.concurso],
+            ["Cargo", questionContext.cargo],
+            ["Ano", questionContext.ano],
+            ["Cidade / UF", questionContext.cidade],
+          ].filter((entry): entry is [string, string] => Boolean(entry[1] && String(entry[1]).trim()));
 
           return (
             <article
               key={q.id}
+              data-review-card={isFirstVisible ? "" : undefined}
               className={cn(
-                "overflow-hidden rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
+                "min-w-0 rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
                 d === "approve" && "ring-2 ring-emerald-300/50",
                 d === "reject" && "ring-2 ring-red-300/50",
                 d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
               )}
             >
-              <div className="grid gap-5 border-b border-black/[0.06] p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:p-6">
+              <div className="grid gap-4 border-b border-black/[0.06] p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-6">
                 <div className="min-w-0 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-xl bg-violet-600 px-2 text-sm font-black text-white shadow-md">
+                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                    <span className="inline-flex h-9 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl bg-violet-600 px-2 text-sm font-black text-white shadow-md">
                       {qi}
                     </span>
-                    <button
-                      type="button"
-                      className="text-balance text-left text-base font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline"
-                      onClick={() => {
-                        setSelectedQ(q.id);
-                        setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
-                      }}
-                    >
-                      Questão {qi}
-                      {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
-                    </button>
-                    {warnings.length > 0 && (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-extrabold text-amber-900 ring-1 ring-amber-200/80">
-                        Revisão recomendada
-                      </span>
-                    )}
-                    {q.confidence != null && (
-                      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-900 ring-1 ring-violet-200/80">
-                        Confiança {Math.round(q.confidence * 100)}%
-                      </span>
-                    )}
-                    {linkedAssets.length > 0 && (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200/90">
-                        {linkedAssets.length} vínculo(s)
-                      </span>
-                    )}
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      <button
+                        type="button"
+                        className="w-full break-words text-left text-base font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline"
+                        onClick={() => {
+                          setSelectedQ(q.id);
+                          setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
+                        }}
+                      >
+                        Questão {qi}
+                        {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
+                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {warnings.length > 0 && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-amber-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200/80 whitespace-normal">
+                            Revisão recomendada
+                          </span>
+                        )}
+                        {q.confidence != null && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-violet-100 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-violet-900 ring-1 ring-violet-200/80 whitespace-normal">
+                            Confiança {Math.round(q.confidence * 100)}%
+                          </span>
+                        )}
+                        {linkedAssets.length > 0 && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-slate-700 ring-1 ring-slate-200/90 whitespace-normal">
+                            {linkedAssets.length} vínculo(s)
+                          </span>
+                        )}
+                        {draft.correctAnswer && ansMeta.answerSource === "gabarito" && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-emerald-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-emerald-900 ring-1 ring-emerald-200/90 whitespace-normal" title={ansMeta.gabaritoMatchNumber != null ? `Chave no gabarito: questão ${ansMeta.gabaritoMatchNumber}` : undefined}>
+                            Gabarito · {draft.correctAnswer}
+                            {ansMeta.gabaritoMatchNumber != null ? ` (nº gab. ${ansMeta.gabaritoMatchNumber})` : ""}
+                          </span>
+                        )}
+                        {draft.correctAnswer && ansMeta.answerSource === "llm" && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-sky-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-sky-900 ring-1 ring-sky-200/90 whitespace-normal">
+                            IA · {draft.correctAnswer}
+                          </span>
+                        )}
+                        {draft.correctAnswer && ansMeta.answerSource === "manual" && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-slate-200/90 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-slate-800 ring-1 ring-slate-300/90 whitespace-normal">
+                            Manual · {draft.correctAnswer}
+                          </span>
+                        )}
+                        {draft.correctAnswer && !ansMeta.answerSource && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-violet-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-violet-900 ring-1 ring-violet-200/90 whitespace-normal">
+                            Correta · {draft.correctAnswer}
+                          </span>
+                        )}
+                        {!draft.correctAnswer && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-rose-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-rose-900 ring-1 ring-rose-200/90 whitespace-normal">
+                            Sem resposta marcada
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {!isExpanded && (
-                    <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
+                    <p className="line-clamp-3 min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-secondary)]">
                       {draft.content}
                     </p>
                   )}
                 </div>
 
-                <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:pl-2">
+                <div className="flex min-w-0 flex-shrink-0 flex-wrap items-center justify-start gap-2 sm:max-w-[min(100%,20rem)] sm:justify-end">
                   <button
                     type="button"
                     className={cn(
@@ -569,11 +779,25 @@ export default function RevisaoImportacaoPage() {
               </div>
 
               {isExpanded && (
-                <div className="border-t border-black/[0.06] bg-white/60 px-5 py-5 sm:px-6 sm:py-6">
+                <div className="border-t border-black/[0.06] bg-white/60 px-5 py-6 sm:px-6 sm:py-7">
+                  {contextRows.length > 0 && (
+                    <div className="mb-6 rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/80 to-white p-4 shadow-sm sm:p-5">
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-violet-900/80">Contexto da questão</h3>
+                      <dl className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                        {contextRows.map(([k, v]) => (
+                          <div key={`${q.id}-ctx-${k}`} className="min-w-0">
+                            <dt className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{k}</dt>
+                            <dd className="mt-0.5 break-words text-sm font-semibold text-[var(--text-primary)]">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  )}
+
                   {warnings.length > 0 && (
-                    <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
-                      <div className="font-extrabold">Pontos de atenção</div>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
+                    <div className="mb-6 rounded-2xl border border-amber-200/90 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm sm:p-5">
+                      <div className="text-sm font-extrabold tracking-tight">Pontos de atenção</div>
+                      <ul className="mt-3 list-disc space-y-2 break-words pl-5 leading-relaxed">
                         {warnings.map((w, i) => (
                           <li key={`${q.id}-w-${i}`}>{w}</li>
                         ))}
@@ -581,147 +805,195 @@ export default function RevisaoImportacaoPage() {
                     </div>
                   )}
 
-                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
-                    <div className="min-w-0 space-y-5">
-                      <div className="orbit-form-stack">
+                  {aiMeta?.instructions ? (
+                    <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-800 shadow-sm sm:p-5">
+                      <div className="text-xs font-extrabold uppercase tracking-wider text-slate-600">Instruções da prova (IA)</div>
+                      <p className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{aiMeta.instructions}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                    <div className="min-w-0 space-y-6">
+                      <div className="orbit-form-stack gap-3">
                         <label className="orbit-form-label">Enunciado</label>
                         <textarea
-                          className="input min-h-[180px] resize-y text-sm leading-relaxed"
+                          className="input min-h-[200px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
                           value={draft.content}
                           onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))}
                         />
                       </div>
 
-                      <div className="orbit-form-stack">
-                        <label className="orbit-form-label">Alternativas</label>
-                        <div className="space-y-3">
-                          {draft.alternatives.map((alt, altIdx) => (
-                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
-                              <input
-                                className="input text-center text-sm font-bold"
-                                value={alt.letter}
-                                onChange={(e) => {
-                                  const v = e.target.value.toUpperCase();
-                                  setDrafts((prev) => {
-                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
-                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                  });
-                                }}
-                              />
-                              <textarea
-                                className="input min-h-[72px] resize-y text-sm leading-relaxed"
-                                value={alt.content}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setDrafts((prev) => {
-                                    const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
-                                    return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
-                                  });
-                                }}
-                              />
-                            </div>
-                          ))}
+                      <div className="orbit-form-stack gap-3">
+                        <div className="flex flex-wrap items-end justify-between gap-2">
+                          <label className="orbit-form-label mb-0">Alternativas</label>
+                          {draft.correctAnswer ? (
+                            <span className="text-xs font-bold text-emerald-800">
+                              Correta: <span className="tabular-nums">{draft.correctAnswer}</span>
+                              {ansMeta.answerSource === "gabarito" ? " · do gabarito" : ansMeta.answerSource === "llm" ? " · inferida pela IA" : ansMeta.answerSource === "manual" ? " · manual" : ""}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {!draft.correctAnswer && (
+                          <div className="rounded-2xl border border-rose-200/90 bg-rose-50/90 px-4 py-3 text-sm font-semibold leading-snug text-rose-950 shadow-sm">
+                            Nenhuma resposta foi identificada no gabarito para esta questão. Selecione a alternativa correta abaixo (será salva como resposta manual).
+                          </div>
+                        )}
+
+                        <fieldset className="min-w-0 rounded-2xl border border-black/[0.06] bg-white/90 p-4 shadow-sm">
+                          <legend className="float-left w-full px-0 text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">
+                            Marcar resposta correta
+                          </legend>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {draft.alternatives.map((alt) => {
+                              const letter = String(alt.letter ?? "").trim().toUpperCase().slice(0, 1);
+                              const sel = draft.correctAnswer?.toUpperCase() === letter;
+                              return (
+                                <label
+                                  key={`${q.id}-corr-${letter}`}
+                                  className={cn(
+                                    "inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-bold transition-colors",
+                                    sel
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm ring-1 ring-emerald-300/80"
+                                      : "border-black/[0.08] bg-white text-[var(--text-secondary)] hover:bg-slate-50",
+                                  )}
+                                >
+                                  <input
+                                    type="radio"
+                                    className="h-4 w-4 accent-emerald-600"
+                                    name={`correct-${q.id}`}
+                                    checked={sel}
+                                    onChange={() => {
+                                      setDrafts((prev) => {
+                                        const cur = prev[q.id];
+                                        if (!cur) return prev;
+                                        const rawText = mergeRawTextPatch(cur.rawText, {
+                                          answerSource: "manual",
+                                          gabaritoMatchNumber: null,
+                                        });
+                                        return { ...prev, [q.id]: { ...cur, correctAnswer: letter, rawText } };
+                                      });
+                                    }}
+                                  />
+                                  {letter}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+
+                        <div className="space-y-4">
+                          {draft.alternatives.map((alt, altIdx) => {
+                            const letter = String(alt.letter ?? "").trim().toUpperCase().slice(0, 1);
+                            const isCorrect = draft.correctAnswer?.toUpperCase() === letter;
+                            return (
+                              <div
+                                key={`${q.id}:${alt.letter}:${altIdx}`}
+                                className={cn(
+                                  "grid grid-cols-[52px_minmax(0,1fr)] gap-3 rounded-2xl sm:gap-4",
+                                  isCorrect && "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-white",
+                                )}
+                              >
+                                <input
+                                  className="input w-full min-w-0 shrink-0 text-center text-sm font-bold"
+                                  value={alt.letter}
+                                  onChange={(e) => {
+                                    const v = e.target.value.toUpperCase();
+                                    setDrafts((prev) => {
+                                      const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
+                                      return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                    });
+                                  }}
+                                />
+                                <textarea
+                                  className={cn(
+                                    "input min-h-[80px] w-full min-w-0 resize-y break-words text-sm leading-relaxed",
+                                    isCorrect && "border-emerald-300/80 bg-emerald-50/40",
+                                  )}
+                                  value={alt.content}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setDrafts((prev) => {
+                                      const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
+                                      return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
+                                    });
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex min-w-0 flex-col gap-5">
-                      <div className="rounded-2xl border border-black/[0.06] bg-slate-50/80 p-4 shadow-sm sm:p-5">
-                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ações</h3>
-                        <div className="mt-4 flex flex-col gap-2">
+                    <div className="flex min-w-0 flex-col gap-5 lg:sticky lg:top-4 lg:self-start">
+                      <div className="rounded-2xl border border-black/[0.06] bg-slate-50/90 p-4 shadow-sm sm:p-5">
+                        <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ações principais</h3>
+                        <div className="mt-4 flex flex-col gap-2.5">
                           <button
                             type="button"
-                            className="btn btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold shadow-md"
+                            className="btn btn-primary inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-bold shadow-md"
                             onClick={() => saveQuestion(q.id)}
                           >
-                            <Save className="h-4 w-4" /> Salvar questão
+                            <Save className="h-4 w-4 shrink-0" /> Salvar questão
                           </button>
+                        </div>
+                        <h4 className="mt-5 text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ferramentas</h4>
+                        <div className="mt-2 flex flex-col gap-2">
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
                             onClick={() => duplicateQuestion(q.id)}
                           >
-                            <Copy className="h-4 w-4" /> Duplicar
+                            <Copy className="h-4 w-4 shrink-0" /> Duplicar
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
                             onClick={() => splitQuestionAuto(q.id)}
                           >
                             Dividir (auto)
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
                             onClick={() => mergeWithNext(q.id)}
                           >
                             Unir c/ próxima
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            className="btn btn-ghost inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-3 text-sm font-semibold"
                             onClick={() => markNeedsReview(q.id)}
                           >
                             Marcar p/ revisão
                           </button>
                           <button
                             type="button"
-                            className="btn inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-sm font-bold text-red-800 hover:bg-red-100/80"
+                            className="btn inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-bold text-red-800 hover:bg-red-100/80"
                             onClick={() => deleteQuestion(q.id)}
                           >
-                            <Trash2 className="h-4 w-4" /> Excluir
+                            <Trash2 className="h-4 w-4 shrink-0" /> Excluir
                           </button>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-black/[0.06] bg-white p-4 shadow-sm sm:p-5">
-                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Vínculos ao PDF</h3>
-                        <div className="mt-3 space-y-3">
-                          {linkedAssets.length === 0 ? (
-                            <p className="text-sm text-[var(--text-muted)]">Nenhum vínculo ainda. Use os botões abaixo para marcar texto ou imagem no PDF.</p>
-                          ) : (
-                            linkedAssets.map((a) => (
-                              <div key={a.id} className="rounded-xl border border-black/[0.06] bg-slate-50/90 p-3 shadow-sm">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="text-sm font-semibold text-[var(--text-primary)]">
-                                    {a.kind === "IMAGE" ? "Figura" : "Texto"} <span className="font-normal text-[var(--text-muted)]">· p.{a.page}</span>
-                                  </div>
-                                  <div className="text-xs font-medium text-[var(--text-muted)]">{a.label ?? ""}</div>
-                                </div>
-                                {a.kind === "TEXT_BLOCK" && a.extractedText ? (
-                                  <div className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/[0.06] bg-white p-2.5 text-xs leading-relaxed text-[var(--text-secondary)]">
-                                    {a.extractedText}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                          <button
-                            type="button"
-                            className="btn btn-purple inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl px-3 text-sm font-bold shadow-sm"
-                            onClick={() => {
-                              setSelectedQ(q.id);
-                              setDrawerLinkType("TEXT");
-                              setDrawerOpen(true);
-                            }}
-                          >
-                            Vincular texto
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-purple inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl px-3 text-sm font-bold shadow-sm"
-                            onClick={() => {
-                              setSelectedQ(q.id);
-                              setDrawerLinkType("IMAGE");
-                              setDrawerOpen(true);
-                            }}
-                          >
-                            Vincular imagem
-                          </button>
-                        </div>
-                      </div>
+                      <PdfQuestionLinkAssets
+                        importId={id}
+                        questionId={q.id}
+                        assets={linkedAssets}
+                        onRefresh={refreshImport}
+                        onOpenLinkText={() => {
+                          setSelectedQ(q.id);
+                          setDrawerLinkType("TEXT");
+                          setDrawerOpen(true);
+                        }}
+                        onOpenLinkImage={() => {
+                          setSelectedQ(q.id);
+                          setDrawerLinkType("IMAGE");
+                          setDrawerOpen(true);
+                        }}
+                      />
 
                       <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 shadow-sm sm:p-5">
                         <h3 className="text-xs font-extrabold uppercase tracking-wider text-violet-800">IA</h3>

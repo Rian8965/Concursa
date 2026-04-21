@@ -15,20 +15,20 @@ type Props = {
 
 export function TopBar({ title, subtitle, onApproveAll, onRejectAll, onSave, saving }: Props) {
   return (
-    <div className="orbit-card-premium !p-0 overflow-hidden">
+    <div className="orbit-card-premium !p-0" data-review-topbar>
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-full">
           <Link
             href="/admin/importacoes"
             className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:text-violet-800"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" /> Voltar
           </Link>
-          <h1 className="text-balance text-xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{title}</h1>
-          {subtitle ? <p className="mt-2 text-sm font-semibold text-violet-700">{subtitle}</p> : null}
+          <h1 className="break-words text-balance text-xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{title}</h1>
+          {subtitle ? <p className="mt-2 break-words text-sm font-semibold text-violet-700">{subtitle}</p> : null}
         </div>
 
-        <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+        <div className="flex w-full min-w-0 flex-col gap-2.5 sm:w-auto sm:max-w-full sm:flex-row sm:flex-wrap sm:justify-end">
           <motion.button
             type="button"
             whileHover={{ scale: 1.02 }}
