@@ -20,8 +20,8 @@ export default async function AdminCidadesPage() {
         </Link>
       </PageHeader>
 
-      <div className="orbit-panel overflow-hidden p-0">
-        {cities.length === 0 ? (
+      {cities.length === 0 ? (
+        <div className="orbit-panel overflow-hidden p-0">
           <div className="orbit-empty-state py-14">
             <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhuma cidade cadastrada</p>
             <Link href="/admin/cidades/nova" className="btn btn-primary mt-4 inline-flex items-center gap-2 rounded-2xl text-[13px]">
@@ -29,23 +29,23 @@ export default async function AdminCidadesPage() {
               Cadastrar cidade
             </Link>
           </div>
-        ) : (
-          <div className="orbit-table-wrap border-0 shadow-none">
+        </div>
+      ) : (
+        <div className="orbit-data-table-scroll">
+          <div className="orbit-table-wrap">
             <table className="orbit-admin-table">
               <colgroup>
-                <col className="w-[40%]" />
-                <col className="w-[12%]" />
-                <col className="w-[28%]" />
-                <col className="w-[20%]" />
+                <col className="min-w-[180px] w-[36%]" />
+                <col className="min-w-[88px] w-[14%]" />
+                <col className="min-w-[120px] w-[24%]" />
+                <col className="min-w-[110px] w-[26%]" />
               </colgroup>
               <thead>
                 <tr>
                   {["Cidade", "Estado", "Código IBGE", "Status"].map((h) => (
                     <th
                       key={h}
-                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
-                        h === "Código IBGE" ? "text-right" : "text-left"
-                      }`}
+                      className={h === "Código IBGE" ? "text-right" : h === "Status" ? "text-left" : "text-left"}
                     >
                       {h}
                     </th>
@@ -54,21 +54,23 @@ export default async function AdminCidadesPage() {
               </thead>
               <tbody>
                 {cities.map((c) => (
-                  <tr key={c.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                    <td className="px-4 py-3">
-                      <p className="text-[13.5px] font-semibold leading-snug text-[var(--text-primary)]">{c.name}</p>
+                  <tr key={c.id}>
+                    <td>
+                      <p className="font-semibold leading-snug text-[var(--text-primary)]">{c.name}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex min-w-[2.25rem] justify-center rounded-md bg-[var(--bg-muted)] px-2 py-0.5 text-xs font-bold text-[var(--text-secondary)] ring-1 ring-black/[0.06]">
+                    <td>
+                      <span className="inline-flex min-w-[2.5rem] justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-[var(--text-secondary)] ring-1 ring-black/[0.06]">
                         {c.state}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[13px] text-[var(--text-secondary)]">{c.ibgeCode ?? "—"}</td>
-                    <td className="px-4 py-3">
+                    <td className="text-right tabular-nums text-[var(--text-secondary)]">{c.ibgeCode ?? "—"}</td>
+                    <td>
                       <span
-                        className={`inline-flex rounded-lg px-2.5 py-0.5 text-[11px] font-bold ring-1 ${
-                          c.isActive ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80" : "bg-gray-100 text-gray-600 ring-gray-200/80"
-                        }`}
+                        className={
+                          c.isActive
+                            ? "orbit-status-badge orbit-status-badge--success"
+                            : "orbit-status-badge orbit-status-badge--muted"
+                        }
                       >
                         {c.isActive ? "Ativa" : "Inativa"}
                       </span>
@@ -78,8 +80,8 @@ export default async function AdminCidadesPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

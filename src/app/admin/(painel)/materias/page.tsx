@@ -55,29 +55,26 @@ export default function AdminMateriasPage() {
         </button>
       </PageHeader>
 
-      <div className="orbit-panel overflow-hidden p-0">
-        {items.length === 0 ? (
+      {items.length === 0 ? (
+        <div className="orbit-panel overflow-hidden p-0">
           <div className="orbit-empty-state py-14">
             <p className="text-[15px] text-[var(--text-muted)]">Nenhuma matéria cadastrada</p>
           </div>
-        ) : (
-          <div className="orbit-table-wrap border-0 shadow-none">
+        </div>
+      ) : (
+        <div className="orbit-data-table-scroll">
+          <div className="orbit-table-wrap">
             <table className="orbit-admin-table">
               <colgroup>
-                <col className="w-[26%]" />
-                <col className="w-[46%]" />
-                <col className="w-[10%]" />
-                <col className="w-[18%]" />
+                <col className="min-w-[160px] w-[28%]" />
+                <col className="min-w-[200px] w-[44%]" />
+                <col className="min-w-[88px] w-[12%]" />
+                <col className="min-w-[100px] w-[16%]" />
               </colgroup>
               <thead>
                 <tr>
                   {["Matéria", "Descrição", "Cor", "Ações"].map((h) => (
-                    <th
-                      key={h}
-                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
-                        h === "Cor" ? "text-center" : h === "Ações" ? "text-right" : "text-left"
-                      }`}
-                    >
+                    <th key={h} className={h === "Cor" ? "text-center" : h === "Ações" ? "text-right" : "text-left"}>
                       {h}
                     </th>
                   ))}
@@ -85,27 +82,27 @@ export default function AdminMateriasPage() {
               </thead>
               <tbody>
                 {items.map((s) => (
-                  <tr key={s.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                    <td className="px-4 py-3">
-                      <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-[var(--text-primary)]">{s.name}</p>
+                  <tr key={s.id}>
+                    <td className="min-w-0">
+                      <p className="line-clamp-2 font-semibold leading-snug text-[var(--text-primary)]">{s.name}</p>
                     </td>
-                    <td className="min-w-0 px-4 py-3">
-                      <p className="truncate text-[13px] text-[var(--text-secondary)]" title={s.description?.trim() ? s.description : undefined}>
+                    <td className="min-w-0">
+                      <p className="truncate text-[var(--text-secondary)]" title={s.description?.trim() ? s.description : undefined}>
                         {s.description?.trim() ? s.description : "—"}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="inline-flex h-8 w-8 items-center justify-center">
+                    <td className="text-center">
+                      <div className="inline-flex h-10 w-10 items-center justify-center">
                         <div
-                          className="h-6 w-6 rounded-md border border-black/[0.08] shadow-sm"
+                          className="h-8 w-8 rounded-lg border border-black/[0.08] shadow-sm"
                           style={{ background: s.color ?? "#E5E7EB" }}
                           title={s.color ?? undefined}
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="text-right">
                       <button type="button" onClick={() => setEditing(s)} className="orbit-icon-btn" title="Editar">
-                        <Edit2 className="h-3 w-3" />
+                        <Edit2 className="h-3.5 w-3.5" />
                       </button>
                     </td>
                   </tr>
@@ -113,8 +110,8 @@ export default function AdminMateriasPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {editing && (
         <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && setEditing(null)}>

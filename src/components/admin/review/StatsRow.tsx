@@ -5,25 +5,30 @@ type Props = {
   pending: number;
 };
 
+function StatCard({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: number;
+  valueClass: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white to-[#fafafd] px-4 py-4 shadow-sm sm:px-5 sm:py-4">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className={`mt-2 text-2xl font-extrabold tabular-nums tracking-tight ${valueClass}`}>{value}</div>
+    </div>
+  );
+}
+
 export function StatsRow({ total, approved, rejected, pending }: Props) {
   return (
-    <div className="grid gap-3 sm:grid-cols-4">
-      <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-4 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Total</div>
-        <div className="mt-1 text-[18px] font-extrabold text-[#111827]">{total}</div>
-      </div>
-      <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-4 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Aprovadas</div>
-        <div className="mt-1 text-[18px] font-extrabold text-[#059669]">{approved}</div>
-      </div>
-      <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-4 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Rejeitadas</div>
-        <div className="mt-1 text-[18px] font-extrabold text-[#DC2626]">{rejected}</div>
-      </div>
-      <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-4 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Pendentes</div>
-        <div className="mt-1 text-[18px] font-extrabold text-[#D97706]">{pending}</div>
-      </div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+      <StatCard label="Total" value={total} valueClass="text-[var(--text-primary)]" />
+      <StatCard label="Aprovadas" value={approved} valueClass="text-emerald-700" />
+      <StatCard label="Rejeitadas" value={rejected} valueClass="text-red-700" />
+      <StatCard label="Pendentes" value={pending} valueClass="text-amber-700" />
     </div>
   );
 }

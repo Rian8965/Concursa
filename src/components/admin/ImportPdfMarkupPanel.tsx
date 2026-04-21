@@ -446,113 +446,123 @@ export function ImportPdfMarkupPanel({
   }
 
   const pdfCard = (
-    <div className="min-w-0 rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Questão alvo</span>
-          <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">PDF v2</span>
-          <select
-            className="input max-w-[220px] py-1.5 text-[13px]"
-            value={effectiveTargetQ}
-            onChange={(e) => {
-              const v = e.target.value;
-              setTargetQ(v);
-              onSelectedQuestionIdChange?.(v);
-              // #region agent log
-              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-sync-selection',location:'ImportPdfMarkupPanel.tsx:selectTarget',message:'changed target question in PDF panel',data:{importId,targetQuestionId:v},timestamp:Date.now()})}).catch(()=>{});
-              // #endregion
-            }}
-          >
-            {questions.map((q) => (
-              <option key={q.id} value={q.id}>
-                {q.label}
-              </option>
-            ))}
-          </select>
-          {uiMode === "review" ? (
-            <>
-              <button
-                type="button"
-                className={`btn ${mode === "TEXT_BLOCK" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
-                onClick={() => setMode((m) => (m === "TEXT_BLOCK" ? null : "TEXT_BLOCK"))}
+    <div className="min-w-0 rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-md sm:p-5">
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Questão alvo</span>
+              <select
+                className="input mt-1.5 h-11 w-full max-w-md text-sm"
+                value={effectiveTargetQ}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setTargetQ(v);
+                  onSelectedQuestionIdChange?.(v);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-sync-selection',location:'ImportPdfMarkupPanel.tsx:selectTarget',message:'changed target question in PDF panel',data:{importId,targetQuestionId:v},timestamp:Date.now()})}).catch(()=>{});
+                  // #endregion
+                }}
               >
-                <Type className="h-3.5 w-3.5" /> Texto-base
-              </button>
-              <button
-                type="button"
-                className={`btn ${mode === "IMAGE" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
-                onClick={() => setMode((m) => (m === "IMAGE" ? null : "IMAGE"))}
-              >
-                <ImageIcon className="h-3.5 w-3.5" /> Figura
-              </button>
-              <button
-                type="button"
-                className={`btn ${showAllRegions ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
-                onClick={() => setShowAllRegions((v) => !v)}
-                title="Mostrar regiões de todas as questões"
-              >
-                {showAllRegions ? "Todas" : "Só esta"}
-              </button>
-              {mode && <span className="text-[12px] font-semibold text-[#7C3AED]">Desenhe um retângulo na página</span>}
-            </>
-          ) : (
-            <span className="text-[12px] font-semibold text-[#7C3AED]">
-              {uiMode === "selector" ? "Selecione a área no PDF" : `Selecione a área no PDF (${computedLabel.toLowerCase()})`}
-            </span>
-          )}
+                {questions.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {uiMode === "review" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={`btn inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3.5 text-sm font-semibold ${mode === "TEXT_BLOCK" ? "btn-primary" : "btn-ghost border border-black/[0.08] bg-white"}`}
+                  onClick={() => setMode((m) => (m === "TEXT_BLOCK" ? null : "TEXT_BLOCK"))}
+                >
+                  <Type className="h-4 w-4 shrink-0" /> Texto-base
+                </button>
+                <button
+                  type="button"
+                  className={`btn inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3.5 text-sm font-semibold ${mode === "IMAGE" ? "btn-primary" : "btn-ghost border border-black/[0.08] bg-white"}`}
+                  onClick={() => setMode((m) => (m === "IMAGE" ? null : "IMAGE"))}
+                >
+                  <ImageIcon className="h-4 w-4 shrink-0" /> Figura
+                </button>
+                <button
+                  type="button"
+                  className={`btn inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3.5 text-sm font-semibold ${showAllRegions ? "btn-purple" : "btn-ghost border border-black/[0.08] bg-white"}`}
+                  onClick={() => setShowAllRegions((v) => !v)}
+                  title="Mostrar regiões de todas as questões"
+                >
+                  {showAllRegions ? "Todas as questões" : "Só esta questão"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {uiMode === "review" && mode ? (
+            <p className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-900">Desenhe um retângulo na página para marcar a região.</p>
+          ) : uiMode !== "review" ? (
+            <p className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-900">
+              {uiMode === "selector" ? "Selecione a área no PDF com o retângulo." : `Selecione a área no PDF (${computedLabel.toLowerCase()}).`}
+            </p>
+          ) : null}
         </div>
 
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        <div className="mb-4 flex flex-col gap-2 rounded-xl border border-black/[0.06] bg-slate-50/90 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
-              className="btn btn-ghost !py-1 !text-[12px]"
+              className="btn btn-ghost inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl px-3 text-sm font-bold"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Página anterior"
             >
               ←
             </button>
-            <span className="text-[12px] text-[#6B7280]">
-              Página {page} {numPages ? `/ ${numPages}` : ""}
+            <span className="px-1 text-sm font-medium text-[var(--text-secondary)]">
+              Página {page}
+              {numPages ? ` / ${numPages}` : ""}
             </span>
             <button
               type="button"
-              className="btn btn-ghost !py-1 !text-[12px]"
+              className="btn btn-ghost inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl px-3 text-sm font-bold"
               disabled={numPages > 0 && page >= numPages}
               onClick={() => setPage((p) => (numPages ? Math.min(numPages, p + 1) : p + 1))}
+              aria-label="Próxima página"
             >
               →
             </button>
-            <span className="mx-1 h-4 w-px bg-[#E5E7EB]" />
+            <span className="mx-1 hidden h-6 w-px bg-black/[0.08] sm:inline-block" aria-hidden />
             <button
               type="button"
-              className="btn btn-ghost !py-1 !text-[12px]"
+              className="btn btn-ghost inline-flex min-h-[40px] items-center justify-center rounded-xl px-3 text-sm font-bold"
               onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
-              title="Zoom -"
+              title="Diminuir zoom"
             >
               −
             </button>
-            <span className="text-[12px] text-[#6B7280]">{Math.round(zoom * 100)}%</span>
+            <span className="min-w-[3.5rem] text-center text-sm font-semibold tabular-nums text-[var(--text-secondary)]">{Math.round(zoom * 100)}%</span>
             <button
               type="button"
-              className="btn btn-ghost !py-1 !text-[12px]"
+              className="btn btn-ghost inline-flex min-h-[40px] items-center justify-center rounded-xl px-3 text-sm font-bold"
               onClick={() => setZoom((z) => Math.min(2.0, Math.round((z + 0.1) * 10) / 10))}
-              title="Zoom +"
+              title="Aumentar zoom"
             >
               +
             </button>
             <button
               type="button"
-              className="btn btn-ghost !py-1 !text-[12px]"
+              className="btn btn-ghost inline-flex min-h-[40px] items-center justify-center rounded-xl px-3 text-sm font-semibold"
               onClick={() => setZoom(1)}
-              title="Ajustar à largura"
+              title="Redefinir zoom (100%)"
             >
               Ajustar
             </button>
           </div>
-          {busy && <Loader2 className="h-4 w-4 animate-spin text-[#7C3AED]" />}
+          {busy ? (
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin self-end text-violet-600 sm:self-auto" aria-label="Processando" />
+          ) : null}
         </div>
 
-        <div ref={pageWrapRef} className="relative overflow-auto rounded-[12px] border border-[#E5E7EB] bg-[#F3F4F6]">
+        <div ref={pageWrapRef} className="relative overflow-auto rounded-2xl border border-black/[0.08] bg-slate-100 shadow-inner">
           {pdfLoadError ? (
             <div className="rounded-[12px] border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-[12.5px] text-[#7F1D1D]">
               <div className="font-extrabold">Falha ao carregar o PDF</div>
@@ -566,7 +576,12 @@ export function ImportPdfMarkupPanel({
           ) : (
             <Document
               file={pdfUrl}
-              loading={<div className="flex justify-center p-12 text-[13px] text-[#6B7280]">Carregando PDF…</div>}
+              loading={
+                <div className="flex flex-col items-center justify-center gap-4 py-20 text-[var(--text-muted)]">
+                  <Loader2 className="h-10 w-10 animate-spin text-violet-600" aria-hidden />
+                  <span className="text-sm font-semibold">Carregando PDF…</span>
+                </div>
+              }
               onLoadSuccess={({ numPages: n }) => setNumPages(n)}
               onLoadError={(e) => {
                 const msg = e instanceof Error ? e.message : String(e);

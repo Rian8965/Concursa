@@ -15,52 +15,53 @@ type Props = {
 
 export function TopBar({ title, subtitle, onApproveAll, onRejectAll, onSave, saving }: Props) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0">
-        <Link
-          href="/admin/importacoes"
-          className="mb-2 inline-flex items-center gap-1 text-[13px] font-semibold text-[#7C3AED]"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar
-        </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="truncate text-[20px] font-extrabold tracking-tight text-[#111827]">{title}</h1>
-          <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">UI v3</span>
+    <div className="orbit-card-premium !p-0 overflow-hidden">
+      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
+        <div className="min-w-0">
+          <Link
+            href="/admin/importacoes"
+            className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:text-violet-800"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" /> Voltar
+          </Link>
+          <h1 className="text-balance text-xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{title}</h1>
+          {subtitle ? <p className="mt-2 text-sm font-semibold text-violet-700">{subtitle}</p> : null}
         </div>
-        {subtitle ? <p className="mt-1 text-[13px] font-semibold text-[#7C3AED]">{subtitle}</p> : null}
-      </div>
 
-      <div className="flex items-center gap-2">
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onApproveAll}
-          className="btn !h-[34px] !px-3 !text-[12px]"
-          style={{ background: "#ECFDF5", border: "1px solid #6EE7B7", color: "#059669" }}
-        >
-          <CheckCircle2 className="h-4 w-4" /> Aprovar todas
-        </motion.button>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onRejectAll}
-          className="btn !h-[34px] !px-3 !text-[12px]"
-          style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#DC2626" }}
-        >
-          <XCircle className="h-4 w-4" /> Rejeitar todas
-        </motion.button>
-        <motion.button
-          type="button"
-          whileHover={{ scale: saving ? 1 : 1.02 }}
-          whileTap={{ scale: saving ? 1 : 0.98 }}
-          onClick={onSave}
-          disabled={!!saving}
-          className="btn btn-primary !h-[34px] !text-[12px]"
-        >
-          {saving ? "Salvando..." : <><Save className="h-4 w-4" /> Salvar revisão</>}
-        </motion.button>
+        <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onApproveAll}
+            className="btn inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 text-sm font-bold text-emerald-800 shadow-sm hover:bg-emerald-100/90"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" /> Aprovar todas
+          </motion.button>
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onRejectAll}
+            className="btn inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-800 shadow-sm hover:bg-red-100/90"
+          >
+            <XCircle className="h-4 w-4 shrink-0" /> Rejeitar todas
+          </motion.button>
+          <motion.button
+            type="button"
+            whileHover={{ scale: saving ? 1 : 1.02 }}
+            whileTap={{ scale: saving ? 1 : 0.98 }}
+            onClick={onSave}
+            disabled={!!saving}
+            className="btn btn-primary inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold shadow-md disabled:opacity-60"
+          >
+            {saving ? "Salvando…" : (
+              <>
+                <Save className="h-4 w-4 shrink-0" /> Salvar revisão
+              </>
+            )}
+          </motion.button>
+        </div>
       </div>
     </div>
   );

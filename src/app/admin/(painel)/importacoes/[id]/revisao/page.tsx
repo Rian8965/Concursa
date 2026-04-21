@@ -3,7 +3,8 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy } from "lucide-react";
+import { Save, AlertCircle, Trash2, Copy, Check, X, Pencil } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportLinkDrawer } from "@/components/admin/ImportLinkDrawer";
 import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
@@ -417,138 +418,162 @@ export default function RevisaoImportacaoPage() {
 
   if (loading || !imp) {
     return (
-      <div style={{ textAlign: "center", padding: "48px 0" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="orbit-stack mx-auto max-w-5xl py-16 text-center">
+        <div
+          className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-violet-200 border-t-violet-600"
+          aria-hidden
+        />
+        <p className="mt-4 text-sm font-medium text-[var(--text-muted)]">Carregando revisão…</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-none">
-      <div className="mb-4">
-        <TopBar
-          title={`Revisão: ${imp.originalFilename}`}
-          subtitle={imp.competition?.name ?? null}
-          onApproveAll={() => selectAll("approve")}
-          onRejectAll={() => selectAll("reject")}
-          onSave={saveReview}
-          saving={saving}
-        />
-      </div>
+    <div className="orbit-stack mx-auto w-full max-w-6xl pb-10">
+      <TopBar
+        title={`Revisão: ${imp.originalFilename}`}
+        subtitle={imp.competition?.name ?? null}
+        onApproveAll={() => selectAll("approve")}
+        onRejectAll={() => selectAll("reject")}
+        onSave={saveReview}
+        saving={saving}
+      />
 
-      <div className="mb-4">
-        <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
-      </div>
+      <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-[#E5E7EB] bg-white p-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="orbit-card-premium !flex !flex-col gap-4 !py-4 sm:!flex-row sm:!items-center sm:!justify-between sm:!py-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <input
-            className="input h-[36px] w-[320px] max-w-full text-[12.5px]"
+            className="input h-11 w-full min-w-0 flex-1 text-sm sm:max-w-md"
             placeholder="Buscar (texto, nº)…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button
             type="button"
-            className={`btn !h-[36px] !text-[12px] ${onlyNeedsReview ? "btn-primary" : "btn-ghost"}`}
+            className={cn(
+              "btn inline-flex h-11 shrink-0 items-center justify-center rounded-2xl px-4 text-sm font-bold",
+              onlyNeedsReview ? "btn-primary shadow-sm" : "border border-black/[0.08] bg-white font-semibold text-[var(--text-secondary)] hover:bg-slate-50",
+            )}
             onClick={() => setOnlyNeedsReview((v) => !v)}
           >
             Só revisão recomendada
           </button>
         </div>
-        <div className="text-[12px] font-semibold text-[#6B7280]">
-          {filteredQuestions.length} questões
-        </div>
+        <p className="shrink-0 text-sm font-bold tabular-nums text-[var(--text-muted)]">{filteredQuestions.length} questões</p>
       </div>
 
-      <div className="space-y-3">
-        {filteredQuestions.slice(0, visibleCount).map((q, idx) => {
+      <div className="flex flex-col gap-5">
+        {filteredQuestions.slice(0, visibleCount).map((q) => {
           const d = decisions[q.id] ?? "pending";
           const isExpanded = expanded[q.id] ?? false;
           const draft = drafts[q.id] ?? q;
           const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
           const warnings = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
-          const cardBorder =
-            d === "approve" ? "#6EE7B7" : d === "reject" ? "#FCA5A5" : warnings.length ? "#FDE68A" : "#E5E7EB";
+          const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
 
           return (
-            <div key={q.id} className="rounded-[18px] border bg-white" style={{ borderColor: cardBorder }}>
-              <div className="flex flex-wrap items-start justify-between gap-3 p-4">
-                <div className="min-w-0">
+            <article
+              key={q.id}
+              className={cn(
+                "overflow-hidden rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
+                d === "approve" && "ring-2 ring-emerald-300/50",
+                d === "reject" && "ring-2 ring-red-300/50",
+                d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
+              )}
+            >
+              <div className="grid gap-5 border-b border-black/[0.06] p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:p-6">
+                <div className="min-w-0 space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-xl bg-violet-600 px-2 text-sm font-black text-white shadow-md">
+                      {qi}
+                    </span>
                     <button
                       type="button"
-                      className="text-[13px] font-extrabold text-[#111827]"
+                      className="text-balance text-left text-base font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline"
                       onClick={() => {
                         setSelectedQ(q.id);
                         setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
                       }}
                     >
-                      Questão {imp.importedQuestions.findIndex((x) => x.id === q.id) + 1}
+                      Questão {qi}
                       {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
                     </button>
                     {warnings.length > 0 && (
-                      <span className="rounded-full bg-[#D9770618] px-2 py-0.5 text-[11px] font-extrabold text-[#D97706]">
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-extrabold text-amber-900 ring-1 ring-amber-200/80">
                         Revisão recomendada
                       </span>
                     )}
                     {q.confidence != null && (
-                      <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
+                      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-900 ring-1 ring-violet-200/80">
                         Confiança {Math.round(q.confidence * 100)}%
                       </span>
                     )}
                     {linkedAssets.length > 0 && (
-                      <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-semibold text-[#374151]">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200/90">
                         {linkedAssets.length} vínculo(s)
                       </span>
                     )}
                   </div>
 
                   {!isExpanded && (
-                    <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#374151]">
+                    <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
                       {draft.content}
-                    </div>
+                    </p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:pl-2">
                   <button
                     type="button"
-                    className="btn !h-[34px] !px-3 !text-[12px]"
-                    style={{ background: d === "approve" ? "#059669" : "#F3F4F6", border: "1px solid #E5E7EB", color: d === "approve" ? "#fff" : "#374151" }}
+                    className={cn(
+                      "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border-2 text-sm font-bold shadow-sm transition-colors",
+                      d === "approve"
+                        ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+                    )}
                     onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
                     title="Aprovar"
+                    aria-pressed={d === "approve"}
                   >
-                    ✓
+                    <Check className="h-5 w-5" strokeWidth={2.5} />
                   </button>
                   <button
                     type="button"
-                    className="btn !h-[34px] !px-3 !text-[12px]"
-                    style={{ background: d === "reject" ? "#DC2626" : "#F3F4F6", border: "1px solid #E5E7EB", color: d === "reject" ? "#fff" : "#374151" }}
+                    className={cn(
+                      "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border-2 text-sm font-bold shadow-sm transition-colors",
+                      d === "reject"
+                        ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
+                        : "border-red-200 bg-white text-red-700 hover:bg-red-50",
+                    )}
                     onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
                     title="Rejeitar"
+                    aria-pressed={d === "reject"}
                   >
-                    ✗
+                    <X className="h-5 w-5" strokeWidth={2.5} />
                   </button>
                   <button
                     type="button"
-                    className="btn btn-ghost !h-[34px] !text-[12px]"
+                    className={cn(
+                      "btn inline-flex min-h-[44px] items-center gap-2 rounded-2xl px-4 text-sm font-bold shadow-sm",
+                      isExpanded ? "btn-ghost border border-black/[0.1] bg-white" : "btn-primary",
+                    )}
                     onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
                     title={isExpanded ? "Recolher" : "Editar"}
                   >
+                    <Pencil className="h-4 w-4" />
                     {isExpanded ? "Recolher" : "Editar"}
                   </button>
                 </div>
               </div>
 
               {isExpanded && (
-                <div className="border-t border-[#E5E7EB] p-4">
+                <div className="border-t border-black/[0.06] bg-white/60 px-5 py-5 sm:px-6 sm:py-6">
                   {warnings.length > 0 && (
-                    <div className="mb-3 rounded-[14px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[12px] text-[#92400E]">
+                    <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
                       <div className="font-extrabold">Pontos de atenção</div>
-                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      <ul className="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
                         {warnings.map((w, i) => (
                           <li key={`${q.id}-w-${i}`}>{w}</li>
                         ))}
@@ -556,24 +581,24 @@ export default function RevisaoImportacaoPage() {
                     </div>
                   )}
 
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    <div className="min-w-0 space-y-3">
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Enunciado</label>
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
+                    <div className="min-w-0 space-y-5">
+                      <div className="orbit-form-stack">
+                        <label className="orbit-form-label">Enunciado</label>
                         <textarea
-                          className="input min-h-[160px] text-[12.5px]"
+                          className="input min-h-[180px] resize-y text-sm leading-relaxed"
                           value={draft.content}
                           onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))}
                         />
                       </div>
 
-                      <div>
-                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Alternativas</label>
-                        <div className="space-y-2">
+                      <div className="orbit-form-stack">
+                        <label className="orbit-form-label">Alternativas</label>
+                        <div className="space-y-3">
                           {draft.alternatives.map((alt, altIdx) => (
-                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
+                            <div key={`${q.id}:${alt.letter}:${altIdx}`} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
                               <input
-                                className="input text-center text-[12px] font-bold"
+                                className="input text-center text-sm font-bold"
                                 value={alt.letter}
                                 onChange={(e) => {
                                   const v = e.target.value.toUpperCase();
@@ -584,7 +609,7 @@ export default function RevisaoImportacaoPage() {
                                 }}
                               />
                               <textarea
-                                className="input min-h-[60px] text-[12.5px]"
+                                className="input min-h-[72px] resize-y text-sm leading-relaxed"
                                 value={alt.content}
                                 onChange={(e) => {
                                   const v = e.target.value;
@@ -600,47 +625,71 @@ export default function RevisaoImportacaoPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="rounded-[16px] border border-[#E5E7EB] bg-[#FAFAFC] p-3">
-                        <div className="text-[12px] font-extrabold text-[#111827]">Ações</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button type="button" className="btn btn-purple !h-[34px] !text-[12px]" onClick={() => saveQuestion(q.id)}>
+                    <div className="flex min-w-0 flex-col gap-5">
+                      <div className="rounded-2xl border border-black/[0.06] bg-slate-50/80 p-4 shadow-sm sm:p-5">
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Ações</h3>
+                        <div className="mt-4 flex flex-col gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold shadow-md"
+                            onClick={() => saveQuestion(q.id)}
+                          >
                             <Save className="h-4 w-4" /> Salvar questão
                           </button>
-                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => duplicateQuestion(q.id)}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            onClick={() => duplicateQuestion(q.id)}
+                          >
                             <Copy className="h-4 w-4" /> Duplicar
                           </button>
-                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => splitQuestionAuto(q.id)}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            onClick={() => splitQuestionAuto(q.id)}
+                          >
                             Dividir (auto)
                           </button>
-                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            onClick={() => mergeWithNext(q.id)}
+                          >
                             Unir c/ próxima
                           </button>
-                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => markNeedsReview(q.id)}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-black/[0.08] bg-white text-sm font-semibold"
+                            onClick={() => markNeedsReview(q.id)}
+                          >
                             Marcar p/ revisão
                           </button>
-                          <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => deleteQuestion(q.id)}>
-                            <Trash2 className="h-4 w-4 text-red-600" /> Excluir
+                          <button
+                            type="button"
+                            className="btn inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-sm font-bold text-red-800 hover:bg-red-100/80"
+                            onClick={() => deleteQuestion(q.id)}
+                          >
+                            <Trash2 className="h-4 w-4" /> Excluir
                           </button>
                         </div>
                       </div>
 
-                      <div className="rounded-[16px] border border-[#E5E7EB] bg-white p-3">
-                        <div className="text-[12px] font-extrabold text-[#111827]">Vínculos</div>
-                        <div className="mt-2 space-y-2">
+                      <div className="rounded-2xl border border-black/[0.06] bg-white p-4 shadow-sm sm:p-5">
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Vínculos ao PDF</h3>
+                        <div className="mt-3 space-y-3">
                           {linkedAssets.length === 0 ? (
-                            <div className="text-[12px] text-[#6B7280]">Nenhum vínculo ainda.</div>
+                            <p className="text-sm text-[var(--text-muted)]">Nenhum vínculo ainda. Use os botões abaixo para marcar texto ou imagem no PDF.</p>
                           ) : (
                             linkedAssets.map((a) => (
-                              <div key={a.id} className="rounded-[14px] border border-[#E5E7EB] bg-[#FAFAFC] p-2">
+                              <div key={a.id} className="rounded-xl border border-black/[0.06] bg-slate-50/90 p-3 shadow-sm">
                                 <div className="flex items-center justify-between gap-2">
-                                  <div className="text-[12px] font-semibold text-[#374151]">
-                                    {a.kind === "IMAGE" ? "Figura" : "Texto"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
+                                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                                    {a.kind === "IMAGE" ? "Figura" : "Texto"} <span className="font-normal text-[var(--text-muted)]">· p.{a.page}</span>
                                   </div>
-                                  <div className="text-[11px] font-semibold text-[#9CA3AF]">{a.label ?? ""}</div>
+                                  <div className="text-xs font-medium text-[var(--text-muted)]">{a.label ?? ""}</div>
                                 </div>
                                 {a.kind === "TEXT_BLOCK" && a.extractedText ? (
-                                  <div className="mt-1 whitespace-pre-wrap text-[11.5px] text-[#4B5563]">
+                                  <div className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/[0.06] bg-white p-2.5 text-xs leading-relaxed text-[var(--text-secondary)]">
                                     {a.extractedText}
                                   </div>
                                 ) : null}
@@ -648,87 +697,74 @@ export default function RevisaoImportacaoPage() {
                             ))
                           )}
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                           <button
                             type="button"
-                            className="btn btn-ghost !h-[34px] !text-[12px]"
+                            className="btn btn-purple inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl px-3 text-sm font-bold shadow-sm"
                             onClick={() => {
                               setSelectedQ(q.id);
                               setDrawerLinkType("TEXT");
                               setDrawerOpen(true);
                             }}
                           >
-                            Adicionar vínculo (texto)
+                            Vincular texto
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost !h-[34px] !text-[12px]"
+                            className="btn btn-purple inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl px-3 text-sm font-bold shadow-sm"
                             onClick={() => {
                               setSelectedQ(q.id);
                               setDrawerLinkType("IMAGE");
                               setDrawerOpen(true);
                             }}
                           >
-                            Adicionar vínculo (imagem)
+                            Vincular imagem
                           </button>
                         </div>
                       </div>
 
-                      <div className="rounded-[16px] border border-[#E5E7EB] bg-white p-3">
-                        <div className="text-[12px] font-extrabold text-[#111827]">IA</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-ghost !h-[34px] !text-[12px]"
-                            onClick={() => {
-                              setSelectedQ(q.id);
-                              setAltDrawerOpen(true);
-                            }}
-                          >
-                            Identificar alternativas
-                          </button>
-                        </div>
+                      <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 shadow-sm sm:p-5">
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-violet-800">IA</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-violet-900/80">Selecione no PDF o bloco das alternativas para extrair A–E automaticamente.</p>
+                        <button
+                          type="button"
+                          className="btn btn-primary mt-4 inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl text-sm font-bold shadow-md"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setAltDrawerOpen(true);
+                          }}
+                        >
+                          Identificar alternativas
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
+            </article>
           );
         })}
       </div>
 
       {filteredQuestions.length > visibleCount && (
-        <div className="mt-3">
-          <button type="button" className="btn btn-ghost w-full !h-[38px] !text-[12px]" onClick={() => setVisibleCount((n) => n + 60)}>
+        <div className="rounded-2xl border border-dashed border-black/[0.1] bg-white/80 p-4 text-center shadow-sm">
+          <button
+            type="button"
+            className="btn btn-ghost inline-flex min-h-[44px] w-full max-w-md items-center justify-center rounded-2xl border border-black/[0.08] text-sm font-bold"
+            onClick={() => setVisibleCount((n) => n + 60)}
+          >
             Mostrar mais (+60)
           </button>
-          <p className="mt-1 text-center text-[11px] text-[#9CA3AF]">Renderização incremental para listas longas.</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">Listas longas carregam aos poucos para manter a página fluida.</p>
         </div>
       )}
-
-      {/* Mantém o editor detalhado atual abaixo (por enquanto), para não perder funcionalidade durante a reestruturação.
-          Na próxima iteração, ele vira painel de edição no lado direito (aba "Conteúdo"). */}
-      <div className="mt-6 rounded-[16px] border border-[#E5E7EB] bg-white p-4">
-        <div className="mb-2 text-[12px] font-extrabold text-[#111827]">Editor detalhado (temporário)</div>
-        <div className="text-[12px] text-[#6B7280]">
-          Este bloco será migrado para o painel direito em abas (Conteúdo / Vínculos) na próxima etapa.
-        </div>
-      </div>
-
-      <div className="hidden">
-        {imp.importedQuestions.slice(0, 1).map(() => null)}
-      </div>
 
       {imp.importedQuestions.length === 0 && (
-        <div className="mt-6 rounded-[16px] border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center">
-          <AlertCircle className="mx-auto mb-2 h-7 w-7 text-[#D1D5DB]" />
-          <p className="text-[14px] text-[#6B7280]">Nenhuma questão extraída nesta importação</p>
+        <div className="orbit-empty-state">
+          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[var(--text-muted)]" />
+          <p className="text-base font-medium text-[var(--text-secondary)]">Nenhuma questão extraída nesta importação</p>
         </div>
       )}
-
-      {/* drawers continuam abaixo */}
-      <div className="mt-0">{/* espaço reservado */}</div>
 
       <ImportLinkDrawer
         open={drawerOpen}
@@ -756,8 +792,6 @@ export default function RevisaoImportacaoPage() {
         existingAlternatives={(drafts[selectedQ]?.alternatives ?? []) as any}
         onApply={async (mode, alternatives) => applyAlternativesFromAi(selectedQ, mode, alternatives)}
       />
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

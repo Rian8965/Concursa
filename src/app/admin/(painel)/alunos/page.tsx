@@ -94,25 +94,27 @@ export default function AdminAlunosPage() {
           <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhum aluno encontrado</p>
         </div>
       ) : (
-        <div className="orbit-panel overflow-hidden p-0">
-          <div className="orbit-table-wrap border-0 shadow-none">
+        <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
+          <div className="orbit-table-wrap">
             <table className="orbit-admin-table">
               <colgroup>
-                <col className="w-[30%]" />
-                <col className="w-[20%]" />
-                <col className="w-[10%]" />
-                <col className="w-[14%]" />
-                <col className="w-[12%]" />
-                <col className="w-[14%]" />
+                <col className="min-w-[200px] w-[28%]" />
+                <col className="min-w-[140px] w-[22%]" />
+                <col className="min-w-[88px] w-[10%]" />
+                <col className="min-w-[120px] w-[14%]" />
+                <col className="min-w-[100px] w-[12%]" />
+                <col className="min-w-[140px] w-[14%]" />
               </colgroup>
               <thead>
                 <tr>
                   {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
-                        h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"
-                      }`}
+                      className={
+                        h === "Questões" || h === "Cadastro" || h === "Ações"
+                          ? "text-right"
+                          : "text-left"
+                      }
                     >
                       {h}
                     </th>
@@ -121,38 +123,37 @@ export default function AdminAlunosPage() {
               </thead>
               <tbody>
                 {students.map((s) => (
-                  <tr key={s.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                    <td className="min-w-0 px-4 py-3">
-                      <p className="truncate text-[13.5px] font-semibold text-[var(--text-primary)]">{s.name}</p>
-                      <p className="truncate text-xs text-[var(--text-muted)]">{s.email}</p>
+                  <tr key={s.id}>
+                    <td className="min-w-0">
+                      <p className="truncate font-semibold text-[var(--text-primary)]">{s.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{s.email}</p>
                     </td>
-                    <td className="min-w-0 px-4 py-3">
-                      <p className="truncate text-[13px] text-[var(--text-secondary)]">
+                    <td className="min-w-0">
+                      <p className="truncate text-[var(--text-secondary)]">
                         {s.studentProfile?.plan?.name ?? <span className="text-[var(--text-muted)]">—</span>}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-[var(--text-secondary)]">
+                    <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
                       {s.studentProfile?._count?.studentAnswers ?? 0}
                     </td>
-                    <td className="px-4 py-3 text-right text-xs tabular-nums text-[var(--text-secondary)]">
+                    <td className="text-right text-sm tabular-nums text-[var(--text-secondary)]">
                       {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <span
-                        className={cn(
-                          "inline-flex rounded-lg px-2.5 py-0.5 text-[11px] font-bold ring-1",
-                          s.isActive ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80" : "bg-red-50 text-red-700 ring-red-200/80",
-                        )}
+                        className={
+                          s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"
+                        }
                       >
                         {s.isActive ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center justify-end gap-1.5">
+                    <td className="text-right">
+                      <div className="inline-flex flex-wrap items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setSelected(s)}
-                          className="btn btn-ghost h-9 min-w-[5.5rem] rounded-xl px-3 text-xs font-semibold"
+                          className="btn btn-ghost inline-flex min-h-[40px] min-w-[6.5rem] items-center justify-center rounded-xl px-4 text-xs font-semibold"
                         >
                           Gerenciar
                         </button>

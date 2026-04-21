@@ -44,8 +44,8 @@ export default async function AdminImportacoesPage() {
         </div>
       )}
 
-      <div className="orbit-panel overflow-hidden p-0">
-        {imports.length === 0 ? (
+      {imports.length === 0 ? (
+        <div className="orbit-panel overflow-hidden p-0">
           <div className="orbit-empty-state py-14">
             <FileText className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.5} />
             <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhuma importação realizada</p>
@@ -53,26 +53,28 @@ export default async function AdminImportacoesPage() {
               <Plus className="h-3.5 w-3.5" /> Nova importação
             </Link>
           </div>
-        ) : (
-          <div className="orbit-table-wrap border-0 shadow-none">
+        </div>
+      ) : (
+        <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
+          <div className="orbit-table-wrap">
             <table className="orbit-admin-table">
               <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[26%]" />
-                <col className="w-[16%]" />
+                <col className="min-w-[200px] w-[24%]" />
+                <col className="min-w-[140px] w-[22%]" />
+                <col className="min-w-[120px] w-[15%]" />
                 <col className="w-[9%]" />
                 <col className="w-[9%]" />
-                <col className="w-[10%]" />
-                <col className="w-[8%]" />
+                <col className="min-w-[100px] w-[11%]" />
+                <col className="min-w-[140px] w-[10%]" />
               </colgroup>
               <thead>
                 <tr>
                   {["Arquivo", "Concurso", "Status", "Extraídas", "Aprovadas", "Data", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className={`whitespace-nowrap px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)] ${
+                      className={
                         h === "Extraídas" || h === "Aprovadas" || h === "Data" || h === "Ações" ? "text-right" : "text-left"
-                      }`}
+                      }
                     >
                       {h}
                     </th>
@@ -84,39 +86,42 @@ export default async function AdminImportacoesPage() {
                   const s = STATUS_MAP[imp.status] ?? STATUS_MAP.PENDING;
                   const Icon = s.icon;
                   return (
-                    <tr key={imp.id} className="border-t border-black/[0.04] transition-colors hover:bg-[var(--bg-muted)]/80">
-                      <td className="px-4 py-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-violet-600" />
-                          <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]" title={imp.originalFilename}>
+                    <tr key={imp.id}>
+                      <td className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <FileText className="h-4 w-4 shrink-0 text-violet-600" />
+                          <p className="truncate font-semibold text-[var(--text-primary)]" title={imp.originalFilename}>
                             {imp.originalFilename}
                           </p>
                         </div>
                       </td>
-                      <td className="min-w-0 px-4 py-3">
-                        <p className="truncate text-[13px] text-[var(--text-secondary)]" title={imp.competition?.name ?? undefined}>
+                      <td className="min-w-0">
+                        <p className="truncate text-[var(--text-secondary)]" title={imp.competition?.name ?? undefined}>
                           {imp.competition?.name ?? <span className="text-[var(--text-muted)]">—</span>}
                         </p>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold ring-1 ${s.badgeClass}`}>
-                          <Icon className="h-3 w-3 shrink-0" /> {s.label}
+                      <td>
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${s.badgeClass}`}>
+                          <Icon className="h-3.5 w-3.5 shrink-0" /> {s.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-[var(--text-secondary)]">{imp.totalExtracted}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-[13px] font-bold text-emerald-700">{imp.totalApproved}</td>
-                      <td className="px-4 py-3 text-right text-[12px] tabular-nums text-[var(--text-muted)]">{formatDate(imp.createdAt)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                      <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">{imp.totalExtracted}</td>
+                      <td className="text-right tabular-nums font-semibold text-emerald-700">{imp.totalApproved}</td>
+                      <td className="text-right text-sm tabular-nums text-[var(--text-muted)]">{formatDate(imp.createdAt)}</td>
+                      <td className="text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
                           {imp.status === "REVIEW_PENDING" ? (
                             <Link
                               href={`/admin/importacoes/${imp.id}/revisao`}
-                              className="btn btn-primary rounded-xl px-3 py-1.5 text-[11px] font-bold"
+                              className="btn btn-primary inline-flex min-h-[40px] items-center rounded-xl px-4 text-xs font-bold"
                             >
-                              Revisar →
+                              Revisar
                             </Link>
                           ) : (
-                            <Link href={`/admin/importacoes/${imp.id}/revisao`} className="btn btn-ghost rounded-xl px-3 py-1.5 text-[11px] font-semibold">
+                            <Link
+                              href={`/admin/importacoes/${imp.id}/revisao`}
+                              className="btn btn-ghost inline-flex min-h-[40px] items-center rounded-xl px-4 text-xs font-semibold"
+                            >
                               Ver
                             </Link>
                           )}
@@ -129,8 +134,8 @@ export default async function AdminImportacoesPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
