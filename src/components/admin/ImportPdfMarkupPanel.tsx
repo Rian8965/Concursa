@@ -27,6 +27,8 @@ type QOpt = { id: string; label: string };
 
 type DrawMode = "TEXT_BLOCK" | "IMAGE" | null;
 
+export type PdfLinkType = "TEXT" | "IMAGE" | "TABLE" | "GRAPH" | "MIXED";
+
 type Props = {
   importId: string;
   pdfAvailable: boolean;
@@ -35,6 +37,8 @@ type Props = {
   onChanged: () => Promise<void> | void;
   selectedQuestionId?: string;
   onSelectedQuestionIdChange?: (id: string) => void;
+  uiMode?: "review" | "linker";
+  linkType?: PdfLinkType;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -53,6 +57,8 @@ export function ImportPdfMarkupPanel({
   onChanged,
   selectedQuestionId,
   onSelectedQuestionIdChange,
+  uiMode = "review",
+  linkType = "TEXT",
 }: Props) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -64,6 +70,15 @@ export function ImportPdfMarkupPanel({
   const pageWrapRef = useRef<HTMLDivElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingText, setEditingText] = useState<Record<string, string>>({});
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("");
+  const [draggingAsset, setDraggingAsset] = useState<{ id: string; startX: number; startY: number; base: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [resizingAsset, setResizingAsset] = useState<{
+    id: string;
+    handle: "nw" | "ne" | "sw" | "se";
+    startX: number;
+    startY: number;
+    base: { x: number; y: number; w: number; h: number };
+  } | null>(null);
 
   const pdfUrl = `/api/admin/imports/${importId}/pdf`;
 
@@ -81,39 +96,164 @@ export function ImportPdfMarkupPanel({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-pdf-panel-mounted',location:'ImportPdfMarkupPanel.tsx:mounted',message:'pdf markup panel mounted',data:{importId,pdfAvailable,questionsCount:questions.length,assetsCount:assets.length,selectedQuestionId:selectedQuestionId ?? null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [importId, pdfAvailable, questions.length, assets.length, selectedQuestionId]);
 
   const pageWidth = Math.max(280, Math.min(1400, Math.floor(wrapWidth * zoom)));
 
   const pageAssets = useMemo(() => assets.filter((a) => a.page === page), [assets, page]);
+  const selectedAsset = useMemo(() => assets.find((a) => a.id === selectedAssetId) ?? null, [assets, selectedAssetId]);
+  const selectedQuestionAssetIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!effectiveTargetQ) return ids;
+    for (const a of assets) {
+      if ((a.questionLinks ?? []).some((l) => l.importedQuestionId === effectiveTargetQ)) ids.add(a.id);
+    }
+    return ids;
+  }, [assets, effectiveTargetQ]);
 
   const startDraw = useCallback(
     (e: React.MouseEvent) => {
-      if (!mode || !overlayRef.current) return;
+      if (!overlayRef.current) return;
+      if (uiMode !== "linker" && !mode) return;
       const r = overlayRef.current.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
       const y = (e.clientY - r.top) / r.height;
       setDrawing({ ax: x, ay: y });
       setPreview(null);
     },
-    [mode],
+    [mode, uiMode],
   );
 
   const moveDraw = useCallback(
     (e: React.MouseEvent) => {
+      if (resizingAsset && overlayRef.current) {
+        const r = overlayRef.current.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width;
+        const y = (e.clientY - r.top) / r.height;
+        const dx = x - resizingAsset.startX;
+        const dy = y - resizingAsset.startY;
+        const minSize = 0.01;
+        let nx = resizingAsset.base.x;
+        let ny = resizingAsset.base.y;
+        let nw = resizingAsset.base.w;
+        let nh = resizingAsset.base.h;
+
+        if (resizingAsset.handle === "se") {
+          nw = Math.max(minSize, resizingAsset.base.w + dx);
+          nh = Math.max(minSize, resizingAsset.base.h + dy);
+        } else if (resizingAsset.handle === "sw") {
+          nx = Math.min(resizingAsset.base.x + dx, resizingAsset.base.x + resizingAsset.base.w - minSize);
+          nw = Math.max(minSize, resizingAsset.base.w - dx);
+          nh = Math.max(minSize, resizingAsset.base.h + dy);
+        } else if (resizingAsset.handle === "ne") {
+          ny = Math.min(resizingAsset.base.y + dy, resizingAsset.base.y + resizingAsset.base.h - minSize);
+          nw = Math.max(minSize, resizingAsset.base.w + dx);
+          nh = Math.max(minSize, resizingAsset.base.h - dy);
+        } else if (resizingAsset.handle === "nw") {
+          nx = Math.min(resizingAsset.base.x + dx, resizingAsset.base.x + resizingAsset.base.w - minSize);
+          ny = Math.min(resizingAsset.base.y + dy, resizingAsset.base.y + resizingAsset.base.h - minSize);
+          nw = Math.max(minSize, resizingAsset.base.w - dx);
+          nh = Math.max(minSize, resizingAsset.base.h - dy);
+        }
+
+        nx = Math.max(0, Math.min(1 - minSize, nx));
+        ny = Math.max(0, Math.min(1 - minSize, ny));
+        nw = Math.max(minSize, Math.min(1 - nx, nw));
+        nh = Math.max(minSize, Math.min(1 - ny, nh));
+
+        setPreview({ x: nx, y: ny, w: nw, h: nh });
+        return;
+      }
+      if (draggingAsset && overlayRef.current) {
+        const r = overlayRef.current.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width;
+        const y = (e.clientY - r.top) / r.height;
+        const dx = x - draggingAsset.startX;
+        const dy = y - draggingAsset.startY;
+        const next = {
+          x: Math.max(0, Math.min(1 - draggingAsset.base.w, draggingAsset.base.x + dx)),
+          y: Math.max(0, Math.min(1 - draggingAsset.base.h, draggingAsset.base.y + dy)),
+          w: draggingAsset.base.w,
+          h: draggingAsset.base.h,
+        };
+        setPreview(next);
+        return;
+      }
       if (!drawing || !overlayRef.current) return;
       const r = overlayRef.current.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
       const y = (e.clientY - r.top) / r.height;
       setPreview(normRect(drawing.ax, drawing.ay, x, y));
     },
-    [drawing],
+    [drawing, draggingAsset, resizingAsset],
   );
 
   const effectiveTargetQ = selectedQuestionId ?? targetQ;
+  const effectiveLinkType = linkType;
+  const computedKind: DrawMode =
+    effectiveLinkType === "TEXT" ? "TEXT_BLOCK" : "IMAGE";
+  const computedRole = computedKind === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE";
+  const computedLabel =
+    effectiveLinkType === "TEXT" ? "TEXT" :
+    effectiveLinkType === "IMAGE" ? "IMAGE" :
+    effectiveLinkType === "TABLE" ? "TABLE" :
+    effectiveLinkType === "GRAPH" ? "GRAPH" : "MIXED";
 
   const endDraw = useCallback(
     async (e: React.MouseEvent) => {
-      if (!drawing || !overlayRef.current || !mode) return;
+      if (resizingAsset && preview) {
+        setBusy(true);
+        try {
+          // #region agent log
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-canvas-resize',location:'ImportPdfMarkupPanel.tsx:resizeEnd',message:'updating bbox after resize',data:{importId,assetId:resizingAsset.id,page,bbox:preview,handle:resizingAsset.handle},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          const res = await fetch(`/api/admin/imports/${importId}/assets/${resizingAsset.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page, bboxX: preview.x, bboxY: preview.y, bboxW: preview.w, bboxH: preview.h }),
+          });
+          if (!res.ok) throw new Error("Erro ao atualizar região");
+          await onChanged();
+        } catch (err) {
+          console.error(err);
+          alert(err instanceof Error ? err.message : "Erro");
+        } finally {
+          setBusy(false);
+          setResizingAsset(null);
+          setPreview(null);
+        }
+        return;
+      }
+      if (draggingAsset && preview && overlayRef.current) {
+        setBusy(true);
+        try {
+          // #region agent log
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-canvas-move',location:'ImportPdfMarkupPanel.tsx:dragEnd',message:'updating bbox after drag',data:{importId,assetId:draggingAsset.id,page,bbox:preview},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          const res = await fetch(`/api/admin/imports/${importId}/assets/${draggingAsset.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page, bboxX: preview.x, bboxY: preview.y, bboxW: preview.w, bboxH: preview.h }),
+          });
+          if (!res.ok) throw new Error("Erro ao atualizar região");
+          await onChanged();
+        } catch (err) {
+          console.error(err);
+          alert(err instanceof Error ? err.message : "Erro");
+        } finally {
+          setBusy(false);
+          setDraggingAsset(null);
+          setPreview(null);
+        }
+        return;
+      }
+
+      const effectiveMode = uiMode === "linker" ? computedKind : mode;
+      if (!drawing || !overlayRef.current || !effectiveMode) return;
       const r = overlayRef.current.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
       const y = (e.clientY - r.top) / r.height;
@@ -132,7 +272,7 @@ export function ImportPdfMarkupPanel({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: mode,
+            kind: effectiveMode,
             page,
             bboxX: box.x,
             bboxY: box.y,
@@ -141,12 +281,13 @@ export function ImportPdfMarkupPanel({
             scope: "EXCLUSIVE",
             extractedText: null,
             imageDataUrl: null,
+            label: uiMode === "linker" ? computedLabel : null,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Erro ao criar região");
         const assetId = data.asset?.id as string;
-        const role = mode === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE";
+        const role = uiMode === "linker" ? computedRole : (effectiveMode === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE");
         const lr = await fetch(`/api/admin/imports/${importId}/links`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -168,7 +309,7 @@ export function ImportPdfMarkupPanel({
         setBusy(false);
       }
     },
-    [drawing, mode, page, importId, effectiveTargetQ, onChanged],
+    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged],
   );
 
   const patchAssetText = async (assetId: string, extractedText: string) => {
@@ -277,6 +418,7 @@ export function ImportPdfMarkupPanel({
       <div className="min-w-0 rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">Questão alvo</span>
+          <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">PDF v2</span>
           <select
             className="input max-w-[220px] py-1.5 text-[13px]"
             value={effectiveTargetQ}
@@ -295,21 +437,27 @@ export function ImportPdfMarkupPanel({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className={`btn ${mode === "TEXT_BLOCK" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
-            onClick={() => setMode((m) => (m === "TEXT_BLOCK" ? null : "TEXT_BLOCK"))}
-          >
-            <Type className="h-3.5 w-3.5" /> Texto-base
-          </button>
-          <button
-            type="button"
-            className={`btn ${mode === "IMAGE" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
-            onClick={() => setMode((m) => (m === "IMAGE" ? null : "IMAGE"))}
-          >
-            <ImageIcon className="h-3.5 w-3.5" /> Figura
-          </button>
-          {mode && <span className="text-[12px] font-semibold text-[#7C3AED]">Desenhe um retângulo na página</span>}
+          {uiMode === "review" ? (
+            <>
+              <button
+                type="button"
+                className={`btn ${mode === "TEXT_BLOCK" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
+                onClick={() => setMode((m) => (m === "TEXT_BLOCK" ? null : "TEXT_BLOCK"))}
+              >
+                <Type className="h-3.5 w-3.5" /> Texto-base
+              </button>
+              <button
+                type="button"
+                className={`btn ${mode === "IMAGE" ? "btn-primary" : "btn-ghost"} !py-1.5 !text-[12px]`}
+                onClick={() => setMode((m) => (m === "IMAGE" ? null : "IMAGE"))}
+              >
+                <ImageIcon className="h-3.5 w-3.5" /> Figura
+              </button>
+              {mode && <span className="text-[12px] font-semibold text-[#7C3AED]">Desenhe um retângulo na página</span>}
+            </>
+          ) : (
+            <span className="text-[12px] font-semibold text-[#7C3AED]">Selecione a área no PDF ({computedLabel.toLowerCase()})</span>
+          )}
         </div>
 
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -375,27 +523,46 @@ export function ImportPdfMarkupPanel({
               <div
                 ref={overlayRef}
                 className="absolute inset-0 z-20 cursor-crosshair"
-                style={{ pointerEvents: mode ? "auto" : "none" }}
+                style={{ pointerEvents: (uiMode === "linker" ? true : Boolean(mode)) ? "auto" : "none" }}
                 onMouseDown={startDraw}
                 onMouseMove={moveDraw}
                 onMouseUp={endDraw}
                 onMouseLeave={() => {
                   setDrawing(null);
                   setPreview(null);
+                  setDraggingAsset(null);
+                  setResizingAsset(null);
                 }}
               >
                 {pageAssets.map((a) => (
                   <div
                     key={a.id}
                     title={a.kind}
-                    className="pointer-events-none absolute border-2"
+                    className="absolute border-2"
                     style={{
                       left: `${a.bboxX * 100}%`,
                       top: `${a.bboxY * 100}%`,
                       width: `${a.bboxW * 100}%`,
                       height: `${a.bboxH * 100}%`,
-                      borderColor: a.kind === "IMAGE" ? "#D97706" : "#7C3AED",
-                      background: a.kind === "IMAGE" ? "rgba(217,119,6,0.12)" : "rgba(124,58,237,0.10)",
+                      borderColor: selectedAssetId === a.id ? "#111827" : (a.kind === "IMAGE" ? "#D97706" : "#7C3AED"),
+                      background:
+                        selectedAssetId === a.id
+                          ? "rgba(17,24,39,0.10)"
+                          : selectedQuestionAssetIds.has(a.id)
+                            ? "rgba(124,58,237,0.14)"
+                            : (a.kind === "IMAGE" ? "rgba(217,119,6,0.12)" : "rgba(124,58,237,0.10)"),
+                    }}
+                    onMouseDown={(e) => {
+                      if (!overlayRef.current) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedAssetId(a.id);
+                      if (uiMode === "linker") return;
+                      const r = overlayRef.current.getBoundingClientRect();
+                      const x = (e.clientX - r.left) / r.width;
+                      const y = (e.clientY - r.top) / r.height;
+                      setDraggingAsset({ id: a.id, startX: x, startY: y, base: { x: a.bboxX, y: a.bboxY, w: a.bboxW, h: a.bboxH } });
+                      setPreview({ x: a.bboxX, y: a.bboxY, w: a.bboxW, h: a.bboxH });
                     }}
                   />
                 ))}
@@ -410,12 +577,53 @@ export function ImportPdfMarkupPanel({
                     }}
                   />
                 )}
+
+                {/* Resize handles for selected asset (review mode only) */}
+                {uiMode === "review" && selectedAsset && selectedAsset.page === page && (
+                  <>
+                    {(
+                      [
+                        { h: "nw", x: selectedAsset.bboxX, y: selectedAsset.bboxY },
+                        { h: "ne", x: selectedAsset.bboxX + selectedAsset.bboxW, y: selectedAsset.bboxY },
+                        { h: "sw", x: selectedAsset.bboxX, y: selectedAsset.bboxY + selectedAsset.bboxH },
+                        { h: "se", x: selectedAsset.bboxX + selectedAsset.bboxW, y: selectedAsset.bboxY + selectedAsset.bboxH },
+                      ] as const
+                    ).map((p) => (
+                      <div
+                        key={p.h}
+                        className="absolute z-30 h-3 w-3 rounded-full border border-[#111827] bg-white shadow"
+                        style={{
+                          left: `calc(${p.x * 100}% - 6px)`,
+                          top: `calc(${p.y * 100}% - 6px)`,
+                          cursor: p.h === "nw" || p.h === "se" ? "nwse-resize" : "nesw-resize",
+                        }}
+                        onMouseDown={(e) => {
+                          if (!overlayRef.current) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const r = overlayRef.current.getBoundingClientRect();
+                          const x = (e.clientX - r.left) / r.width;
+                          const y = (e.clientY - r.top) / r.height;
+                          setResizingAsset({
+                            id: selectedAsset.id,
+                            handle: p.h,
+                            startX: x,
+                            startY: y,
+                            base: { x: selectedAsset.bboxX, y: selectedAsset.bboxY, w: selectedAsset.bboxW, h: selectedAsset.bboxH },
+                          });
+                          setPreview({ x: selectedAsset.bboxX, y: selectedAsset.bboxY, w: selectedAsset.bboxW, h: selectedAsset.bboxH });
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </Document>
         </div>
       </div>
 
+      {uiMode === "review" && (
       <div className="flex flex-col gap-4">
         <div className="rounded-[var(--r-panel)] border border-[rgba(17,24,39,0.08)] bg-white p-4 shadow-sm">
           <h3 className="mb-2 text-[13px] font-bold text-[#111827]">Regiões marcadas</h3>
@@ -548,6 +756,7 @@ export function ImportPdfMarkupPanel({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

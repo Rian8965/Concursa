@@ -53,10 +53,23 @@ function bboxStats(layout?: DocaiLayout) {
 function reconstructReadingOrder(pages: Array<{ pageNumber: number | null; paragraphs: Array<{ text: string; midX: number | null; midY: number | null }> }>) {
   const out: Array<{ page: number | null; text: string }> = [];
   for (const p of pages) {
-    const withPos = p.paragraphs.filter((x) => x.text.trim().length > 0 && x.midY != null);
-    const left = withPos.filter((x) => (x.midX ?? 0.5) < 0.5).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
-    const right = withPos.filter((x) => (x.midX ?? 0.5) >= 0.5).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
-    const joined = [...left, ...right].map((x) => x.text.trim()).filter(Boolean).join("\n");
+    // Remove prováveis headers/footers pelo Y normalizado.
+    const withPos = p.paragraphs.filter((x) => x.text.trim().length > 0 && x.midY != null)
+      .filter((x) => (x.midY ?? 0) > 0.06 && (x.midY ?? 1) < 0.94);
+
+    const left = withPos.filter((x) => (x.midX ?? 0.5) < 0.45).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
+    const right = withPos.filter((x) => (x.midX ?? 0.5) > 0.55).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
+    const oneCol = [...withPos].sort((a, b) => {
+      const dy = (a.midY ?? 0) - (b.midY ?? 0);
+      if (Math.abs(dy) > 0.002) return dy;
+      return (a.midX ?? 0.5) - (b.midX ?? 0.5);
+    });
+
+    const likelyTwoCols = left.length >= 5 && right.length >= 5;
+    const joined = (likelyTwoCols ? [...left, ...right] : oneCol)
+      .map((x) => x.text.trim())
+      .filter(Boolean)
+      .join("\n");
     out.push({ page: p.pageNumber, text: joined });
   }
   return out;
@@ -222,12 +235,16 @@ export async function POST(req: NextRequest) {
         "Você é um extrator de provas de concurso.",
         "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
         "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-        "{ meta: { city?, concurso?, ano?, banca?, cargo?, materia? }, baseTexts: [{id, text}], questions: [{number, statement, baseTextId?, alternatives:[{letter, text}], correctAnswerLetter?}] }",
+        "{ meta: { city?, concurso?, ano?, banca?, cargo?, materia?, instructions? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
         "REGRAS:",
-        "- Se houver 'texto-base' (enunciado comum) que vale para várias questões, crie um item em baseTexts e aponte baseTextId em todas as questões relacionadas.",
-        "- Ignorar redação/discursivas: não criar questions para essa seção.",
+        "- NÃO cole texto-base dentro do enunciado. Se houver 'texto-base' compartilhado por várias questões, crie um item em baseTexts e aponte baseTextId nas questões relacionadas.",
+        "- NÃO associe automaticamente texto introdutório geral à primeira questão. Se for instrução geral (ex: 'Leia o texto', 'Assinale'), coloque em meta.instructions.",
+        "- Se um texto-base vale claramente para um intervalo de questões (ex: 1 a 3), inclua appliesToQuestionNumbers no baseText.",
+        "- Ignorar redação/discursivas: seções como 'Redação', 'Discursiva', 'Escreva um texto...' NÃO devem virar questions nem baseTexts.",
         "- Manter a ordem correta das questões.",
         "- Alternativas: normalizar letras A,B,C,D,E.",
+        "- Numeração: reconhecer padrões (1., 01, Questão 1, Q.1). O campo number deve ser um número (1..N).",
+        "- Comentários/explicações (quando existirem) devem ir em commentary; não misturar no statement.",
       ].join("\n");
 
       const user = [
@@ -243,41 +260,157 @@ export async function POST(req: NextRequest) {
       const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
 
       const baseMap = new Map<string, string>();
+      const baseApplies = new Map<string, number[]>();
       for (const bt of baseTexts) {
-        if (bt?.id && typeof bt.text === "string") baseMap.set(String(bt.id), bt.text);
+        if (bt?.id && typeof bt.text === "string") {
+          const id = String(bt.id);
+          baseMap.set(id, bt.text);
+          const numsRaw = Array.isArray(bt.appliesToQuestionNumbers) ? bt.appliesToQuestionNumbers : null;
+          const nums = (numsRaw ?? [])
+            .map((n: any) => (typeof n === "number" && Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null))
+            .filter((n: any) => typeof n === "number") as number[];
+          if (nums.length) baseApplies.set(id, Array.from(new Set(nums)).sort((a, b) => a - b));
+        }
       }
 
-      const importedQuestions = questions.map((q: any, idx: number) => {
-        const base = q?.baseTextId ? baseMap.get(String(q.baseTextId)) : undefined;
+      // 3.1) Persistir textos-base como ImportAsset (compartilhado), para poder vincular/editar na revisão
+      const baseAssetIdByBaseId = new Map<string, string>();
+      for (const [baseId, text] of baseMap.entries()) {
+        const t = String(text ?? "").trim();
+        if (!t) continue;
+        const asset = await prisma.importAsset.create({
+          data: {
+            importId: pdfImport.id,
+            kind: "TEXT_BLOCK",
+            scope: "SHARED",
+            // Não temos bbox/page reais via LLM; começa como "placeholder" para o admin ajustar depois no canvas.
+            page: 1,
+            bboxX: 0,
+            bboxY: 0,
+            bboxW: 1,
+            bboxH: 0.02,
+            extractedText: t,
+            label: `AI_BASETEXT:${baseId}`,
+          },
+          select: { id: true },
+        });
+        baseAssetIdByBaseId.set(baseId, asset.id);
+      }
+
+      function normalizeAlternatives(alts: Array<{ letter: string; content: string }>) {
+        const cleaned = alts
+          .map((a) => ({
+            letter: String(a.letter ?? "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1),
+            content: String(a.content ?? "").trim(),
+          }))
+          .filter((a) => a.content.length > 0);
+        const out: Array<{ letter: string; content: string }> = [];
+        const seen = new Set<string>();
+        for (const a of cleaned) {
+          const letter = a.letter || String.fromCharCode(65 + out.length);
+          if (seen.has(letter)) continue;
+          seen.add(letter);
+          out.push({ letter, content: a.content });
+          if (out.length >= 6) break;
+        }
+        // Se não veio letra, força A..E
+        if (out.length > 0 && out.every((a) => !a.letter)) {
+          return out.map((a, i) => ({ ...a, letter: String.fromCharCode(65 + i) }));
+        }
+        // Ordena por letra A..Z
+        out.sort((a, b) => a.letter.localeCompare(b.letter));
+        return out;
+      }
+
+      function computeHeuristicConfidence(q: { statement: string; alternatives: Array<{ letter: string; content: string }>; correctAnswer: string | null; number?: number | null }) {
+        let c = 0.78;
+        const st = (q.statement ?? "").trim();
+        if (st.length < 40) c -= 0.18;
+        if (st.length > 1800) c -= 0.08;
+        const alts = q.alternatives ?? [];
+        if (alts.length < 4) c -= 0.22;
+        if (alts.length > 6) c -= 0.10;
+        const letters = alts.map((a) => a.letter);
+        if (new Set(letters).size !== letters.length) c -= 0.18;
+        if (!q.correctAnswer) c -= 0.10;
+        if (q.correctAnswer && !new Set(letters).has(q.correctAnswer)) c -= 0.18;
+        if (!q.number || !Number.isFinite(q.number)) c -= 0.08;
+        return Math.max(0.05, Math.min(0.98, Number(c.toFixed(2))));
+      }
+
+      // 3.2) Criar questões importadas e (se aplicável) vínculos com o texto-base compartilhado
+      let createdCount = 0;
+      const createdByNumber = new Map<number, string>();
+      const createdDirectBase = new Map<string, string[]>(); // baseId -> [questionId]
+      for (let idx = 0; idx < questions.length; idx++) {
+        const q: any = questions[idx];
+        const baseTextId = q?.baseTextId != null ? String(q.baseTextId) : null;
+        const numberRaw = q?.number;
+        const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
         const statement = String(q?.statement ?? q?.content ?? "").trim();
-        const content = base ? `${base.trim()}\n\n${statement}` : statement;
+        const commentary = typeof q?.commentary === "string" ? q.commentary.trim() : null;
 
         const altsRaw = Array.isArray(q?.alternatives) ? q.alternatives : [];
-        const alternatives = altsRaw
-          .map((a: any, i: number) => ({
-            letter: String(a?.letter ?? String.fromCharCode(65 + i)).toUpperCase().slice(0, 1),
-            content: String(a?.text ?? a?.content ?? "").trim(),
-          }))
-          .filter((a: any) => a.content.length > 0);
+        const alternatives = normalizeAlternatives(
+          altsRaw.map((a: any, i: number) => ({
+            letter: String(a?.letter ?? String.fromCharCode(65 + i)),
+            content: String(a?.text ?? a?.content ?? ""),
+          })),
+        );
 
-        return {
-          importId: pdfImport.id,
-          content,
-          alternatives,
-          correctAnswer: q?.correctAnswerLetter ? String(q.correctAnswerLetter).toUpperCase().slice(0, 1) : (q?.correct_answer ?? null),
-          suggestedSubjectId: subjectId ?? null,
-          sourcePage: null,
-          sourcePosition: idx + 1,
-          hasImage: false,
-          imageUrl: null,
-          rawText: JSON.stringify({ baseTextId: q?.baseTextId ?? null, baseText: base ?? null, statement, meta: parsed?.meta ?? null }),
-          confidence: null,
-          status: "PENDING_REVIEW" as const,
-        };
-      });
+        const correctAnswer = q?.correctAnswerLetter
+          ? String(q.correctAnswerLetter).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1)
+          : (q?.correct_answer ? String(q.correct_answer).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1) : null);
 
-      if (importedQuestions.length > 0) {
-        await prisma.importedQuestion.createMany({ data: importedQuestions });
+        const confidence = computeHeuristicConfidence({ statement, alternatives, correctAnswer, number: number ?? undefined });
+
+        const created = await prisma.importedQuestion.create({
+          data: {
+            importId: pdfImport.id,
+            content: statement,
+            alternatives,
+            correctAnswer,
+            suggestedSubjectId: subjectId ?? null,
+            sourcePage: null,
+            sourcePosition: idx + 1,
+            hasImage: false,
+            imageUrl: null,
+            rawText: JSON.stringify({ number, baseTextId, statement, commentary, meta: parsed?.meta ?? null }),
+            confidence,
+            status: "PENDING_REVIEW" as const,
+          },
+          select: { id: true },
+        });
+        createdCount++;
+        if (number != null) createdByNumber.set(number, created.id);
+
+        if (baseTextId && baseAssetIdByBaseId.has(baseTextId)) {
+          const assetId = baseAssetIdByBaseId.get(baseTextId)!;
+          await prisma.importedQuestionAsset.create({
+            data: {
+              importedQuestionId: created.id,
+              importAssetId: assetId,
+              role: "SUPPORT_TEXT",
+            },
+          }).catch(() => {});
+          const arr = createdDirectBase.get(baseTextId) ?? [];
+          arr.push(created.id);
+          createdDirectBase.set(baseTextId, arr);
+        }
+      }
+
+      // 3.3) Vínculo extra: baseTexts.appliesToQuestionNumbers (quando a IA sabe o intervalo, mas não marcou baseTextId em todas)
+      for (const [baseId, nums] of baseApplies.entries()) {
+        if (!baseAssetIdByBaseId.has(baseId)) continue;
+        const assetId = baseAssetIdByBaseId.get(baseId)!;
+        for (const n of nums) {
+          const qid = createdByNumber.get(n);
+          if (!qid) continue;
+          // Se já foi criado por baseTextId direto, ignora (unique constraint também protege).
+          await prisma.importedQuestionAsset.create({
+            data: { importedQuestionId: qid, importAssetId: assetId, role: "SUPPORT_TEXT" },
+          }).catch(() => {});
+        }
       }
 
       const elapsedMs = Date.now() - startedAt;
@@ -286,13 +419,14 @@ export async function POST(req: NextRequest) {
         where: { id: pdfImport.id },
         data: {
           status: "REVIEW_PENDING",
-          totalExtracted: importedQuestions.length,
+          totalExtracted: createdCount,
           processingLog: JSON.stringify({
             pipeline: "ai",
             elapsedMs,
             provider: llm.provider,
             model: llm.model,
             inferredMeta: parsed?.meta ?? null,
+            baseTexts: baseMap.size,
           }),
           originalFilenameGabarito: gabaritoFile?.name ?? null,
           gabaritoInSamePdf: gabaritoNoMesmoPdf,
@@ -301,7 +435,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         importId: pdfImport.id,
-        totalExtracted: importedQuestions.length,
+        totalExtracted: createdCount,
         usedOcr: true,
         pipeline: "ai",
       }, { status: 201 });

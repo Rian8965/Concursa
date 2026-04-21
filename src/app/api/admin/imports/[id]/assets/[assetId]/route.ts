@@ -20,12 +20,43 @@ export async function PATCH(
     extractedText?: string | null;
     imageDataUrl?: string | null;
     label?: string | null;
+    page?: number;
+    bboxX?: number;
+    bboxY?: number;
+    bboxW?: number;
+    bboxH?: number;
   };
 
   const existing = await prisma.importAsset.findFirst({
     where: { id: assetId, importId: id },
   });
   if (!existing) return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
+
+  const wantsBbox =
+    body.page !== undefined ||
+    body.bboxX !== undefined ||
+    body.bboxY !== undefined ||
+    body.bboxW !== undefined ||
+    body.bboxH !== undefined;
+  if (wantsBbox) {
+    const page = body.page ?? existing.page;
+    const bboxX = body.bboxX ?? existing.bboxX;
+    const bboxY = body.bboxY ?? existing.bboxY;
+    const bboxW = body.bboxW ?? existing.bboxW;
+    const bboxH = body.bboxH ?? existing.bboxH;
+    const ok =
+      typeof page === "number" &&
+      page >= 1 &&
+      [bboxX, bboxY, bboxW, bboxH].every((n) => typeof n === "number" && n >= 0 && n <= 1) &&
+      bboxW > 0 &&
+      bboxH > 0;
+    if (!ok) {
+      return NextResponse.json(
+        { error: "page/bbox inválidos (use página >= 1 e bbox normalizado 0–1)." },
+        { status: 400 },
+      );
+    }
+  }
 
   const asset = await prisma.importAsset.update({
     where: { id: assetId },
@@ -34,6 +65,11 @@ export async function PATCH(
       ...(body.extractedText !== undefined ? { extractedText: body.extractedText?.trim() || null } : {}),
       ...(body.imageDataUrl !== undefined ? { imageDataUrl: body.imageDataUrl?.trim() || null } : {}),
       ...(body.label !== undefined ? { label: body.label?.trim() || null } : {}),
+      ...(body.page !== undefined ? { page: body.page } : {}),
+      ...(body.bboxX !== undefined ? { bboxX: body.bboxX } : {}),
+      ...(body.bboxY !== undefined ? { bboxY: body.bboxY } : {}),
+      ...(body.bboxW !== undefined ? { bboxW: body.bboxW } : {}),
+      ...(body.bboxH !== undefined ? { bboxH: body.bboxH } : {}),
     },
   });
 

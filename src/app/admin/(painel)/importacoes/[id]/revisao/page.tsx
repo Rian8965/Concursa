@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, XCircle, Save, AlertCircle, ChevronDown, ChevronUp, Trash2, Copy, Link2 } from "lucide-react";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
+import { ImportLinkDrawer } from "@/components/admin/ImportLinkDrawer";
+import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
 
 const ImportPdfMarkupPanel = dynamic(
   () => import("@/components/admin/ImportPdfMarkupPanel").then((m) => m.ImportPdfMarkupPanel),
@@ -20,6 +22,20 @@ interface ImportedQ {
   status: string; rawText?: string | null;
   hasImage?: boolean;
   imageUrl?: string | null;
+}
+
+function parseAiMeta(rawText?: string | null): { number?: number | null; commentary?: string | null; instructions?: string | null } | null {
+  if (!rawText) return null;
+  try {
+    const parsed = JSON.parse(rawText);
+    return {
+      number: typeof parsed.number === "number" ? parsed.number : null,
+      commentary: typeof parsed.commentary === "string" ? parsed.commentary : null,
+      instructions: typeof parsed.meta?.instructions === "string" ? parsed.meta.instructions : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function parseSuggestedSubject(rawText?: string | null): { subject: string; confidence: string; alternatives: string[] } | null {
@@ -47,6 +63,22 @@ interface ImportData {
 
 type Decision = "approve" | "reject" | "pending";
 
+function computeReviewWarnings(q: ImportedQ) {
+  const warnings: string[] = [];
+  const content = (q.content ?? "").trim();
+  if (content.length < 30) warnings.push("Enunciado muito curto (possível quebra/colagem).");
+
+  const alts = Array.isArray(q.alternatives) ? q.alternatives : [];
+  if (alts.length < 4) warnings.push("Poucas alternativas (esperado 4–5).");
+  const letters = alts.map((a) => String(a.letter ?? "").trim().toUpperCase()).filter(Boolean);
+  const uniq = new Set(letters);
+  if (letters.length && uniq.size !== letters.length) warnings.push("Letras de alternativas duplicadas.");
+  if (q.correctAnswer && !uniq.has(String(q.correctAnswer).trim().toUpperCase())) warnings.push("Resposta correta não bate com as alternativas.");
+  if (!q.correctAnswer) warnings.push("Sem resposta correta (precisa revisar).");
+  if (q.confidence != null && q.confidence < 0.55) warnings.push("Baixa confiança da IA.");
+  return warnings;
+}
+
 export default function RevisaoImportacaoPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -58,6 +90,8 @@ export default function RevisaoImportacaoPage() {
   const [selectedQ, setSelectedQ] = useState<string>("");
   const [drafts, setDrafts] = useState<Record<string, ImportedQ>>({});
   const rightRef = useRef<HTMLDivElement | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerLinkType, setDrawerLinkType] = useState<PdfLinkType>("TEXT");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -122,6 +156,9 @@ export default function RevisaoImportacaoPage() {
         map[l.importedQuestionId].push(a);
       }
     }
+    for (const k of Object.keys(map)) {
+      map[k] = map[k].slice().sort((a, b) => (a.page ?? 0) - (b.page ?? 0));
+    }
     return map;
   }, [imp?.importAssets]);
 
@@ -141,6 +178,7 @@ export default function RevisaoImportacaoPage() {
         suggestedSubjectId: subjectMap[questionId] || null,
         sourcePage: d.sourcePage ?? null,
         confidence: d.confidence ?? null,
+        rawText: d.rawText ?? null,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -149,6 +187,17 @@ export default function RevisaoImportacaoPage() {
       return;
     }
     toast.success("Questão salva");
+    await refreshImport();
+  }
+
+  async function markNeedsReview(questionId: string) {
+    const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "PENDING_REVIEW" }),
+    });
+    if (res.ok) toast.success("Marcada para revisão");
+    else toast.error("Erro ao marcar para revisão");
     await refreshImport();
   }
 
@@ -175,6 +224,75 @@ export default function RevisaoImportacaoPage() {
     await refreshImport();
   }
 
+  async function splitQuestion(questionId: string) {
+    const d = drafts[questionId];
+    if (!d) return;
+    const delimiter = prompt("Dividir enunciado a partir de qual texto? (ex: \"Questão\" ou um trecho exato)");
+    if (!delimiter) return;
+    const idx = d.content.indexOf(delimiter);
+    if (idx <= 0 || idx >= d.content.length - 5) {
+      toast.error("Não encontrei um ponto bom para dividir com esse texto.");
+      return;
+    }
+    const first = d.content.slice(0, idx).trim();
+    const second = d.content.slice(idx).trim();
+    if (!first || !second) {
+      toast.error("Divisão inválida.");
+      return;
+    }
+
+    // Atualiza a questão atual com a primeira parte (mantém alternativas)
+    await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: first }),
+    });
+
+    // Cria nova questão com a segunda parte (alternativas vazias para o admin preencher)
+    const cr = await fetch(`/api/admin/imports/${id}/imported-questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: second,
+        alternatives: [],
+        correctAnswer: null,
+        suggestedSubjectId: subjectMap[questionId] || null,
+        sourcePage: d.sourcePage ?? null,
+      }),
+    });
+    if (!cr.ok) {
+      const err = await cr.json().catch(() => ({}));
+      toast.error(err.error ?? "Erro ao criar questão dividida");
+      return;
+    }
+    toast.success("Questão dividida (nova questão criada)");
+    await refreshImport();
+  }
+
+  async function mergeWithNext(questionId: string) {
+    if (!imp) return;
+    const idx = imp.importedQuestions.findIndex((q) => q.id === questionId);
+    if (idx === -1 || idx >= imp.importedQuestions.length - 1) {
+      toast.error("Não há próxima questão para unir.");
+      return;
+    }
+    const nextQ = imp.importedQuestions[idx + 1];
+    if (!confirm("Unir com a próxima questão? Isso vai mover o enunciado da próxima para esta e excluir a próxima.")) return;
+
+    const cur = drafts[questionId] ?? imp.importedQuestions[idx];
+    const nxt = drafts[nextQ.id] ?? nextQ;
+    const merged = `${(cur.content ?? "").trim()}\n\n${(nxt.content ?? "").trim()}`.trim();
+
+    await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: merged }),
+    });
+    await fetch(`/api/admin/imports/${id}/imported-questions/${nextQ.id}`, { method: "DELETE" });
+    toast.success("Questões unidas");
+    await refreshImport();
+  }
+
   if (loading || !imp) {
     return (
       <div style={{ textAlign: "center", padding: "48px 0" }}>
@@ -196,7 +314,12 @@ export default function RevisaoImportacaoPage() {
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="truncate text-[22px] font-extrabold tracking-tight text-[#111827]">Revisão: {imp.originalFilename}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-[22px] font-extrabold tracking-tight text-[#111827]">Revisão: {imp.originalFilename}</h1>
+              <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-extrabold text-[#7C3AED]">
+                UI v2
+              </span>
+            </div>
             {imp.competition && <p className="mt-1 text-[13px] font-semibold text-[#7C3AED]">{imp.competition.name}</p>}
           </div>
           <div className="flex items-center gap-2">
@@ -254,6 +377,8 @@ export default function RevisaoImportacaoPage() {
           const bgColor = d === "approve" ? "#ECFDF5" : d === "reject" ? "#FEF2F2" : "#FFFFFF";
           const draft = drafts[q.id] ?? q;
           const linked = linkedAssetsByQuestion[q.id] ?? [];
+          const warnings = computeReviewWarnings(draft);
+          const aiMeta = parseAiMeta(draft.rawText);
 
           return (
             <div
@@ -273,6 +398,11 @@ export default function RevisaoImportacaoPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-bold text-[#111827]">Questão</span>
+                      {aiMeta?.number != null && (
+                        <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-extrabold text-[#111827]">
+                          Nº {aiMeta.number}
+                        </span>
+                      )}
                       {q.confidence != null && (
                         <span className="rounded-full bg-[#7C3AED18] px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
                           Confiança {Math.round(q.confidence * 100)}%
@@ -281,6 +411,11 @@ export default function RevisaoImportacaoPage() {
                       {linked.length > 0 && (
                         <span className="rounded-full bg-[#1118270D] px-2 py-0.5 text-[11px] font-semibold text-[#374151]">
                           {linked.length} vínculo(s)
+                        </span>
+                      )}
+                      {warnings.length > 0 && (
+                        <span className="rounded-full bg-[#DC262618] px-2 py-0.5 text-[11px] font-extrabold text-[#DC2626]">
+                          Revisão recomendada
                         </span>
                       )}
                       {q.sourcePage != null && (
@@ -324,6 +459,16 @@ export default function RevisaoImportacaoPage() {
 
                   {isExpanded && (
                     <div className="mt-3 space-y-3">
+                      {warnings.length > 0 && (
+                        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[12px] text-[#7F1D1D]">
+                          <div className="font-extrabold">Pontos de atenção</div>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                            {warnings.map((w, i) => (
+                              <li key={`${q.id}-w-${i}`}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       <div>
                         <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Enunciado</label>
                         <textarea
@@ -424,6 +569,15 @@ export default function RevisaoImportacaoPage() {
                         <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => duplicateQuestion(q.id)}>
                           <Copy className="h-4 w-4" /> Duplicar
                         </button>
+                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => splitQuestion(q.id)}>
+                          Dividir
+                        </button>
+                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => mergeWithNext(q.id)}>
+                          Unir com próxima
+                        </button>
+                        <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => markNeedsReview(q.id)}>
+                          Marcar p/ revisão
+                        </button>
                         <button type="button" className="btn btn-ghost !h-[34px] !text-[12px]" onClick={() => deleteQuestion(q.id)}>
                           <Trash2 className="h-4 w-4 text-red-600" /> Excluir
                         </button>
@@ -432,12 +586,85 @@ export default function RevisaoImportacaoPage() {
                           className="btn btn-ghost !h-[34px] !text-[12px]"
                           onClick={() => {
                             setSelectedQ(q.id);
-                            rightRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            setDrawerLinkType("TEXT");
+                            setDrawerOpen(true);
                           }}
                         >
                           <Link2 className="h-4 w-4" /> Vincular imagem/texto
                         </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost !h-[34px] !text-[12px]"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setDrawerLinkType("TEXT");
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          Vincular texto
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost !h-[34px] !text-[12px]"
+                          onClick={() => {
+                            setSelectedQ(q.id);
+                            setDrawerLinkType("IMAGE");
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          Vincular imagem
+                        </button>
                       </div>
+
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-[#374151]">Comentário/explicação (opcional)</label>
+                        <textarea
+                          className="input min-h-[80px] text-[12.5px]"
+                          value={aiMeta?.commentary ?? ""}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setDrafts((prev) => {
+                              const cur = prev[q.id] ?? draft;
+                              let rawObj: any = {};
+                              try { rawObj = cur.rawText ? JSON.parse(cur.rawText) : {}; } catch { rawObj = {}; }
+                              rawObj.commentary = next;
+                              return { ...prev, [q.id]: { ...cur, rawText: JSON.stringify(rawObj) } };
+                            });
+                          }}
+                          placeholder="Ex: justificativa do gabarito, observações..."
+                        />
+                        <p className="mt-1 text-[11px] text-[#9CA3AF]">
+                          (O salvamento do comentário será persistido junto ao JSON `rawText` por enquanto.)
+                        </p>
+                      </div>
+
+                      {linked.length > 0 && (
+                        <div className="rounded-xl border border-[#E5E7EB] bg-[#FAFAFC] p-3">
+                          <div className="text-[12px] font-extrabold text-[#111827]">Vínculos desta questão</div>
+                          <div className="mt-2 space-y-2">
+                            {linked.slice(0, 4).map((a) => (
+                              <div key={`${q.id}-lk-${a.id}`} className="rounded-lg border border-[#E5E7EB] bg-white p-2 text-[12px]">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="font-semibold text-[#374151]">
+                                    {a.kind === "IMAGE" ? "Figura" : "Texto-base"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
+                                  </div>
+                                  <div className="text-[11px] font-semibold text-[#9CA3AF]">{a.label ?? ""}</div>
+                                </div>
+                                {a.kind === "TEXT_BLOCK" && a.extractedText && (
+                                  <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11.5px] text-[#4B5563]">
+                                    {a.extractedText}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            {linked.length > 4 && (
+                              <div className="text-[11px] font-semibold text-[#6B7280]">
+                                +{linked.length - 4} vínculo(s) (veja todos na coluna do PDF)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -478,6 +705,20 @@ export default function RevisaoImportacaoPage() {
           </div>
         </div>
       </div>
+
+      <ImportLinkDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        importId={id}
+        pdfAvailable={Boolean(imp.storedPdfPath)}
+        questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
+        assets={imp.importAssets ?? []}
+        selectedQuestionId={selectedQ}
+        onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
+        linkType={drawerLinkType}
+        onLinkTypeChange={setDrawerLinkType}
+        onChanged={refreshImport}
+      />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
