@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
 
 export const runtime = "nodejs";
 
@@ -21,13 +22,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!q.aiMeta) return NextResponse.json({ error: "Sem sugestões de IA para aplicar" }, { status: 400 });
 
   const meta = q.aiMeta;
+  const linkCols = await getQuestionOptionalLinkColumns(prisma);
   const updated = await prisma.question.update({
     where: { id },
     data: {
       ...(q.year == null && meta.suggestedYear != null && { year: meta.suggestedYear }),
       ...(q.examBoardId == null && meta.suggestedExamBoardId != null && { examBoardId: meta.suggestedExamBoardId }),
-      ...(q.cityId == null && meta.suggestedCityId != null && { cityId: meta.suggestedCityId }),
-      ...(q.jobRoleId == null && meta.suggestedJobRoleId != null && { jobRoleId: meta.suggestedJobRoleId }),
+      ...(linkCols.hasCityId && q.cityId == null && meta.suggestedCityId != null && { cityId: meta.suggestedCityId }),
+      ...(linkCols.hasJobRoleId && q.jobRoleId == null && meta.suggestedJobRoleId != null && { jobRoleId: meta.suggestedJobRoleId }),
       ...(q.subjectId == null && meta.suggestedSubjectId != null && { subjectId: meta.suggestedSubjectId }),
       ...(q.topicId == null && meta.suggestedTopicId != null && { topicId: meta.suggestedTopicId }),
     },
