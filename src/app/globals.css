@@ -112,7 +112,8 @@
 
   /* ── ADMIN SHELL (área útil ampla em telas grandes) ── */
   --sidebar-w: 268px;
-  --admin-content-max: min(1580px, calc(100vw - var(--sidebar-w) - 28px));
+  --admin-shell-gap: 18px;
+  --admin-content-max: min(1580px, calc(100vw - var(--sidebar-w) - var(--admin-shell-gap) - 28px));
   --orbit-line: rgba(124,58,237,0.12);
 
   /* ── TRANSIÇÕES ── */
@@ -529,7 +530,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .orbit-main {
-  padding-left: var(--sidebar-w);
+  /* respiro entre sidebar e conteúdo */
+  padding-left: calc(var(--sidebar-w) + var(--admin-shell-gap));
 }
 
 .orbit-main-inner {
