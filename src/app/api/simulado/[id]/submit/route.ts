@@ -1,3 +1,4 @@
+import { generateWrongAnswerExplanation } from "@/lib/ai/explain-wrong-answer";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
@@ -44,15 +45,60 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { correctAnswers: correctCount, timeSpentSeconds: timeSpentSeconds || 0, status: "COMPLETED", completedAt: new Date() },
   });
 
-  const studentAnswers = answers
-    .filter((a) => a.selectedAnswer)
-    .map((a) => {
-      const r = results.find((r) => r.questionId === a.questionId)!;
-      return { studentProfileId: profile.id, questionId: a.questionId, selectedAnswer: a.selectedAnswer!, isCorrect: r.isCorrect, sessionType: "EXAM" as const, sessionId: id };
-    });
+  const withSelection = answers.filter((a) => a.selectedAnswer);
+  const wrongIds = [
+    ...new Set(
+      withSelection
+        .filter((a) => {
+          const r = results.find((x) => x.questionId === a.questionId);
+          return r && !r.isCorrect;
+        })
+        .map((a) => a.questionId),
+    ),
+  ];
 
-  if (studentAnswers.length > 0) {
-    await prisma.studentAnswer.createMany({ data: studentAnswers, skipDuplicates: true });
+  const questionsById =
+    wrongIds.length > 0
+      ? await prisma.question.findMany({
+          where: { id: { in: wrongIds } },
+          include: { alternatives: { orderBy: { order: "asc" } } },
+        })
+      : [];
+  const qMap = new Map(questionsById.map((q) => [q.id, q]));
+
+  for (const a of withSelection) {
+    const r = results.find((x) => x.questionId === a.questionId);
+    if (!r) continue;
+
+    let aiExplanation: string | null = null;
+    if (!r.isCorrect) {
+      const q = qMap.get(a.questionId);
+      if (q) {
+        try {
+          aiExplanation = await generateWrongAnswerExplanation({
+            content: q.content,
+            supportText: q.supportText,
+            alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
+            selectedAnswer: a.selectedAnswer!,
+            correctAnswer: q.correctAnswer,
+          });
+        } catch (e) {
+          console.error("[simulado/submit] explain", e);
+        }
+      }
+    }
+
+    await prisma.studentAnswer.create({
+      data: {
+        studentProfileId: profile.id,
+        questionId: a.questionId,
+        selectedAnswer: a.selectedAnswer!,
+        isCorrect: r.isCorrect,
+        sessionType: "EXAM",
+        sessionId: id,
+        aiExplanation: r.isCorrect ? null : aiExplanation,
+      },
+    });
   }
 
   return NextResponse.json({
