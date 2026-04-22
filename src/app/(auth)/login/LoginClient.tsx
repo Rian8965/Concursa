@@ -19,6 +19,7 @@ const inter = Inter({
 });
 
 const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
+const BRAND_PHRASING = "Descomplique Seu Concurso";
 
 export function LoginClient() {
   const router = useRouter();
@@ -45,6 +46,12 @@ export function LoginClient() {
       /* ignore */
     }
   }, [reset]);
+
+  function focusLogin() {
+    const el = document.getElementById("login");
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    (el as HTMLInputElement | null)?.focus?.();
+  }
 
   async function onSubmit(data: LoginInput) {
     const result = await signIn("credentials", {
@@ -77,109 +84,131 @@ export function LoginClient() {
   }
 
   return (
-    <div className={cn(inter.className, "min-h-[100dvh] min-h-screen bg-[#f5f3ff]")}>
-      <div className="mx-auto grid min-h-[100dvh] w-full max-w-[1180px] grid-cols-1 items-stretch gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-8 lg:px-10 lg:py-12">
-        {/* Lado esquerdo (roxo claro) */}
-        <section className="relative overflow-hidden rounded-[28px] border border-violet-200/60 bg-[#ede9fe] px-7 py-10 shadow-[0_18px_48px_rgba(124,58,237,0.10)] sm:px-10 sm:py-12">
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative h-10 w-[220px] sm:h-11 sm:w-[280px]">
-              <Image src="/login-brand-logo.png" alt={BRAND_NAME} fill className="object-contain object-left" sizes="280px" priority />
+    <div
+      className={cn(
+        inter.className,
+        "flex min-h-[100dvh] min-h-screen items-center justify-center bg-[#f4f1fb] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10",
+      )}
+    >
+      <div className="grid w-full max-w-[1040px] items-stretch gap-5 sm:gap-6 lg:grid-cols-5 lg:items-stretch lg:gap-0 lg:rounded-3xl lg:shadow-[0_24px_64px_-12px_rgba(15,23,42,0.10)]">
+        {/* Coluna esquerda ~40%: painel roxo claro */}
+        <aside className="relative flex min-h-0 flex-col justify-between overflow-hidden rounded-3xl border border-violet-200/50 bg-[#ede9fe] p-6 sm:p-8 lg:col-span-2 lg:rounded-r-none lg:border-r-0 lg:rounded-l-3xl lg:p-9">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-90"
+            style={{
+              background:
+                "radial-gradient(120% 100% at 0% 0%, rgba(167, 139, 250, 0.35) 0%, transparent 55%), radial-gradient(90% 80% at 100% 100%, rgba(221, 214, 254, 0.9) 0%, transparent 50%)",
+            }}
+            aria-hidden
+          />
+          <div className="relative z-[1] flex w-full max-w-full flex-1 flex-col">
+            <div className="relative h-10 w-[200px] shrink-0 sm:h-11 sm:w-[240px]">
+              <Image
+                src="/login-brand-logo.png"
+                alt={BRAND_NAME}
+                fill
+                className="object-contain object-left"
+                sizes="(max-width: 640px) 200px, 240px"
+                priority
+              />
             </div>
-          </div>
-
-          <div className="mt-10 max-w-[560px]">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700/70">Descomplique seu Concurso</p>
-
-            <h1 className="mt-4 text-balance text-4xl font-extrabold leading-[1.08] tracking-tight text-[#1f1635] sm:text-5xl">
+            <p className="mt-6 text-[10px] font-bold uppercase leading-none tracking-[0.2em] text-violet-800/60 sm:text-[11px]">
+              {BRAND_PHRASING}
+            </p>
+            <h1 className="mt-4 text-balance text-2xl font-bold leading-[1.15] tracking-[-0.02em] text-[#1a1229] sm:text-3xl lg:text-[1.75rem] xl:text-[1.9rem]">
               Seu futuro começa com uma decisão.
             </h1>
-            <p className="mt-5 max-w-prose text-[15px] leading-relaxed text-[#4b4662] sm:text-[16px]">
+            <p className="mt-4 max-w-[28ch] text-[14px] leading-relaxed text-[#4c4660] sm:text-[15px] sm:leading-[1.65]">
               Estude com foco, consistência e estratégia. A aprovação é questão de tempo.
             </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 shrink-0 sm:mt-8">
               <button
                 type="button"
-                className="inline-flex h-11 items-center justify-center rounded-2xl bg-violet-700 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-violet-800"
-                onClick={() => {
-                  const el = document.getElementById("login");
-                  el?.scrollIntoView({ block: "center", behavior: "smooth" });
-                  (el as HTMLInputElement | null)?.focus?.();
-                }}
+                onClick={focusLogin}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-violet-300/80 bg-white/50 px-5 text-[13px] font-semibold text-violet-800 shadow-sm backdrop-blur-sm transition hover:border-violet-400/90 hover:bg-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
               >
-                Acessar
+                Ir para o login
               </button>
-              <span className="text-sm font-semibold text-violet-800/70">Acesse sua conta para continuar.</span>
             </div>
           </div>
+        </aside>
 
-          {/* detalhes sutis */}
-          <div className="pointer-events-none absolute -right-32 -top-32 h-72 w-72 rounded-full bg-violet-300/35 blur-[80px]" aria-hidden />
-          <div className="pointer-events-none absolute -left-24 bottom-[-120px] h-72 w-72 rounded-full bg-fuchsia-200/40 blur-[90px]" aria-hidden />
-        </section>
-
-        {/* Lado direito (card clean) */}
-        <section className="flex flex-col justify-center">
-          <div className="rounded-[28px] border border-black/[0.06] bg-white px-7 py-10 shadow-[0_18px_48px_rgba(17,24,39,0.10)] sm:px-9 sm:py-12">
-            <div className="mx-auto w-full max-w-[420px]">
-              <h2 className="text-xl font-extrabold tracking-tight text-[#111827]">Faça login com email e senha</h2>
-              <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">
-                Use seu e-mail ou CPF para entrar na plataforma.
+        {/* Coluna direita ~60%: fundo e card centralizado verticalmente */}
+        <section className="flex min-h-0 items-center justify-center bg-white/80 p-0 sm:bg-[#faf9ff] lg:col-span-3 lg:rounded-l-none lg:rounded-r-3xl lg:border lg:border-slate-200/80 lg:border-l-0 lg:bg-white lg:px-10 lg:py-10 xl:px-12">
+          <div
+            className="w-full max-w-[400px] rounded-2xl border border-slate-200/80 bg-white px-6 py-8 shadow-[0_12px_40px_-8px_rgba(15,23,42,0.08),0_4px_12px_-4px_rgba(15,23,42,0.04)] sm:px-7 sm:py-9"
+            id="login-card"
+          >
+            <header className="text-left">
+              <h2 className="text-lg font-bold tracking-[-0.02em] text-[#0f172a] sm:text-xl">
+                Faça login com email e senha
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#64748b]">
+                Use e-mail ou CPF para acessar sua conta.
               </p>
+            </header>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4" noValidate>
-              <div>
+            <form onSubmit={handleSubmit(onSubmit)} className="mt-7 flex flex-col gap-5" noValidate>
+              <div className="space-y-1.5">
+                <label htmlFor="login" className="text-xs font-semibold text-[#475569]">
+                  E-mail ou CPF
+                </label>
                 <input
                   id="login"
                   type="text"
                   autoComplete="username"
-                  placeholder="E-mail ou CPF"
+                  placeholder="nome@exemplo.com ou 000.000.000-00"
                   className={cn(
-                    "h-12 w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
-                    errors.login && "border-red-400 focus:border-red-400 focus:ring-red-100",
+                    "h-11 w-full rounded-xl border border-slate-200/90 bg-slate-50/80 px-3.5 text-[15px] font-medium text-slate-900 shadow-inner shadow-white/40 outline-none transition ring-0 placeholder:text-slate-400",
+                    "focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100",
+                    errors.login && "border-red-300 focus:border-red-400 focus:ring-red-100",
                   )}
                   {...register("login")}
                 />
-                {errors.login ? <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.login.message}</p> : null}
+                {errors.login ? <p className="text-xs font-medium text-red-600">{errors.login.message}</p> : null}
               </div>
 
-              <div>
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-xs font-semibold text-[#475569]">
+                  Senha
+                </label>
                 <div className="relative">
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
-                    placeholder="Senha"
+                    placeholder="••••••••"
                     className={cn(
-                      "h-12 w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 pr-12 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
-                      errors.password && "border-red-400 focus:border-red-400 focus:ring-red-100",
+                      "h-11 w-full rounded-xl border border-slate-200/90 bg-slate-50/80 py-0 pl-3.5 pr-11 text-[15px] font-medium text-slate-900 shadow-inner shadow-white/40 outline-none transition placeholder:text-slate-400",
+                      "focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100",
+                      errors.password && "border-red-300 focus:border-red-400 focus:ring-red-100",
                     )}
                     {...register("password")}
                   />
                   <button
                     type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100/90 hover:text-slate-700"
                     onClick={() => setShowPassword((p) => !p)}
                     aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {errors.password ? <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.password.message}</p> : null}
+                {errors.password ? <p className="text-xs font-medium text-red-600">{errors.password.message}</p> : null}
               </div>
 
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <label className="flex cursor-pointer items-center gap-2.5 select-none">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-0.5">
+                <label className="inline-flex cursor-pointer select-none items-center gap-2">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-600/30"
+                    className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
                     {...register("remember")}
                   />
-                  <span className="text-sm font-medium text-[#6B7280]">Lembrar-me</span>
+                  <span className="text-sm font-medium text-[#64748b]">Lembrar-me</span>
                 </label>
                 <button
                   type="button"
-                  className="text-sm font-semibold text-violet-700 hover:underline"
+                  className="text-sm font-semibold text-violet-700 underline-offset-2 hover:underline"
                   onClick={() => toast.info("Em breve: recuperação de senha. Fale com o administrador.")}
                 >
                   Esqueci minha senha
@@ -189,20 +218,16 @@ export function LoginClient() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="mt-2 h-12 w-full rounded-2xl bg-violet-700 text-sm font-extrabold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-60"
+                className="mt-1 h-11 w-full rounded-xl bg-violet-600 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 disabled:opacity-60"
               >
                 {isSubmitting ? "Acessando…" : "Acessar"}
               </button>
             </form>
 
-            <p className="mt-8 text-center text-xs text-[#9CA3AF]">
-              © {new Date().getFullYear()} {BRAND_NAME}
-            </p>
+            <p className="mt-8 text-center text-[11px] leading-tight text-slate-400">© {new Date().getFullYear()} {BRAND_NAME}</p>
           </div>
-        </div>
         </section>
       </div>
     </div>
   );
 }
-
