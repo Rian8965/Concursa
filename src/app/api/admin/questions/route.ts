@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
 import { Prisma } from "@prisma/client";
 import type { Difficulty } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -135,6 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const linkCols = await getQuestionOptionalLinkColumns(prisma);
     const question = await prisma.question.create({
       data: {
         content,
@@ -143,8 +145,8 @@ export async function POST(req: NextRequest) {
         subjectId: optRelationId(subjectId),
         topicId: optRelationId(topicId),
         examBoardId: optRelationId(examBoardId),
-        cityId: optRelationId(cityId),
-        jobRoleId: optRelationId(jobRoleId),
+        ...(linkCols.hasCityId ? { cityId: optRelationId(cityId) } : {}),
+        ...(linkCols.hasJobRoleId ? { jobRoleId: optRelationId(jobRoleId) } : {}),
         difficulty: parseDifficulty(difficulty),
         year: parseYear(year),
         correctAnswer,

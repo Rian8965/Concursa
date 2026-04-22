@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
 import { deleteImportPdfFile } from "@/lib/import-pdf-storage";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -96,6 +97,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     try {
+      const linkCols = await getQuestionOptionalLinkColumns(prisma);
       afterReview = await prisma.$transaction(async (tx) => {
         for (const d of decisions) {
           if (d.action === "approve") {
@@ -154,8 +156,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                 subjectId,
                 topicId,
                 examBoardId: importRow.examBoardId ?? null,
-                cityId: importRow.cityId ?? null,
-                jobRoleId: importRow.jobRoleId ?? null,
+                ...(linkCols.hasCityId ? { cityId: importRow.cityId ?? null } : {}),
+                ...(linkCols.hasJobRoleId ? { jobRoleId: importRow.jobRoleId ?? null } : {}),
                 year: importRow.year ?? null,
                 competitionId: importRow.competitionId ?? null,
                 importId: id,

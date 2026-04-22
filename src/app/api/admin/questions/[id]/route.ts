@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
 import { Prisma } from "@prisma/client";
 import type { Difficulty, QuestionStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -90,6 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   try {
+    const linkCols = await getQuestionOptionalLinkColumns(prisma);
     const question = await prisma.$transaction(async (tx) => {
       await tx.alternative.deleteMany({ where: { questionId: id } });
       return tx.question.update({
@@ -104,8 +106,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           subjectId: optRelationId(subjectId),
           topicId: optRelationId(topicId),
           examBoardId: optRelationId(examBoardId),
-          cityId: optRelationId(cityId),
-          jobRoleId: optRelationId(jobRoleId),
+          ...(linkCols.hasCityId ? { cityId: optRelationId(cityId) } : {}),
+          ...(linkCols.hasJobRoleId ? { jobRoleId: optRelationId(jobRoleId) } : {}),
           year: parseYear(year),
           hasImage: Boolean(hasImage && imageUrl),
           imageUrl: typeof imageUrl === "string" && imageUrl.length > 0 ? imageUrl : null,
