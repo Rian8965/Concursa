@@ -342,9 +342,9 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
               },
               {
                 icon: History,
-                label: "Revisar Erros",
-                desc: "Questões que errei",
-                href: `/concursos/${id}/historico`,
+                label: "Revisar erros",
+                desc: "Explicação e resposta correta",
+                href: "/revisar-erros",
                 primary: false,
               },
             ].map((action) => (

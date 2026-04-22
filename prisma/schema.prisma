@@ -439,6 +439,8 @@ model StudentAnswer {
   questionId       String
   selectedAnswer   String
   isCorrect        Boolean
+  /// Explicação curta (IA) do porquê a resposta do aluno estava incorreta
+  aiExplanation    String?     @db.Text
   timeSpentSeconds Int?
   answeredAt       DateTime    @default(now())
   sessionType      SessionType

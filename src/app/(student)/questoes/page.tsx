@@ -81,9 +81,21 @@ export default async function QuestoesPage() {
                       {ans.isCorrect ? "Correta" : "Incorreta"}
                     </span>
                   </div>
+                  {ans.question.supportText ? (
+                    <div className="mb-3 rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2 text-xs leading-relaxed text-slate-700">
+                      <span className="font-bold text-violet-800">Texto de apoio: </span>
+                      <span className="line-clamp-3 whitespace-pre-wrap">{ans.question.supportText}</span>
+                    </div>
+                  ) : null}
                   <p className="text-[13.5px] leading-relaxed text-[var(--text-secondary)]">
-                    {ans.question.content.length > 180 ? `${ans.question.content.slice(0, 180)}…` : ans.question.content}
+                    {ans.question.content.length > 220 ? `${ans.question.content.slice(0, 220)}…` : ans.question.content}
                   </p>
+                  {((ans.question.hasImage && ans.question.imageUrl) || (ans.question.imageUrl && String(ans.question.imageUrl).trim())) && (
+                    <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ans.question.imageUrl!} alt="" className="max-h-48 w-full object-contain" />
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
                     <span>
                       Sua resposta:{" "}
@@ -96,6 +108,12 @@ export default async function QuestoesPage() {
                     )}
                     <span className="ml-auto font-medium">{formatDate(ans.answeredAt)}</span>
                   </div>
+                  {!ans.isCorrect && ans.aiExplanation && (
+                    <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2 text-xs leading-relaxed text-amber-950/90">
+                      <span className="font-bold text-amber-900/90">Dica: </span>
+                      {ans.aiExplanation}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

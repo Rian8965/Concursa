@@ -341,11 +341,11 @@ export default function SimuladoPage() {
             </div>
           ) : null}
           <p style={{ fontSize: 15.5, color: "#1F2937", lineHeight: 1.7, fontWeight: 500, whiteSpace: "pre-wrap" }}>{q.content}</p>
-          {q.hasImage && q.imageUrl && (
+          {((q.hasImage && q.imageUrl) || (q.imageUrl && String(q.imageUrl).trim())) && (
             <div style={{ marginTop: 12 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={q.imageUrl}
+                src={q.imageUrl!}
                 alt=""
                 style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }}
               />

@@ -253,15 +253,35 @@ export default function RevisaoImportacaoPage() {
   }
 
   async function saveReview() {
+    const decided = Object.entries(decisions)
+      .filter(([, d]) => d !== "pending")
+      .map(([qId, action]) => ({ questionId: qId, action, subjectId: subjectMap[qId] || undefined }));
+    if (decided.length === 0) {
+      toast.info("Nada para integrar: marque questões como aprovar ou rejeitar (pendentes permanecem na revisão).");
+      return;
+    }
     setSaving(true);
-    const decided = Object.entries(decisions).filter(([, d]) => d !== "pending").map(([qId, action]) => ({ questionId: qId, action, subjectId: subjectMap[qId] || undefined }));
     const res = await fetch(`/api/admin/imports/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ decisions: decided }),
     });
-    if (res.ok) { toast.success("Revisão salva!"); router.push("/admin/importacoes"); }
-    else toast.error("Erro ao salvar revisão");
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      importStatus?: "REVIEW_PENDING" | "COMPLETED";
+      stillInReview?: number;
+    };
+    if (res.ok) {
+      await refreshImport();
+      if (data.importStatus === "REVIEW_PENDING" || (data.stillInReview != null && data.stillInReview > 0)) {
+        toast.success("Questões aprovadas enviadas ao banco. Continue a revisão ou salve de novo depois.");
+      } else {
+        toast.success("Revisão concluída para esta importação.");
+        router.push("/admin/importacoes");
+      }
+    } else {
+      toast.error(data.error?.trim() || "Erro ao salvar revisão");
+    }
     setSaving(false);
   }
 

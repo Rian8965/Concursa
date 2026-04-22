@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   X,
+  Lightbulb,
 } from "lucide-react";
 
 const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -25,6 +26,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Meus Concursos", href: "/concursos", icon: Trophy },
   { label: "Questões", href: "/questoes", icon: BookOpen },
+  { label: "Revisar erros", href: "/revisar-erros", icon: Lightbulb },
   { label: "Desempenho", href: "/desempenho", icon: BarChart3 },
   { label: "Histórico", href: "/historico", icon: History },
 ];

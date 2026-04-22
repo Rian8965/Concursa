@@ -23,6 +23,8 @@ interface AnswerState {
   selected: string | null;
   isCorrect: boolean | null;
   revealed: boolean;
+  /** explicação da IA (só em erro) */
+  aiExplanation?: string | null;
 }
 
 const QUANTITIES = [5, 10, 15, 20];
@@ -86,8 +88,16 @@ export default function TreinoPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ questionId: q.id, selectedAnswer: letter }),
     });
-    const data = await res.json();
-    setAnswers((prev) => ({ ...prev, [q.id]: { selected: letter, isCorrect: data.isCorrect, revealed: true } }));
+    const data = await res.json() as { isCorrect: boolean; aiExplanation?: string | null };
+    setAnswers((prev) => ({
+      ...prev,
+      [q.id]: {
+        selected: letter,
+        isCorrect: data.isCorrect,
+        revealed: true,
+        aiExplanation: data.isCorrect ? null : (data.aiExplanation ?? null),
+      },
+    }));
   }
 
   const finishSession = useCallback(async () => {
@@ -333,6 +343,7 @@ export default function TreinoPage() {
   const q = questions[currentIdx];
   if (!q) return null;
   const ans = answers[q.id];
+  const showQuestionImage = Boolean((q.hasImage && q.imageUrl) || (q.imageUrl && String(q.imageUrl).trim().length > 0));
   const progress = ((currentIdx) / questions.length) * 100;
 
   return (
@@ -381,7 +392,7 @@ export default function TreinoPage() {
         <p style={{ fontSize: 15.5, color: "#1F2937", lineHeight: 1.7, fontWeight: 500, whiteSpace: "pre-wrap" }}>
           {q.content}
         </p>
-        {q.hasImage && q.imageUrl && (
+        {showQuestionImage && q.imageUrl && (
           <div style={{ marginTop: 12 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -437,6 +448,22 @@ export default function TreinoPage() {
           );
         })}
       </div>
+
+        {ans?.revealed && ans.isCorrect === false && ans.aiExplanation ? (
+          <div
+            style={{
+              marginTop: 14,
+              marginBottom: 8,
+              padding: 14,
+              background: "#FFFBEB",
+              borderRadius: 12,
+              border: "1px solid #FDE68A",
+            }}
+          >
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#B45309", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Por que errou</p>
+            <p style={{ fontSize: 14, color: "#78350F", lineHeight: 1.65 }}>{ans.aiExplanation}</p>
+          </div>
+        ) : null}
 
       {/* Actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

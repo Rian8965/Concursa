@@ -243,9 +243,9 @@ export default async function StudentDashboardPage() {
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Revisar Erros",
-                  desc: "Questões que errei",
-                  href: "/historico",
+                  label: "Revisar erros",
+                  desc: "Questões erradas com explicação",
+                  href: "/revisar-erros",
                   accent: "#D97706",
                 },
               ].map((action) => (

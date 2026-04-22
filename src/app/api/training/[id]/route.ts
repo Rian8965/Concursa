@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { generateWrongAnswerExplanation } from "@/lib/ai/explain-wrong-answer";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -20,6 +21,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const isCorrect = question.correctAnswer === selectedAnswer;
 
+  let aiExplanation: string | null = null;
+  if (!isCorrect) {
+    aiExplanation = await generateWrongAnswerExplanation({
+      content: question.content,
+      supportText: question.supportText,
+      alternatives: question.alternatives.map((a) => ({ letter: a.letter, content: a.content })),
+      selectedAnswer,
+      correctAnswer: question.correctAnswer,
+    });
+  }
+
   await prisma.studentAnswer.create({
     data: {
       studentProfileId: profile.id,
@@ -28,10 +40,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       isCorrect,
       sessionType: "TRAINING",
       sessionId: id,
+      aiExplanation: isCorrect ? null : aiExplanation,
     },
   });
 
-  return NextResponse.json({ isCorrect, correctAnswer: question.correctAnswer });
+  return NextResponse.json({
+    isCorrect,
+    correctAnswer: question.correctAnswer,
+    aiExplanation: isCorrect ? null : aiExplanation,
+  });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
