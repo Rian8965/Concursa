@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { extractPdfFullTextWithDocumentAi } from "@/lib/docai/extract-pdf-fulltext";
 
 export const runtime = "nodejs";
@@ -133,10 +134,8 @@ export async function POST(req: Request) {
   ].join("\n");
 
   const llm = await runLlmJson(system, user);
-  let draft: EditalDraft | null = null;
-  try {
-    draft = JSON.parse(llm.jsonText) as EditalDraft;
-  } catch (e) {
+  const robust = parseLlmJsonRobustly(llm.jsonText);
+  if (!robust.ok) {
     // #region agent log
     fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
       method: "POST",
@@ -152,9 +151,9 @@ export async function POST(req: Request) {
       }),
     }).catch(() => {});
     // #endregion
-    const msg = e instanceof Error ? e.message : "JSON inválido";
-    return NextResponse.json({ error: `IA retornou JSON inválido: ${msg}` }, { status: 500 });
+    return NextResponse.json({ error: `IA retornou JSON inválido: ${robust.message}` }, { status: 500 });
   }
+  const draft = robust.value as EditalDraft;
 
   const elapsedMs = Date.now() - startedAt;
 

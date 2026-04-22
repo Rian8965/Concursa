@@ -4,6 +4,7 @@ import { saveImportPdfBuffer } from "@/lib/import-pdf-storage";
 import { NextRequest, NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 import {
   extractGabaritoSectionFromProvaFullText,
@@ -310,21 +311,26 @@ export async function POST(req: NextRequest) {
       ].join("\n\n");
 
       const llm = await runLlmJson(system, user);
-      const llmParsed = safeJsonParse<any>(llm.jsonText, "Resposta JSON do modelo (IA)");
-      if (!llmParsed.ok) {
+      const llmRobust = parseLlmJsonRobustly(llm.jsonText);
+      if (!llmRobust.ok) {
+        const detail = `Resposta JSON do modelo (IA): ${llmRobust.message}`;
         await prisma.pDFImport.update({
           where: { id: pdfImport.id },
-          data: { status: "FAILED", processingError: llmParsed.message.slice(0, 500) },
+          data: { status: "FAILED", processingError: detail.slice(0, 500) },
         });
         return NextResponse.json(
           {
             error: "O modelo devolveu JSON inválido ou truncado. Tente processar de novo ou use o pipeline Python.",
-            detail: llmParsed.message,
+            detail,
           },
           { status: 422 },
         );
       }
-      const parsed = llmParsed.value;
+      const parsed = llmRobust.value as {
+        baseTexts?: unknown;
+        questions?: unknown;
+        meta?: unknown;
+      };
 
       const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
       const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];

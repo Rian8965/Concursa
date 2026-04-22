@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 
 export const runtime = "nodejs";
@@ -181,16 +182,20 @@ export async function POST(req: Request) {
   ].join("\n\n");
 
   const llm = await runLlmJson(system, user);
-
-  let parsed: any = null;
-  try {
-    parsed = JSON.parse(llm.jsonText);
-  } catch {
+  const robust = parseLlmJsonRobustly(llm.jsonText);
+  if (!robust.ok) {
     return NextResponse.json(
-      { error: "A IA não retornou JSON válido.", provider: llm.provider, model: llm.model, raw: llm.jsonText.slice(0, 2000) },
+      {
+        error: "A IA não retornou JSON válido.",
+        detail: robust.message,
+        provider: llm.provider,
+        model: llm.model,
+        raw: llm.jsonText.slice(0, 2000),
+      },
       { status: 502 },
     );
   }
+  const parsed: any = robust.value;
 
   const elapsedMs = Date.now() - startedAt;
 

@@ -1,4 +1,5 @@
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 
 /**
  * Classificação em lote (uma chamada) via Gemini ou OpenAI.
@@ -27,7 +28,12 @@ ${items
 
   try {
     const { jsonText } = await runLlmJson(system, user);
-    const parsed = JSON.parse(jsonText) as { items?: Array<{ id: string; needsTextSupport?: boolean; needsFigure?: boolean }> };
+    const robust = parseLlmJsonRobustly(jsonText);
+    if (!robust.ok) {
+      console.error("[enunciado-llm] parse failed", robust.message);
+      return null;
+    }
+    const parsed = robust.value as { items?: Array<{ id: string; needsTextSupport?: boolean; needsFigure?: boolean }> };
     const out: Record<string, { needsTextSupport: boolean; needsFigure: boolean }> = {};
     for (const it of parsed.items ?? []) {
       if (!it?.id) continue;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 
 export const runtime = "nodejs";
 
@@ -93,12 +94,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // #endregion
 
   const llm = await runLlmJson(system, user);
-  let out: LlmOut;
-  try {
-    out = JSON.parse(llm.jsonText) as LlmOut;
-  } catch {
-    return NextResponse.json({ error: "IA retornou JSON inválido" }, { status: 500 });
+  const robust = parseLlmJsonRobustly(llm.jsonText);
+  if (!robust.ok) {
+    return NextResponse.json({ error: "IA retornou JSON inválido", detail: robust.message }, { status: 500 });
   }
+  const out = robust.value as LlmOut;
 
   const examBoardAcronym = norm(out.examBoardAcronym).toUpperCase();
   const cityName = norm(out.cityName);

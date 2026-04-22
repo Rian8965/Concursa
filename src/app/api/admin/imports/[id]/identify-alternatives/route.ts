@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { readImportPdfBuffer } from "@/lib/import-pdf-storage";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
+import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 
 export const runtime = "nodejs";
@@ -140,12 +141,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const user = ["TRECHO OCR:", picked].join("\n\n");
 
   const llm = await runLlmJson(system, user);
-  let parsed: any;
-  try {
-    parsed = JSON.parse(llm.jsonText);
-  } catch {
-    return NextResponse.json({ error: "IA não retornou JSON válido.", raw: llm.jsonText.slice(0, 1200) }, { status: 502 });
+  const robust = parseLlmJsonRobustly(llm.jsonText);
+  if (!robust.ok) {
+    return NextResponse.json(
+      { error: "IA não retornou JSON válido.", detail: robust.message, raw: llm.jsonText.slice(0, 1200) },
+      { status: 502 },
+    );
   }
+  const parsed = robust.value as { alternatives?: unknown[] };
 
   const alternatives = Array.isArray(parsed?.alternatives) ? parsed.alternatives : [];
   const cleaned = alternatives
