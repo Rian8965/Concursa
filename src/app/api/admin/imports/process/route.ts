@@ -11,6 +11,11 @@ import {
   parseGabaritoMap,
   resolveCorrectAnswerForImportedQuestion,
 } from "@/lib/import/gabarito";
+import {
+  coerceMetaYear,
+  matchExamBoardBancaToId,
+  matchSubjectNameToId,
+} from "@/lib/import/import-meta-match";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
@@ -336,13 +341,15 @@ export async function POST(req: NextRequest) {
       const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
 
       const yearHint = pdfImport.year;
-      const aiMetaRaw = parsed?.meta && typeof parsed.meta === "object" ? { ...parsed.meta } : {};
+      const aiMetaRaw = (
+        parsed?.meta && typeof parsed.meta === "object" ? { ...parsed.meta } : {}
+      ) as Record<string, unknown>;
       const mergedMeta = {
         ...aiMetaRaw,
-        concurso: aiMetaRaw.concurso ?? concurso ?? undefined,
-        city: aiMetaRaw.city ?? cidade ?? undefined,
-        banca: aiMetaRaw.banca ?? banca ?? undefined,
-        materia: aiMetaRaw.materia ?? materia ?? undefined,
+        concurso: (aiMetaRaw.concurso as string | undefined) ?? concurso ?? undefined,
+        city: (aiMetaRaw.city as string | undefined) ?? cidade ?? undefined,
+        banca: (aiMetaRaw.banca as string | undefined) ?? banca ?? undefined,
+        materia: (aiMetaRaw.materia as string | undefined) ?? materia ?? undefined,
         ano:
           aiMetaRaw.ano != null && aiMetaRaw.ano !== ""
             ? aiMetaRaw.ano
@@ -431,6 +438,18 @@ export async function POST(req: NextRequest) {
         return Math.max(0.05, Math.min(0.98, Number(c.toFixed(2))));
       }
 
+      const impRow = await prisma.pDFImport.findUnique({ where: { id: pdfImport.id } });
+      const [subjectRows, examBoardRows] = await Promise.all([
+        prisma.subject.findMany({ select: { id: true, name: true, slug: true } }),
+        prisma.examBoard.findMany({ select: { id: true, name: true, acronym: true } }),
+      ]);
+      const mm = mergedMeta as Record<string, unknown>;
+      const bancaStr = typeof mm.banca === "string" ? mm.banca : null;
+      const materiaGlobal = typeof mm.materia === "string" ? mm.materia : null;
+      const yGlobal = coerceMetaYear(mm.ano, yearHint) ?? yearHint;
+      const examIdGlobal = matchExamBoardBancaToId(bancaStr, examBoardRows, impRow?.examBoardId ?? null);
+      const subjFromGlobal = matchSubjectNameToId(materiaGlobal, subjectRows) ?? (subjectId || null);
+
       // 3.2) Criar questões importadas e (se aplicável) vínculos com o texto-base compartilhado
       let createdCount = 0;
       const createdByNumber = new Map<number, string>();
@@ -467,13 +486,21 @@ export async function POST(req: NextRequest) {
 
         const confidence = computeHeuristicConfidence({ statement, alternatives, correctAnswer, number: number ?? undefined });
 
+        const perSubj =
+          (materiaQuestao ? matchSubjectNameToId(materiaQuestao, subjectRows) : null) ?? subjFromGlobal;
+
         const created = await prisma.importedQuestion.create({
           data: {
             importId: pdfImport.id,
             content: statement,
             alternatives,
             correctAnswer,
-            suggestedSubjectId: subjectId ?? null,
+            suggestedSubjectId: perSubj,
+            year: yGlobal,
+            examBoardId: examIdGlobal,
+            competitionId: impRow?.competitionId ?? null,
+            cityId: impRow?.cityId ?? null,
+            jobRoleId: impRow?.jobRoleId ?? null,
             sourcePage: null,
             sourcePosition: idx + 1,
             hasImage: false,
@@ -646,7 +673,19 @@ export async function POST(req: NextRequest) {
     const finalBanca = banca ?? inferred.banca ?? null;
     const finalConcurso = concurso ?? inferred.concurso ?? null;
     const finalCidade = cidade ?? inferred.cidade ?? null;
-    const finalAno = year ? parseInt(year) : (inferred.ano ?? null);
+    const finalAno = year ? parseInt(String(year), 10) : (inferred.ano ?? null);
+    const importSnap = await prisma.pDFImport.findUnique({ where: { id: pdfImport.id } });
+    const [subjectRows, examBoardRows] = await Promise.all([
+      prisma.subject.findMany({ select: { id: true, name: true, slug: true } }),
+      prisma.examBoard.findMany({ select: { id: true, name: true, acronym: true } }),
+    ]);
+    const yForm = year ? parseInt(String(year), 10) : null;
+    const yearNum =
+      coerceMetaYear(inferred.ano, yForm != null && !Number.isNaN(yForm) ? yForm : null) ??
+      (typeof finalAno === "number" && !Number.isNaN(finalAno) ? finalAno : null) ??
+      importSnap?.year ??
+      null;
+    const examResolved = matchExamBoardBancaToId(finalBanca, examBoardRows, importSnap?.examBoardId ?? null);
 
     // Salvar questões extraídas no banco
     const questionsIn = Array.isArray(result.questions) ? result.questions : [];
@@ -663,30 +702,39 @@ export async function POST(req: NextRequest) {
       suggested_subject?: string | null;
       suggested_subject_confidence?: string | null;
       suggested_subject_alternatives?: string[] | null;
-    }) => ({
-      importId: pdfImport.id,
-      content: q.content,
-      alternatives: q.alternatives,
-      correctAnswer: q.correct_answer ?? null,
-      suggestedSubjectId: subjectId ?? null,
-      // Guardar sugestão de matéria como JSON no log da questão
-      sourcePage: q.source_page ?? null,
-      sourcePosition: q.source_position ?? null,
-      hasImage: q.has_image ?? false,
-      imageUrl: q.image_base64 ?? null,
-      rawText: q.raw_text ?? null,
-      confidence: q.confidence ?? null,
-      status: "PENDING_REVIEW" as const,
-      // Guardar classificação automática no raw_text estendido
-      ...(q.suggested_subject ? {
-        rawText: JSON.stringify({
-          originalText: q.raw_text,
-          suggestedSubject: q.suggested_subject,
-          suggestedSubjectConfidence: q.suggested_subject_confidence,
-          suggestedSubjectAlternatives: q.suggested_subject_alternatives,
-        }),
-      } : {}),
-    }));
+    }) => {
+      const subjResolved =
+        (q.suggested_subject ? matchSubjectNameToId(q.suggested_subject, subjectRows) : null) ??
+        importSnap?.subjectId ??
+        (subjectId || null) ??
+        null;
+      return {
+        importId: pdfImport.id,
+        content: q.content,
+        alternatives: q.alternatives,
+        correctAnswer: q.correct_answer ?? null,
+        suggestedSubjectId: subjResolved,
+        year: yearNum,
+        examBoardId: examResolved,
+        competitionId: importSnap?.competitionId,
+        cityId: importSnap?.cityId,
+        jobRoleId: importSnap?.jobRoleId,
+        sourcePage: q.source_page ?? null,
+        sourcePosition: q.source_position ?? null,
+        hasImage: q.has_image ?? false,
+        imageUrl: q.image_base64 ?? null,
+        rawText: q.suggested_subject
+          ? JSON.stringify({
+              originalText: q.raw_text,
+              suggestedSubject: q.suggested_subject,
+              suggestedSubjectConfidence: q.suggested_subject_confidence,
+              suggestedSubjectAlternatives: q.suggested_subject_alternatives,
+            })
+          : (q.raw_text ?? null),
+        confidence: q.confidence ?? null,
+        status: "PENDING_REVIEW" as const,
+      };
+    });
 
     if (importedQuestions.length > 0) {
       await prisma.importedQuestion.createMany({ data: importedQuestions });

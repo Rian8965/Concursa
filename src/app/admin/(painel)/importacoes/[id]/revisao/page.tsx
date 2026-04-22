@@ -31,6 +31,11 @@ import {
   metaMissingLabels,
 } from "@/lib/import/imported-question-meta";
 import type { ImportContextMeta } from "@/lib/import/imported-question-meta";
+import {
+  coerceMetaYear,
+  matchExamBoardBancaToId,
+  matchSubjectNameToId,
+} from "@/lib/import/import-meta-match";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
@@ -116,6 +121,9 @@ function parseAiMeta(rawText?: string | null): {
   }
 }
 
+type SubjectOption = { id: string; name: string; slug: string };
+type ExamBoardOption = { id: string; name: string; acronym: string };
+
 type ImportMetaRow = {
   banca: string;
   materia: string;
@@ -184,6 +192,7 @@ interface ImportData {
   competitionId?: string | null;
   cityId?: string | null;
   jobRoleId?: string | null;
+  subjectId?: string | null;
   competition?: { name: string } | null;
   examBoard?: { name: string; acronym: string } | null;
   subject?: { name: string } | null;
@@ -279,6 +288,7 @@ function canApproveImportQuestion(
     competitionId: imp.competitionId ?? null,
     cityId: imp.cityId ?? null,
     jobRoleId: imp.jobRoleId ?? null,
+    subjectId: imp.subjectId ?? null,
   };
   const diff = (draft.difficulty === "EASY" || draft.difficulty === "MEDIUM" || draft.difficulty === "HARD"
     ? draft.difficulty
@@ -310,9 +320,9 @@ export default function RevisaoImportacaoPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
   const [imp, setImp] = useState<ImportData | null>(null);
-  const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
+  const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
-  const [examBoards, setExamBoards] = useState<{ id: string; name: string; acronym: string }[]>([]);
+  const [examBoards, setExamBoards] = useState<ExamBoardOption[]>([]);
   const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [cities, setCities] = useState<{ id: string; name: string; state: string }[]>([]);
   const [jobRoles, setJobRoles] = useState<{ id: string; name: string }[]>([]);
@@ -375,10 +385,12 @@ export default function RevisaoImportacaoPage() {
       fetch("/api/admin/competitions?limit=500&page=1").then((r) => r.json()),
       fetch("/api/admin/cities").then((r) => r.json()),
       fetch("/api/admin/job-roles").then((r) => r.json()),
-    ]).then(([impData, subData, eb, comp, cty, jr]) => {
+    ]).then(async ([impData, subData, eb, comp, cty, jr]) => {
       setImp(impData.import);
-      setSubjects(subData.subjects ?? []);
-      setExamBoards(eb.examBoards ?? []);
+      const subList: SubjectOption[] = (subData.subjects ?? []).map((s: { id: string; name: string; slug: string }) => s);
+      setSubjects(subList);
+      const ebList: ExamBoardOption[] = eb.examBoards ?? [];
+      setExamBoards(ebList);
       setCompetitions(comp.competitions ?? []);
       setCities(cty.cities ?? []);
       setJobRoles(jr.jobRoles ?? []);
@@ -404,7 +416,51 @@ export default function RevisaoImportacaoPage() {
           alternatives: q.alternatives?.map((a) => ({ ...a })) ?? [],
         };
       });
+      for (const q of impData.import.importedQuestions as ImportedQ[]) {
+        const d = ds[q.id];
+        if (!d) continue;
+        const pm = parseAiMeta(d.rawText);
+        const mStr = pm?.materia ?? (typeof pm?.meta?.materia === "string" ? pm.meta.materia : null);
+        if (!d.suggestedSubjectId && mStr) {
+          const sid = matchSubjectNameToId(mStr, subList);
+          if (sid) d.suggestedSubjectId = sid;
+        }
+        if (!d.suggestedSubjectId) {
+          const sug = parseSuggestedSubject(d.rawText);
+          if (sug?.subject) {
+            const sid = matchSubjectNameToId(sug.subject, subList);
+            if (sid) d.suggestedSubjectId = sid;
+          }
+        }
+        if (d.year == null && pm?.meta?.ano != null) {
+          const y = coerceMetaYear(pm.meta.ano, imp.year ?? null);
+          if (y != null) d.year = y;
+        }
+        if (!d.examBoardId && pm?.meta?.banca) {
+          const eid = matchExamBoardBancaToId(String(pm.meta.banca), ebList, imp.examBoardId ?? null);
+          if (eid) d.examBoardId = eid;
+        }
+      }
       setDrafts(ds);
+      const sids = new Set<string>();
+      for (const q of impData.import.importedQuestions) {
+        const sid = ds[q.id]?.suggestedSubjectId;
+        if (sid) sids.add(sid);
+      }
+      if (sids.size > 0) {
+        const topicEntries = await Promise.all(
+          [...sids].map(async (subjectId) => {
+            const r = await fetch(`/api/admin/topics?subjectId=${encodeURIComponent(subjectId)}`);
+            const data = (await r.json()) as { topics?: { id: string; name: string }[] };
+            return { subjectId, topics: r.ok && Array.isArray(data.topics) ? data.topics : [] };
+          }),
+        );
+        setTopicBySubject((prev) => {
+          const n = { ...prev };
+          for (const t of topicEntries) n[t.subjectId] = t.topics;
+          return n;
+        });
+      }
       setLoading(false);
       // #region agent log
       fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-review-ui',location:'revisao/page.tsx:loaded',message:'review page loaded import data',data:{importId:id,questionsCount:impData.import.importedQuestions?.length ?? 0,assetsCount:impData.import.importAssets?.length ?? 0,pdfAvailable:Boolean(impData.import.storedPdfPath)},timestamp:Date.now()})}).catch(()=>{});
@@ -518,12 +574,30 @@ export default function RevisaoImportacaoPage() {
     }
     const decided = Object.entries(decisions)
       .filter(([, d]) => d !== "pending")
-      .map(([qId, action]) => ({
-        questionId: qId,
-        action,
-        subjectId: drafts[qId]?.suggestedSubjectId || undefined,
-        topicId: drafts[qId]?.suggestedTopicId || undefined,
-      }));
+      .map(([qId, action]) => {
+        if (action === "reject") {
+          return { questionId: qId, action: "reject" as const };
+        }
+        const dr = drafts[qId];
+        if (!dr) {
+          return { questionId: qId, action: "approve" as const };
+        }
+        const diff: DifficultyChoice =
+          dr.difficulty === "EASY" || dr.difficulty === "MEDIUM" || dr.difficulty === "HARD" ? dr.difficulty : "MEDIUM";
+        return {
+          questionId: qId,
+          action: "approve" as const,
+          suggestedSubjectId: dr.suggestedSubjectId ?? null,
+          suggestedTopicId: dr.suggestedTopicId ?? null,
+          year: dr.year ?? null,
+          examBoardId: dr.examBoardId ?? null,
+          competitionId: dr.competitionId ?? null,
+          cityId: dr.cityId ?? null,
+          jobRoleId: dr.jobRoleId ?? null,
+          difficulty: diff,
+          tags: dr.tags ?? [],
+        };
+      });
     if (decided.length === 0) {
       toast.info("Nada para integrar: marque questões como aprovar ou rejeitar (pendentes permanecem na revisão).");
       return;

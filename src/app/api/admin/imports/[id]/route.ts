@@ -20,8 +20,10 @@ import {
 import {
   isImportedQuestionMetaComplete,
   metaMissingLabels,
+  mergeImportedMetaWithApprovePayload,
   resolveImportedQuestionPublishMeta,
   type ImportContextMeta,
+  type ImportedQuestionMetaFields,
 } from "@/lib/import/imported-question-meta";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -98,7 +100,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as {
     status?: string;
-    decisions?: { questionId: string; action: "approve" | "reject"; subjectId?: string; topicId?: string }[];
+    decisions?: {
+      questionId: string;
+      action: "approve" | "reject";
+      subjectId?: string | null;
+      topicId?: string | null;
+      suggestedSubjectId?: string | null;
+      suggestedTopicId?: string | null;
+      year?: number | null;
+      examBoardId?: string | null;
+      competitionId?: string | null;
+      cityId?: string | null;
+      jobRoleId?: string | null;
+      difficulty?: "EASY" | "MEDIUM" | "HARD";
+      tags?: string[];
+    }[];
   };
   const { status, decisions } = body;
   const reviewerId = typeof session.user.id === "string" ? session.user.id : null;
@@ -106,7 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const importRow = await prisma.pDFImport.findUnique({
     where: { id },
-    select: { id: true, competitionId: true, examBoardId: true, cityId: true, jobRoleId: true, year: true },
+    select: { id: true, competitionId: true, examBoardId: true, cityId: true, jobRoleId: true, year: true, subjectId: true },
   });
 
   let afterReview: { importStatus: "REVIEW_PENDING" | "COMPLETED"; stillInReview: number } | null = null;
@@ -122,7 +138,34 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       competitionId: importRow.competitionId,
       cityId: importRow.cityId,
       jobRoleId: importRow.jobRoleId,
+      subjectId: importRow.subjectId,
     };
+
+    function importedRowToMeta(i: {
+      suggestedSubjectId: string | null;
+      suggestedTopicId: string | null;
+      year: number | null;
+      examBoardId: string | null;
+      competitionId: string | null;
+      cityId: string | null;
+      jobRoleId: string | null;
+      difficulty: "EASY" | "MEDIUM" | "HARD";
+      tags: string[] | null;
+    }): ImportedQuestionMetaFields {
+      return {
+        suggestedSubjectId: i.suggestedSubjectId,
+        suggestedTopicId: i.suggestedTopicId,
+        year: i.year,
+        examBoardId: i.examBoardId,
+        competitionId: i.competitionId,
+        cityId: i.cityId,
+        jobRoleId: i.jobRoleId,
+        difficulty: i.difficulty,
+        tags: i.tags ?? [],
+      };
+    }
+
+    const decByQid = new Map((decisions ?? []).map((d) => [d.questionId, d] as const));
 
     try {
       const linkCols = await getQuestionOptionalLinkColumns(prisma);
@@ -199,20 +242,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             );
           }
         }
-        const metaRes = isImportedQuestionMetaComplete(
-          {
-            suggestedSubjectId: iq.suggestedSubjectId,
-            suggestedTopicId: iq.suggestedTopicId,
-            year: iq.year,
-            examBoardId: iq.examBoardId,
-            competitionId: iq.competitionId,
-            cityId: iq.cityId,
-            jobRoleId: iq.jobRoleId,
-            difficulty: iq.difficulty,
-            tags: iq.tags ?? [],
-          },
-          importCtx,
-        );
+        const decMeta = decByQid.get(d.questionId);
+        const mergedIq = mergeImportedMetaWithApprovePayload(importedRowToMeta(iq), decMeta);
+        const metaRes = isImportedQuestionMetaComplete(mergedIq, importCtx);
         if (!metaRes.ok) {
           throw new Error(
             `Questão ${d.questionId.slice(0, 8)}…: preencha os metadados: ${metaMissingLabels(metaRes.missing).join(", ")}. Guarde a questão antes de integrar.`,
@@ -251,20 +283,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               const finalImageUrl = imageFromAsset || freshIq.imageUrl || null;
               const finalHasImage = Boolean(finalImageUrl);
 
-              const meta = resolveImportedQuestionPublishMeta(
-                {
-                  suggestedSubjectId: freshIq.suggestedSubjectId,
-                  suggestedTopicId: freshIq.suggestedTopicId,
-                  year: freshIq.year,
-                  examBoardId: freshIq.examBoardId,
-                  competitionId: freshIq.competitionId,
-                  cityId: freshIq.cityId,
-                  jobRoleId: freshIq.jobRoleId,
-                  difficulty: freshIq.difficulty,
-                  tags: freshIq.tags ?? [],
-                },
-                importCtx,
-              );
+              const decMetaTx = decByQid.get(freshIq.id);
+              const mergedIqTx = mergeImportedMetaWithApprovePayload(importedRowToMeta(freshIq), decMetaTx);
+              const meta = resolveImportedQuestionPublishMeta(mergedIqTx, importCtx);
 
               let subjectId: string | null = meta.subjectId;
               if (subjectId) {
