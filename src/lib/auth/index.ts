@@ -3,7 +3,8 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
-import { loginSchema } from "@/lib/validations/auth";
+import { z } from "zod";
+import { loginCredentialsSchema, normalizeCpfDigits } from "@/lib/validations/auth";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -18,25 +19,52 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        email: { label: "E-mail", type: "email" },
+        login: { label: "E-mail ou CPF", type: "text" },
         password: { label: "Senha", type: "password" },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials);
+        const parsed = loginCredentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const { email, password } = parsed.data;
+        const { login, password } = parsed.data;
+        const trimmed = login.trim();
+        const emailParsed = z.string().email().safeParse(trimmed);
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-          include: {
-            studentProfile: {
-              include: {
-                plan: true,
+        let user = null as Awaited<ReturnType<typeof prisma.user.findUnique>> | null;
+
+        if (emailParsed.success) {
+          user = await prisma.user.findUnique({
+            where: { email: trimmed.toLowerCase() },
+            include: {
+              studentProfile: {
+                include: {
+                  plan: true,
+                },
               },
             },
-          },
-        });
+          });
+        } else {
+          const digits = normalizeCpfDigits(trimmed);
+          if (digits.length !== 11) return null;
+          const formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+          const profile = await prisma.studentProfile.findFirst({
+            where: {
+              OR: [{ cpf: digits }, { cpf: formatted }, { cpf: trimmed }],
+            },
+            include: {
+              user: {
+                include: {
+                  studentProfile: {
+                    include: {
+                      plan: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+          user = profile?.user ?? null;
+        }
 
         if (!user || !user.password) return null;
         if (!user.isActive) return null;

@@ -1,8 +1,24 @@
 import { z } from "zod";
 
+/** Apenas dígitos, para comparar CPF. */
+export function normalizeCpfDigits(input: string): string {
+  return input.replace(/\D/g, "");
+}
+
 export const loginSchema = z.object({
-  email: z.string().email("E-mail inválido"),
+  login: z
+    .string()
+    .min(1, "Informe e-mail ou CPF")
+    .refine(
+      (v) => {
+        const t = v.trim();
+        if (z.string().email().safeParse(t).success) return true;
+        return normalizeCpfDigits(t).length === 11;
+      },
+      { message: "E-mail ou CPF inválido" },
+    ),
   password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  remember: z.boolean().optional(),
 });
 
 export const registerSchema = z
@@ -46,6 +62,9 @@ export const resetPasswordSchema = z
   });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/** Apenas campos enviados ao NextAuth `authorize`. */
+export const loginCredentialsSchema = loginSchema.pick({ login: true, password: true });
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

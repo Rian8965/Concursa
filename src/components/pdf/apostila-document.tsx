@@ -93,7 +93,7 @@ export function ApostilaPdfDocument({ title, generatedAt, questions }: Props) {
             <View style={styles.header}>
               <Text style={styles.title}>{truncate(title, 120)}</Text>
               <Text style={styles.subtitle}>
-                ÓRBITA Concursos · Apostila gerada em {generatedAt}
+                Descomplique seu Concurso · Apostila gerada em {generatedAt}
               </Text>
             </View>
           ) : (

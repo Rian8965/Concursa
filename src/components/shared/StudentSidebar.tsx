@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { getPostLogoutUrl } from "@/lib/auth/post-logout-url";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
@@ -13,10 +15,11 @@ import {
   History,
   User,
   LogOut,
-  Orbit,
   Menu,
   X,
 } from "lucide-react";
+
+const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -66,7 +69,9 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         >
           <Menu className="h-5 w-5" strokeWidth={2} />
         </button>
-        <span className="student-mobile-bar__title">ÓRBITA</span>
+        <span className="student-mobile-bar__title max-w-[min(220px,52vw)] text-[11px] font-extrabold leading-tight text-[var(--text-primary)]">
+          {BRAND_NAME}
+        </span>
         <span className="student-mobile-bar__badge">Aluno</span>
       </div>
 
@@ -87,19 +92,19 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         <div className="px-5 pt-7 pb-5">
           <div className="flex items-center gap-2">
             <Link href="/dashboard" className="group flex min-w-0 flex-1 items-center gap-3.5" onClick={() => setMobileOpen(false)}>
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-[1.03]"
-                style={{
-                  background: "linear-gradient(145deg, #A855F7 0%, #7C3AED 50%, #5B21B6 100%)",
-                  boxShadow:
-                    "0 1px 0 rgba(255,255,255,0.2) inset, 0 8px 22px rgba(124,58,237,0.35), 0 2px 8px rgba(0,0,0,0.2)",
-                }}
-              >
-                <Orbit className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
+                <Image
+                  src="/brand-logo.png"
+                  alt={BRAND_NAME}
+                  width={44}
+                  height={44}
+                  className="h-full w-full object-cover"
+                  priority
+                />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[17px] font-extrabold leading-none tracking-tight text-white">ÓRBITA</p>
-                <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Concursos</p>
+                <p className="text-[12px] font-extrabold leading-snug tracking-tight text-white sm:text-[13px]">{BRAND_NAME}</p>
+                <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Área do aluno</p>
               </div>
             </Link>
             <button
@@ -160,7 +165,11 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
             <User className="h-4 w-4 shrink-0 text-white/35" />
           </Link>
 
-          <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="btn-logout">
+          <button
+            type="button"
+            onClick={() => void signOut({ callbackUrl: getPostLogoutUrl(), redirect: true })}
+            className="btn-logout"
+          >
             <LogOut className="h-[13px] w-[13px]" />
             <span>Sair</span>
           </button>

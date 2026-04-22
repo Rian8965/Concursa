@@ -20,7 +20,7 @@ export default async function AdminConfiguracoesPage() {
     <div className="orbit-stack max-w-3xl animate-fade-up">
       <PageHeader
         title="Configurações"
-        description="Identidade visual e white-label do ÓRBITA. A edição completa de cores e logos por API administrativa pode ser expandida conforme a necessidade da sua instituição."
+        description="Identidade visual e white-label da plataforma. A edição completa de cores e logos por API administrativa pode ser expandida conforme a necessidade da sua instituição."
       />
 
       {theme ? (
@@ -65,7 +65,7 @@ export default async function AdminConfiguracoesPage() {
       ) : (
         <div className="orbit-empty-state text-left sm:text-center">
           <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-            Nenhum tema cadastrado. Execute o seed do banco (<code className="rounded-md bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">npm run db:seed</code>) para criar o tema ÓRBITA padrão.
+            Nenhum tema cadastrado. Execute o seed do banco (<code className="rounded-md bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">npm run db:seed</code>) para criar o tema padrão.
           </p>
         </div>
       )}

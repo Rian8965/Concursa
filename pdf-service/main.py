@@ -1,5 +1,5 @@
 """
-ÓRBITA Concursos — PDF Processing Microservice
+Descomplique seu Concurso — PDF Processing Microservice
 FastAPI service para extração inteligente de questões de PDFs de concursos públicos.
 
 Pipeline:
@@ -35,7 +35,7 @@ from models.schemas import (
 )
 
 app = FastAPI(
-    title="ÓRBITA PDF Service",
+    title="Descomplique seu Concurso — PDF Service",
     description="Microserviço para extração inteligente de questões de PDFs de concursos",
     version="2.0.0",
 )

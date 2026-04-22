@@ -13,12 +13,12 @@ const font = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "ÓRBITA Concursos — Sua aprovação está em órbita",
-    template: "%s | ÓRBITA Concursos",
+    default: "Descomplique seu Concurso — Plataforma de estudos",
+    template: "%s | Descomplique seu Concurso",
   },
   description:
     "Plataforma premium de estudos para concursos públicos com treino inteligente, simulados cronometrados e apostilas personalizadas.",
-  keywords: ["concursos públicos", "estudos", "simulado", "questões", "aprovação", "órbita"],
+  keywords: ["concursos públicos", "estudos", "simulado", "questões", "aprovação", "descomplique seu concurso"],
   robots: "noindex, nofollow",
 };
 
