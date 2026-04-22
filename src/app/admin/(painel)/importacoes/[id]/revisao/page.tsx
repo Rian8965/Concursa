@@ -575,11 +575,15 @@ export default function RevisaoImportacaoPage() {
     };
     post("H-overflow-topbar", "topbar", document.querySelector("[data-review-topbar]"));
     post("H-overflow-card", "first-card", document.querySelector("[data-review-card]"));
+    post("H-page-gutter", "page-shell", document.querySelector("[data-review-page-shell]"));
   }, [imp?.id, loading, filteredQuestions.length]);
 
   if (loading || !imp) {
     return (
-      <div className="orbit-stack mx-auto max-w-5xl py-16 text-center">
+      <div
+        className="orbit-stack mx-auto w-full max-w-[min(1200px,100%)] px-4 py-16 text-center sm:px-6 lg:px-8"
+        data-review-page-shell
+      >
         <div
           className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-violet-200 border-t-violet-600"
           aria-hidden
@@ -590,7 +594,10 @@ export default function RevisaoImportacaoPage() {
   }
 
   return (
-    <div className="orbit-stack mx-auto w-full max-w-6xl pb-10">
+    <div
+      className="orbit-stack mx-auto w-full max-w-[min(1200px,100%)] px-4 pb-10 sm:px-6 lg:px-8"
+      data-review-page-shell
+    >
       <TopBar
         title={`Revisão: ${imp.originalFilename}`}
         subtitle={
