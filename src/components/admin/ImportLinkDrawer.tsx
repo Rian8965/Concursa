@@ -22,6 +22,8 @@ type Props = {
   linkType: PdfLinkType;
   onLinkTypeChange: (t: PdfLinkType) => void;
   onChanged: () => Promise<void> | void;
+  /** Página 1-based onde a questão aparece no PDF (abre direto nela) */
+  initialPage?: number;
 };
 
 export function ImportLinkDrawer({
@@ -36,6 +38,7 @@ export function ImportLinkDrawer({
   linkType,
   onLinkTypeChange,
   onChanged,
+  initialPage = 1,
 }: Props) {
   if (!open) return null;
 
@@ -107,6 +110,7 @@ export function ImportLinkDrawer({
             linkType={linkType}
             layout="pdfOnly"
             onLinkCreated={() => onClose()}
+            initialPage={initialPage}
           />
         </div>
       </div>

@@ -37,6 +37,8 @@ type Props = {
   onChanged: () => Promise<void> | void;
   selectedQuestionId?: string;
   onSelectedQuestionIdChange?: (id: string) => void;
+  /** Página 1-based para abrir o PDF (ex.: página da questão ao vincular texto/imagem) */
+  initialPage?: number | null;
   uiMode?: "review" | "linker" | "selector";
   linkType?: PdfLinkType;
   onBoxSelected?: (sel: { page: number; bbox: { x: number; y: number; w: number; h: number } }) => Promise<void> | void;
@@ -60,13 +62,18 @@ export function ImportPdfMarkupPanel({
   onChanged,
   selectedQuestionId,
   onSelectedQuestionIdChange,
+  initialPage,
   uiMode = "review",
   linkType = "TEXT",
   onBoxSelected,
   layout = "workspace",
   onLinkCreated,
 }: Props) {
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => {
+    const p = initialPage;
+    if (p != null && p >= 1 && Number.isFinite(p)) return Math.max(1, Math.floor(p));
+    return 1;
+  });
   const [numPages, setNumPages] = useState(0);
   const [mode, setMode] = useState<DrawMode>(null);
   const [targetQ, setTargetQ] = useState<string>(() => questions[0]?.id ?? "");
@@ -585,6 +592,12 @@ export function ImportPdfMarkupPanel({
               }
               onLoadSuccess={({ numPages: n }) => {
                 setNumPages(n);
+                setPage((cur) => {
+                  if (initialPage != null && initialPage >= 1 && Number.isFinite(initialPage)) {
+                    return Math.min(Math.max(1, Math.floor(initialPage)), n);
+                  }
+                  return Math.min(cur, n);
+                });
                 // #region agent log
                 requestAnimationFrame(() => {
                   const wrap = pageWrapRef.current;

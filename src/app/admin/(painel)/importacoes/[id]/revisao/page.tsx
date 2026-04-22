@@ -189,6 +189,17 @@ function computeReviewSuggestions(cur: ImportedQ, next?: ImportedQ) {
   return suggestions;
 }
 
+/** Página 1-based no PDF para abrir direto na questão (vínculos / identificar alternativas) */
+function resolvePdfStartPageForQuestion(q: ImportedQ, assets: ImportAssetDTO[] | undefined): number {
+  const sp = q.sourcePage;
+  if (typeof sp === "number" && sp >= 1 && Number.isFinite(sp)) return Math.floor(sp);
+  const pages = (assets ?? [])
+    .filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id))
+    .map((a) => a.page);
+  if (pages.length) return Math.min(...pages);
+  return 1;
+}
+
 export default function RevisaoImportacaoPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -202,7 +213,9 @@ export default function RevisaoImportacaoPage() {
   const rightRef = useRef<HTMLDivElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerLinkType, setDrawerLinkType] = useState<PdfLinkType>("TEXT");
+  const [linkDrawerStartPage, setLinkDrawerStartPage] = useState(1);
   const [altDrawerOpen, setAltDrawerOpen] = useState(false);
+  const [altDrawerStartPage, setAltDrawerStartPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(60);
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [search, setSearch] = useState("");
@@ -1000,6 +1013,9 @@ export default function RevisaoImportacaoPage() {
                           className="btn btn-primary mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl px-5 text-sm font-extrabold shadow-md sm:w-auto"
                           onClick={() => {
                             setSelectedQ(q.id);
+                            setAltDrawerStartPage(
+                              resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
+                            );
                             setAltDrawerOpen(true);
                           }}
                         >
@@ -1065,11 +1081,17 @@ export default function RevisaoImportacaoPage() {
                         onRefresh={refreshImport}
                         onOpenLinkText={() => {
                           setSelectedQ(q.id);
+                          setLinkDrawerStartPage(
+                            resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
+                          );
                           setDrawerLinkType("TEXT");
                           setDrawerOpen(true);
                         }}
                         onOpenLinkImage={() => {
                           setSelectedQ(q.id);
+                          setLinkDrawerStartPage(
+                            resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
+                          );
                           setDrawerLinkType("IMAGE");
                           setDrawerOpen(true);
                         }}
@@ -1115,6 +1137,7 @@ export default function RevisaoImportacaoPage() {
         linkType={drawerLinkType}
         onLinkTypeChange={setDrawerLinkType}
         onChanged={refreshImport}
+        initialPage={linkDrawerStartPage}
       />
 
       <ImportIdentifyAlternativesDrawer
@@ -1128,6 +1151,7 @@ export default function RevisaoImportacaoPage() {
         onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
         existingAlternatives={(drafts[selectedQ]?.alternatives ?? []) as any}
         onApply={async (mode, alternatives) => applyAlternativesFromAi(selectedQ, mode, alternatives)}
+        initialPage={altDrawerStartPage}
       />
     </div>
   );

@@ -24,6 +24,8 @@ type Props = {
   onSelectedQuestionIdChange: (id: string) => void;
   existingAlternatives: Alt[];
   onApply: (mode: "replace" | "merge", alternatives: Alt[]) => Promise<void> | void;
+  /** Página 1-based para abrir o PDF na questão corrente */
+  initialPage?: number;
 };
 
 function mergeAlternatives(existing: Alt[], incoming: Alt[]) {
@@ -55,6 +57,7 @@ export function ImportIdentifyAlternativesDrawer({
   onSelectedQuestionIdChange,
   existingAlternatives,
   onApply,
+  initialPage,
 }: Props) {
   const [stage, setStage] = useState<"select" | "preview">("select");
   const [busy, setBusy] = useState(false);
@@ -147,6 +150,7 @@ export function ImportIdentifyAlternativesDrawer({
               onChanged={() => {}}
               selectedQuestionId={selectedQuestionId}
               onSelectedQuestionIdChange={onSelectedQuestionIdChange}
+              initialPage={initialPage}
               layout="pdfOnly"
               uiMode="selector"
               onBoxSelected={async ({ page, bbox }) => {
