@@ -450,6 +450,10 @@ export async function POST(req: NextRequest) {
       const examIdGlobal = matchExamBoardBancaToId(bancaStr, examBoardRows, impRow?.examBoardId ?? null);
       const subjFromGlobal = matchSubjectNameToId(materiaGlobal, subjectRows) ?? (subjectId || null);
 
+      // #region agent log H-SRV-GLOBAL
+      fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-SRV-GLOBAL',location:'process/route.ts:global-meta',message:'AI pipeline global meta resolved',data:{bancaStr,materiaGlobal,yGlobal,examIdGlobal,subjFromGlobal,subjectRowsCount:subjectRows.length,subjectRowsNames:subjectRows.slice(0,5).map((s)=>s.name),impRowExamBoardId:impRow?.examBoardId,questionsCount:questions.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       // 3.2) Criar questões importadas e (se aplicável) vínculos com o texto-base compartilhado
       let createdCount = 0;
       const createdByNumber = new Map<number, string>();
@@ -486,8 +490,14 @@ export async function POST(req: NextRequest) {
 
         const confidence = computeHeuristicConfidence({ statement, alternatives, correctAnswer, number: number ?? undefined });
 
-        const perSubj =
-          (materiaQuestao ? matchSubjectNameToId(materiaQuestao, subjectRows) : null) ?? subjFromGlobal;
+        const perSubjFromQ = materiaQuestao ? matchSubjectNameToId(materiaQuestao, subjectRows) : null;
+        const perSubj = perSubjFromQ ?? subjFromGlobal;
+
+        // #region agent log H-SRV-PER-Q
+        if (idx === 0) {
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-SRV-PER-Q',location:'process/route.ts:per-q',message:'first question meta',data:{idx,materiaQuestao,perSubjFromQ,perSubj,yGlobal,examIdGlobal,qNumber:number},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
 
         const created = await prisma.importedQuestion.create({
           data: {
