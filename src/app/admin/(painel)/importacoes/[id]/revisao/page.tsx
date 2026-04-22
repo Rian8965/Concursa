@@ -12,6 +12,11 @@ import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdent
 import { TopBar } from "@/components/admin/review/TopBar";
 import { StatsRow } from "@/components/admin/review/StatsRow";
 import { PdfQuestionLinkAssets } from "@/components/admin/review/PdfQuestionLinkAssets";
+import {
+  analyzeEnunciadoHeuristic,
+  isQuestionVinculoComplete,
+  mergeDependencyOr,
+} from "@/lib/import/enunciado-dependency-core";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
@@ -200,6 +205,14 @@ function resolvePdfStartPageForQuestion(q: ImportedQ, assets: ImportAssetDTO[] |
   return 1;
 }
 
+function linkFlagsForQuestion(assets: ImportAssetDTO[] | undefined, qid: string) {
+  const linked = (assets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === qid));
+  return {
+    hasTextBlockLink: linked.some((a) => a.kind === "TEXT_BLOCK"),
+    hasFigureImageLink: linked.some((a) => a.kind === "IMAGE"),
+  };
+}
+
 export default function RevisaoImportacaoPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -221,6 +234,9 @@ export default function RevisaoImportacaoPage() {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [llmById, setLlmById] = useState<Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null>(null);
+  const [llmAnalyzed, setLlmAnalyzed] = useState(false);
+  const textDrawerAutoOpened = useRef<Set<string>>(new Set());
 
   const refreshImport = useCallback(async () => {
     const impData = await fetch(`/api/admin/imports/${id}`).then((r) => r.json());
@@ -259,13 +275,119 @@ export default function RevisaoImportacaoPage() {
     });
   }, [id]);
 
+  useEffect(() => {
+    if (!imp?.id) return;
+    if (!imp.importedQuestions.length) {
+      setLlmById({});
+      setLlmAnalyzed(true);
+      return;
+    }
+    setLlmAnalyzed(false);
+    const items = imp.importedQuestions.map((q) => ({ id: q.id, content: q.content ?? "" }));
+    let cancelled = false;
+    fetch("/api/admin/imports/analyze-enunciado-dependencies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d.llm && typeof d.llm === "object") setLlmById(d.llm);
+        else setLlmById({});
+        setLlmAnalyzed(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLlmById({});
+          setLlmAnalyzed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imp?.id, imp?.importedQuestions.length]);
+
+  const mergedDepByQuestion = useMemo(() => {
+    if (!imp) return {} as Record<string, ReturnType<typeof mergeDependencyOr>>;
+    const o: Record<string, ReturnType<typeof mergeDependencyOr>> = {};
+    for (const q of imp.importedQuestions) {
+      const c = drafts[q.id]?.content ?? q.content;
+      o[q.id] = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[q.id] ?? null);
+    }
+    return o;
+  }, [imp, drafts, llmById]);
+
+  const reviewSaveBlock = useMemo(() => {
+    if (!imp) return { blocked: false, hint: "" as string };
+    const assets = imp.importAssets ?? [];
+    for (const [qid, dec] of Object.entries(decisions)) {
+      if (dec !== "approve") continue;
+      const c = drafts[qid]?.content ?? imp.importedQuestions.find((q) => q.id === qid)?.content ?? "";
+      const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
+      const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(assets, qid);
+      if (!isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink).ok) {
+        return {
+          blocked: true,
+          hint: "Há questões aprovadas sem vínculo obrigatório no PDF. Corrija ou mude a decisão antes de salvar.",
+        };
+      }
+    }
+    return { blocked: false, hint: "" };
+  }, [imp, decisions, drafts, llmById]);
+
   function selectAll(action: "approve" | "reject") {
-    const d: Record<string, Decision> = {};
-    imp?.importedQuestions.forEach((q) => { d[q.id] = action; });
-    setDecisions(d);
+    if (!imp) return;
+    if (action === "reject") {
+      const d: Record<string, Decision> = {};
+      imp.importedQuestions.forEach((q) => { d[q.id] = "reject"; });
+      setDecisions(d);
+      return;
+    }
+    const assets = imp.importAssets ?? [];
+    let skipped = 0;
+    const next: Record<string, Decision> = { ...decisions };
+    for (const q of imp.importedQuestions) {
+      const c = drafts[q.id]?.content ?? q.content;
+      const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[q.id] ?? null);
+      const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(assets, q.id);
+      if (isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink).ok) {
+        next[q.id] = "approve";
+      } else {
+        skipped += 1;
+      }
+    }
+    setDecisions(next);
+    if (skipped) {
+      toast.info(`${skipped} questão(ões) exigem vínculo (texto/imagem no PDF) e não foram aprovadas automaticamente.`);
+    }
+  }
+
+  function setQuestionDecision(qid: string, next: Decision) {
+    if (next === "pending" || next === "reject" || !imp) {
+      setDecisions((p) => ({ ...p, [qid]: next }));
+      return;
+    }
+    const c = drafts[qid]?.content ?? imp.importedQuestions.find((q) => q.id === qid)?.content ?? "";
+    const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
+    const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(imp.importAssets, qid);
+    const g = isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink);
+    if (!g.ok) {
+      const msgs: string[] = [];
+      if (g.missing.includes("image")) msgs.push("Precisa vincular imagem");
+      if (g.missing.includes("text")) msgs.push("Precisa vincular texto de apoio no PDF");
+      toast.error(msgs.join(" · "));
+      return;
+    }
+    setDecisions((p) => ({ ...p, [qid]: "approve" }));
   }
 
   async function saveReview() {
+    if (!imp) return;
+    if (reviewSaveBlock.blocked) {
+      toast.error(reviewSaveBlock.hint);
+      return;
+    }
     const decided = Object.entries(decisions)
       .filter(([, d]) => d !== "pending")
       .map(([qId, action]) => ({ questionId: qId, action, subjectId: subjectMap[qId] || undefined }));
@@ -297,21 +419,6 @@ export default function RevisaoImportacaoPage() {
     }
     setSaving(false);
   }
-
-  const linkedAssetsByQuestion = useMemo(() => {
-    const map: Record<string, ImportAssetDTO[]> = {};
-    const assets = imp?.importAssets ?? [];
-    for (const a of assets) {
-      for (const l of a.questionLinks ?? []) {
-        map[l.importedQuestionId] ??= [];
-        map[l.importedQuestionId].push(a);
-      }
-    }
-    for (const k of Object.keys(map)) {
-      map[k] = map[k].slice().sort((a, b) => (a.page ?? 0) - (b.page ?? 0));
-    }
-    return map;
-  }, [imp?.importAssets]);
 
   async function saveQuestion(questionId: string) {
     const d = drafts[questionId];
@@ -554,7 +661,15 @@ export default function RevisaoImportacaoPage() {
 
   const filteredQuestions = useMemo(() => {
     const all = imp?.importedQuestions ?? [];
-    const base = onlyNeedsReview ? all.filter((q) => computeReviewWarnings(drafts[q.id] ?? q).length > 0) : all;
+    const base = onlyNeedsReview
+      ? all.filter((q) => {
+          if (computeReviewWarnings(drafts[q.id] ?? q).length > 0) return true;
+          const dep = mergedDepByQuestion[q.id];
+          if (!dep) return false;
+          const f = linkFlagsForQuestion(imp?.importAssets, q.id);
+          return !isQuestionVinculoComplete(dep, f.hasTextBlockLink, f.hasFigureImageLink).ok;
+        })
+      : all;
     const s = search.trim().toLowerCase();
     if (!s) return base;
     const gm = globalMetaDisplay;
@@ -580,7 +695,7 @@ export default function RevisaoImportacaoPage() {
       const hay = `${idx + 1} ${num} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, imp?.importedQuestions, drafts, search, globalMetaDisplay]);
+  }, [onlyNeedsReview, imp?.importedQuestions, imp?.importAssets, drafts, search, globalMetaDisplay, mergedDepByQuestion]);
 
   useLayoutEffect(() => {
     if (!imp || loading) return;
@@ -640,9 +755,15 @@ export default function RevisaoImportacaoPage() {
         onRejectAll={() => selectAll("reject")}
         onSave={saveReview}
         saving={saving}
+        saveDisabled={reviewSaveBlock.blocked}
+        saveHint={reviewSaveBlock.blocked ? reviewSaveBlock.hint : undefined}
       />
 
       <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
+
+      {!llmAnalyzed && (
+        <p className="text-center text-xs font-semibold text-violet-700">Refinando análise dos enunciados com IA…</p>
+      )}
 
       <div className="orbit-card-premium !flex !flex-col gap-4 !py-4 sm:!flex-row sm:!items-center sm:!justify-between sm:!py-5">
         <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -714,6 +835,30 @@ export default function RevisaoImportacaoPage() {
             { key: "Matéria", value: questionContext.materia },
             { key: "Cargo", value: questionContext.cargo },
           ];
+          const dep = mergedDepByQuestion[q.id];
+          const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(imp.importAssets, q.id);
+          const vComplete = dep
+            ? isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink)
+            : { ok: true, missing: [] as Array<"text" | "image"> };
+          const depNeedsImage = Boolean(dep?.needsFigure && !hasFigureImageLink);
+          const depNeedsText = Boolean(dep?.needsTextSupport && !hasTextBlockLink);
+          const vinculoIncomplete = Boolean(dep && !vComplete.ok);
+
+          const openExpand = (fromAutoText: boolean) => {
+            setSelectedQ(q.id);
+            const willExpand = !isExpanded;
+            setExpanded((prev) => ({ ...prev, [q.id]: willExpand }));
+            if (fromAutoText && willExpand) {
+              const depM = mergedDepByQuestion[q.id];
+              const f = linkFlagsForQuestion(imp.importAssets, q.id);
+              if (depM?.needsTextSupport && !f.hasTextBlockLink && !textDrawerAutoOpened.current.has(q.id)) {
+                textDrawerAutoOpened.current.add(q.id);
+                setLinkDrawerStartPage(resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp.importAssets));
+                setDrawerLinkType("TEXT");
+                setDrawerOpen(true);
+              }
+            }
+          };
 
           return (
             <article
@@ -721,9 +866,10 @@ export default function RevisaoImportacaoPage() {
               data-review-card={isFirstVisible ? "" : undefined}
               className={cn(
                 "min-w-0 rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
-                d === "approve" && "ring-2 ring-emerald-300/50",
-                d === "reject" && "ring-2 ring-red-300/50",
-                d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
+                vinculoIncomplete && "ring-2 ring-rose-400/85",
+                !vinculoIncomplete && d === "approve" && "ring-2 ring-emerald-300/50",
+                !vinculoIncomplete && d === "reject" && "ring-2 ring-red-300/50",
+                !vinculoIncomplete && d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
               )}
             >
               <div className="border-b border-black/[0.06] bg-gradient-to-b from-slate-50/40 to-transparent p-5 sm:p-6">
@@ -737,10 +883,7 @@ export default function RevisaoImportacaoPage() {
                         <button
                           type="button"
                           className="w-full break-words text-left text-lg font-extrabold tracking-tight text-[var(--text-primary)] underline-offset-4 hover:text-violet-700 hover:underline sm:text-xl"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }));
-                          }}
+                          onClick={() => openExpand(true)}
                         >
                           Questão {qi}
                           {aiMeta?.number != null ? ` · Nº ${aiMeta.number}` : ""}
@@ -759,6 +902,16 @@ export default function RevisaoImportacaoPage() {
                         {warnings.length > 0 && (
                           <span className="inline-flex max-w-full items-center rounded-full bg-amber-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200/80 whitespace-normal">
                             Revisão recomendada
+                          </span>
+                        )}
+                        {depNeedsImage && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-rose-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-rose-900 ring-1 ring-rose-300/90 whitespace-normal">
+                            Precisa vincular imagem
+                          </span>
+                        )}
+                        {depNeedsText && (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-950 ring-1 ring-orange-200/90 whitespace-normal">
+                            Precisa vincular texto de apoio
                           </span>
                         )}
                         {q.confidence != null && (
@@ -816,9 +969,13 @@ export default function RevisaoImportacaoPage() {
                       d === "approve"
                         ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
                         : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+                      vinculoIncomplete && d !== "approve" && "opacity-55",
                     )}
-                    onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "approve" ? "pending" : "approve" }))}
-                    title="Aprovar"
+                    onClick={() => {
+                      if (d === "approve") setDecisions((prev) => ({ ...prev, [q.id]: "pending" }));
+                      else setQuestionDecision(q.id, "approve");
+                    }}
+                    title={vinculoIncomplete ? "Vincule no PDF o texto/imagem exigidos pelo enunciado" : "Aprovar"}
                     aria-pressed={d === "approve"}
                   >
                     <Check className="h-5 w-5" strokeWidth={2.5} />
@@ -843,7 +1000,7 @@ export default function RevisaoImportacaoPage() {
                       "btn inline-flex min-h-[44px] items-center gap-2 rounded-2xl px-4 text-sm font-bold shadow-sm",
                       isExpanded ? "btn-ghost border border-black/[0.1] bg-white" : "btn-primary",
                     )}
-                    onClick={() => setExpanded((prev) => ({ ...prev, [q.id]: !isExpanded }))}
+                    onClick={() => openExpand(true)}
                     title={isExpanded ? "Recolher" : "Editar"}
                   >
                     <Pencil className="h-4 w-4" />
@@ -855,6 +1012,15 @@ export default function RevisaoImportacaoPage() {
 
               {isExpanded && (
                 <div className="border-t border-black/[0.06] bg-white/60 px-5 py-8 sm:px-8 sm:py-10">
+                  {vinculoIncomplete && (
+                    <div className="mb-8 rounded-2xl border border-rose-300/90 bg-rose-50 p-5 text-sm text-rose-950 shadow-sm sm:p-6">
+                      <div className="text-base font-extrabold tracking-tight">Vínculos obrigatórios (enunciado)</div>
+                      <p className="mt-2 space-y-1.5 font-semibold leading-relaxed">
+                        {depNeedsImage ? <span className="block">Precisa vincular imagem (figura, gráfico, tabela, mapa, charge, etc.) no painel à direita.</span> : null}
+                        {depNeedsText ? <span className="block">Precisa vincular texto de apoio no PDF.</span> : null}
+                      </p>
+                    </div>
+                  )}
                   <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
                     <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados da questão</h3>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">

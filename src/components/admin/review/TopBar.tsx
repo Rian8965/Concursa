@@ -11,9 +11,11 @@ type Props = {
   onRejectAll: () => void;
   onSave: () => void;
   saving?: boolean;
+  saveDisabled?: boolean;
+  saveHint?: string;
 };
 
-export function TopBar({ title, subtitle, onApproveAll, onRejectAll, onSave, saving }: Props) {
+export function TopBar({ title, subtitle, onApproveAll, onRejectAll, onSave, saving, saveDisabled, saveHint }: Props) {
   return (
     <div className="orbit-card-premium !p-0" data-review-topbar>
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
@@ -47,12 +49,15 @@ export function TopBar({ title, subtitle, onApproveAll, onRejectAll, onSave, sav
           >
             <XCircle className="h-4 w-4 shrink-0" /> Rejeitar todas
           </motion.button>
+          {saveHint ? (
+            <p className="w-full text-right text-xs font-bold leading-snug text-rose-700 sm:order-last sm:max-w-sm sm:text-right">{saveHint}</p>
+          ) : null}
           <motion.button
             type="button"
-            whileHover={{ scale: saving ? 1 : 1.02 }}
-            whileTap={{ scale: saving ? 1 : 0.98 }}
+            whileHover={{ scale: saving || saveDisabled ? 1 : 1.02 }}
+            whileTap={{ scale: saving || saveDisabled ? 1 : 0.98 }}
             onClick={onSave}
-            disabled={!!saving}
+            disabled={!!saving || !!saveDisabled}
             className="btn btn-primary inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold shadow-md disabled:opacity-60"
           >
             {saving ? "Salvando…" : (

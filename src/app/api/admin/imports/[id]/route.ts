@@ -3,6 +3,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
 import { deleteImportPdfFile } from "@/lib/import-pdf-storage";
+import {
+  analyzeEnunciadoHeuristic,
+  getDependencyBlockUserMessage,
+  isEnunciadoDependencySatisfied,
+  mergeDependencyOr,
+} from "@/lib/import/enunciado-dependency-core";
+import { analyzeEnunciadoBatchLlm } from "@/lib/import/enunciado-llm";
 import { NextRequest, NextResponse } from "next/server";
 
 function isAdmin(r?: string) {
@@ -98,6 +105,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     try {
       const linkCols = await getQuestionOptionalLinkColumns(prisma);
+      const approveDecisions = decisions.filter((d) => d.action === "approve");
+      const approveIds = approveDecisions.map((d) => d.questionId);
+      const iqsForLlm =
+        approveIds.length > 0
+          ? await prisma.importedQuestion.findMany({
+              where: { importId: id, id: { in: approveIds } },
+              select: { id: true, content: true },
+            })
+          : [];
+      const llmEnunciadoMap =
+        iqsForLlm.length > 0
+          ? await analyzeEnunciadoBatchLlm(iqsForLlm.map((q) => ({ id: q.id, content: q.content })))
+          : null;
+
       afterReview = await prisma.$transaction(async (tx) => {
         for (const d of decisions) {
           if (d.action === "approve") {
@@ -121,6 +142,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               where: { importedQuestionId: iq.id },
               include: { importAsset: true },
             });
+            const heur = analyzeEnunciadoHeuristic(iq.content);
+            const dep = mergeDependencyOr(heur, llmEnunciadoMap?.[iq.id] ?? null);
+            const hasTextBlockLink = assetLinks.some(
+              (l) => l.role === "SUPPORT_TEXT" && l.importAsset.kind === "TEXT_BLOCK",
+            );
+            const hasFigureImageLink = assetLinks.some((l) => l.role === "FIGURE" && l.importAsset.kind === "IMAGE");
+            const gate = isEnunciadoDependencySatisfied(dep, hasTextBlockLink, hasFigureImageLink);
+            if (!gate.ok) {
+              throw new Error(
+                `Questão ${d.questionId.slice(0, 8)}…: ${getDependencyBlockUserMessage(gate.missing)}`,
+              );
+            }
             const supportParts = assetLinks
               .filter((l) => l.role === "SUPPORT_TEXT" && l.importAsset.extractedText?.trim())
               .map((l) => l.importAsset.extractedText!.trim());
@@ -225,7 +258,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
       const message = e instanceof Error ? e.message : "Falha ao aplicar decisões";
-      const isUserFacing = /Questão importada|alternativas válidas/i.test(message);
+      const isUserFacing = /Questão importada|alternativas válidas|Precisa vincular/i.test(message);
       return NextResponse.json(
         { error: message || "Falha ao salvar revisão" },
         { status: isUserFacing ? 400 : 500 },
