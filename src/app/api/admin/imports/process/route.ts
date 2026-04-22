@@ -13,6 +13,16 @@ import {
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
+/** Evita que JSON inválido (ex.: resposta do Python/LLM) derrube o processo com erro opaco. */
+function safeJsonParse<T>(raw: string, label: string): { ok: true; value: T } | { ok: false; message: string } {
+  try {
+    return { ok: true, value: JSON.parse(raw) as T };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, message: `${label}: ${msg}` };
+  }
+}
+
 const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL ?? "http://localhost:8000";
 const PDF_SERVICE_SECRET = process.env.PDF_SERVICE_SECRET ?? "secret-compartilhado";
 
@@ -300,7 +310,21 @@ export async function POST(req: NextRequest) {
       ].join("\n\n");
 
       const llm = await runLlmJson(system, user);
-      const parsed = JSON.parse(llm.jsonText) as any;
+      const llmParsed = safeJsonParse<any>(llm.jsonText, "Resposta JSON do modelo (IA)");
+      if (!llmParsed.ok) {
+        await prisma.pDFImport.update({
+          where: { id: pdfImport.id },
+          data: { status: "FAILED", processingError: llmParsed.message.slice(0, 500) },
+        });
+        return NextResponse.json(
+          {
+            error: "O modelo devolveu JSON inválido ou truncado. Tente processar de novo ou use o pipeline Python.",
+            detail: llmParsed.message,
+          },
+          { status: 422 },
+        );
+      }
+      const parsed = llmParsed.value;
 
       const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
       const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
@@ -566,7 +590,35 @@ export async function POST(req: NextRequest) {
       throw new Error(`Erro no serviço Python: ${err}`);
     }
 
-    const result = await pyRes.json();
+    const rawBody = await pyRes.text();
+    const bodyParsed = safeJsonParse<Record<string, unknown>>(rawBody, "Resposta do microserviço de PDF (JSON)");
+    if (!bodyParsed.ok) {
+      await prisma.pDFImport.update({
+        where: { id: pdfImport.id },
+        data: { status: "FAILED", processingError: bodyParsed.message.slice(0, 500) },
+      });
+      return NextResponse.json(
+        {
+          error:
+            "O serviço de PDF devolveu conteúdo que não é JSON válido. Pode ser PDF muito grande, caracteres não escapados no JSON, ou bug no serviço Python. Verifique os logs do pdf-service.",
+          detail: bodyParsed.message,
+        },
+        { status: 502 },
+      );
+    }
+    const result = bodyParsed.value as {
+      status?: string;
+      questions?: unknown;
+      metadata?: {
+        used_ocr?: boolean;
+        answer_key_found?: boolean;
+        answer_key_count?: number;
+        inferred?: Record<string, unknown>;
+        [k: string]: unknown;
+      };
+      error?: string;
+      total_extracted?: number;
+    };
 
     if (result.status === "FAILED") {
       await prisma.pDFImport.update({
@@ -577,14 +629,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Metadados inferidos pelo Python (fallback quando admin não preencheu)
-    const inferred = result.metadata?.inferred ?? {};
+    const inferred = (result.metadata?.inferred ?? {}) as {
+      banca?: string;
+      concurso?: string;
+      cidade?: string;
+      ano?: number;
+      estado?: string;
+      cargo?: string;
+    };
     const finalBanca = banca ?? inferred.banca ?? null;
     const finalConcurso = concurso ?? inferred.concurso ?? null;
     const finalCidade = cidade ?? inferred.cidade ?? null;
     const finalAno = year ? parseInt(year) : (inferred.ano ?? null);
 
     // Salvar questões extraídas no banco
-    const importedQuestions = result.questions.map((q: {
+    const questionsIn = Array.isArray(result.questions) ? result.questions : [];
+    const importedQuestions = questionsIn.map((q: {
       content: string;
       alternatives: { letter: string; content: string }[];
       correct_answer?: string | null;
