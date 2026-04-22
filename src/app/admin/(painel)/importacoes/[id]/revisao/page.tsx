@@ -416,19 +416,38 @@ export default function RevisaoImportacaoPage() {
           alternatives: q.alternatives?.map((a) => ({ ...a })) ?? [],
         };
       });
+      // #region agent log H-D
+      fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-D',location:'revisao/page.tsx:meta-loop-start',message:'before meta loop',data:{subListCount:subList.length,ebListCount:ebList.length,subListSample:subList.slice(0,3).map((s:{id:string;name:string;slug:string})=>({id:s.id,name:s.name,slug:s.slug})),questionsCount:(impData.import.importedQuestions??[]).length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       for (const q of impData.import.importedQuestions as ImportedQ[]) {
         const d = ds[q.id];
         if (!d) continue;
         const pm = parseAiMeta(d.rawText);
         const mStr = pm?.materia ?? (typeof pm?.meta?.materia === "string" ? pm.meta.materia : null);
+        // #region agent log H-A H-B H-C
+        if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
+          const sug0 = parseSuggestedSubject(d.rawText);
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-A',location:'revisao/page.tsx:q0-rawtext',message:'first question rawText analysis',data:{rawTextSnippet:(d.rawText??'').slice(0,400),pm_materia:pm?.materia,pm_meta_materia:pm?.meta?.materia,pm_meta_banca:pm?.meta?.banca,pm_meta_ano:pm?.meta?.ano,mStr,suggestedSubjectIdFromDB:d.suggestedSubjectId,examBoardIdFromDB:d.examBoardId,yearFromDB:d.year,suggestSubjectText:sug0?.subject,subListFirstNames:subList.slice(0,5).map((s:{name:string})=>s.name)},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
         if (!d.suggestedSubjectId && mStr) {
           const sid = matchSubjectNameToId(mStr, subList);
+          // #region agent log H-C
+          if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
+            fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-C',location:'revisao/page.tsx:q0-match-materia',message:'matchSubjectNameToId result for materia',data:{mStr,matchedId:sid}},timestamp:Date.now())}).catch(()=>{});
+          }
+          // #endregion
           if (sid) d.suggestedSubjectId = sid;
         }
         if (!d.suggestedSubjectId) {
           const sug = parseSuggestedSubject(d.rawText);
           if (sug?.subject) {
             const sid = matchSubjectNameToId(sug.subject, subList);
+            // #region agent log H-E
+            if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
+              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-E',location:'revisao/page.tsx:q0-match-suggestedsubject',message:'matchSubjectNameToId result for suggestedSubject',data:{sugText:sug.subject,matchedId:sid}},timestamp:Date.now())}).catch(()=>{});
+            }
+            // #endregion
             if (sid) d.suggestedSubjectId = sid;
           }
         }
