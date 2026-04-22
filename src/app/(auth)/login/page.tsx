@@ -7,18 +7,22 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn, getSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Eye, EyeOff, Sparkles } from "lucide-react";
-import { Playfair_Display, DM_Sans } from "next/font/google";
+import {
+  Eye,
+  EyeOff,
+  Target,
+  Rocket,
+  Trophy,
+  User,
+  Lock,
+  ChevronRight,
+  Quote,
+} from "lucide-react";
+import { Inter } from "next/font/google";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { cn } from "@/lib/utils/cn";
 
-const display = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  display: "swap",
-});
-
-const sans = DM_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   display: "swap",
@@ -26,30 +30,75 @@ const sans = DM_Sans({
 
 const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
 
-/** Estrelas / partículas — posições fixas (SSR-safe). */
 const STARS: { t: string; l: string; s: number; o: number }[] = [
-  { t: "6%", l: "8%", s: 2, o: 0.35 },
-  { t: "12%", l: "22%", s: 1.5, o: 0.28 },
-  { t: "18%", l: "78%", s: 2.5, o: 0.4 },
-  { t: "28%", l: "14%", s: 1, o: 0.22 },
-  { t: "35%", l: "88%", s: 2, o: 0.32 },
-  { t: "42%", l: "42%", s: 1.5, o: 0.2 },
-  { t: "52%", l: "6%", s: 2, o: 0.3 },
-  { t: "58%", l: "65%", s: 1, o: 0.25 },
-  { t: "68%", l: "92%", s: 2.5, o: 0.38 },
-  { t: "76%", l: "28%", s: 1.5, o: 0.2 },
-  { t: "84%", l: "55%", s: 2, o: 0.28 },
-  { t: "92%", l: "18%", s: 1, o: 0.22 },
-  { t: "24%", l: "52%", s: 1, o: 0.18 },
-  { t: "48%", l: "72%", s: 1.5, o: 0.26 },
-  { t: "64%", l: "38%", s: 1, o: 0.2 },
+  { t: "4%", l: "6%", s: 2, o: 0.4 },
+  { t: "8%", l: "18%", s: 1, o: 0.25 },
+  { t: "12%", l: "72%", s: 2.5, o: 0.35 },
+  { t: "22%", l: "12%", s: 1.5, o: 0.22 },
+  { t: "30%", l: "88%", s: 2, o: 0.3 },
+  { t: "38%", l: "40%", s: 1, o: 0.18 },
+  { t: "48%", l: "8%", s: 2, o: 0.28 },
+  { t: "55%", l: "65%", s: 1.5, o: 0.2 },
+  { t: "62%", l: "92%", s: 2, o: 0.32 },
+  { t: "72%", l: "22%", s: 1, o: 0.24 },
+  { t: "78%", l: "78%", s: 2.5, o: 0.26 },
+  { t: "88%", l: "45%", s: 1.5, o: 0.2 },
+  { t: "15%", l: "52%", s: 1, o: 0.16 },
+  { t: "42%", l: "58%", s: 1, o: 0.2 },
+  { t: "65%", l: "35%", s: 1.5, o: 0.22 },
 ];
 
-const SUPPORT = [
-  "Quem estuda com método, passa.",
-  "Disciplina vence motivação.",
-  "Todo dia conta.",
+const FEATURES = [
+  {
+    icon: Target,
+    title: "Foco",
+    text: "Cada minuto te aproxima.",
+  },
+  {
+    icon: Rocket,
+    title: "Disciplina",
+    text: "Pequenas ações geram grandes resultados.",
+  },
+  {
+    icon: Trophy,
+    title: "Persistência",
+    text: "Não é sorte. É preparação. É você no topo.",
+  },
+] as const;
+
+const QUOTES = [
+  "O que te leva hoje ao esforço, te leva amanhã à aprovação.",
+  "Concurso não é sprint, é maratona. Confie no processo.",
+  "A vaga é de quem se prepara quando ninguém está vendo.",
 ];
+
+function MountainSilhouette() {
+  return (
+    <svg
+      className="pointer-events-none absolute bottom-0 left-0 z-[1] w-[min(55%,420px)] opacity-[0.18] sm:w-[min(50%,480px)] lg:opacity-[0.22]"
+      viewBox="0 0 400 200"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id="silGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="#0a0212" stopOpacity="0" />
+          <stop offset="100%" stopColor="#c4b5fd" stopOpacity="0.35" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M0 200 L120 95 L160 120 L200 70 L260 130 L320 60 L400 110 L400 200 Z"
+        fill="url(#silGrad)"
+      />
+      <circle cx="200" cy="78" r="14" fill="rgba(255,255,255,0.08)" />
+      <path
+        d="M196 82 L204 82 L202 74 Z"
+        fill="rgba(255,255,255,0.12)"
+      />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -113,203 +162,200 @@ export default function LoginPage() {
   return (
     <div
       className={cn(
-        sans.className,
-        "relative flex min-h-[100dvh] min-h-screen w-full flex-col overflow-x-hidden bg-[#f3f0fa] antialiased lg:flex-row",
+        inter.className,
+        "relative min-h-[100dvh] min-h-screen w-full overflow-x-hidden text-white antialiased",
       )}
     >
-      {/* ——— Coluna visual (~58%) ——— */}
-      <section
-        className="relative order-1 flex min-h-[320px] w-full flex-shrink-0 flex-col overflow-hidden lg:order-1 lg:min-h-screen lg:w-[58%] lg:max-w-none"
+      {/* Fundo cósmico — tela inteira */}
+      <div
+        className="absolute inset-0"
         style={{
           background: `
-            radial-gradient(ellipse 120% 90% at 10% 15%, rgba(139, 107, 255, 0.45) 0%, transparent 52%),
-            radial-gradient(ellipse 90% 70% at 90% 80%, rgba(109, 61, 245, 0.28) 0%, transparent 48%),
-            radial-gradient(ellipse 70% 50% at 50% 100%, rgba(255, 255, 255, 0.07) 0%, transparent 42%),
-            radial-gradient(ellipse 60% 45% at 70% 25%, rgba(182, 140, 255, 0.15) 0%, transparent 40%),
-            linear-gradient(168deg, #1a0f2e 0%, #24123d 18%, #2d1850 38%, #4b238f 62%, #5c32a8 82%, #4b238f 100%)
+            radial-gradient(ellipse 100% 80% at 20% 0%, rgba(147, 51, 234, 0.35) 0%, transparent 45%),
+            radial-gradient(ellipse 80% 60% at 85% 90%, rgba(109, 40, 217, 0.25) 0%, transparent 50%),
+            radial-gradient(ellipse 60% 50% at 50% 50%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
+            radial-gradient(ellipse 120% 40% at 50% 100%, rgba(167, 139, 250, 0.15) 0%, transparent 40%),
+            linear-gradient(180deg, #0a0212 0%, #12081f 25%, #1a0d2e 50%, #0f0618 78%, #0a0212 100%)
           `,
         }}
-      >
-        {/* Glows de profundidade */}
-        <div
-          className="pointer-events-none absolute -left-32 top-[15%] h-[420px] w-[420px] rounded-full opacity-[0.35] blur-[120px]"
-          style={{ background: "#6d3df5" }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-24 bottom-[10%] h-[360px] w-[360px] rounded-full opacity-25 blur-[100px]"
-          style={{ background: "#8b6bff" }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute left-1/3 top-1/2 h-[200px] w-[200px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.12] blur-[80px]"
-          style={{ background: "#ffffff" }}
-          aria-hidden
-        />
+        aria-hidden
+      />
 
-        {/* Partículas / estrelas */}
-        <div className="pointer-events-none absolute inset-0" aria-hidden>
-          {STARS.map((st, i) => (
-            <span
-              key={i}
-              className="absolute rounded-full bg-white"
-              style={{
-                top: st.t,
-                left: st.l,
-                width: st.s,
-                height: st.s,
-                opacity: st.o,
-                boxShadow: `0 0 ${st.s * 2}px rgba(255,255,255,0.35)`,
-              }}
-            />
-          ))}
-        </div>
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40 mix-blend-screen"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E")`,
+        }}
+        aria-hidden
+      />
 
-        {/* Borda suave entre colunas (desktop) */}
-        <div
-          className="pointer-events-none absolute inset-y-0 right-0 z-[1] hidden w-px bg-gradient-to-b from-transparent via-white/12 to-transparent lg:block"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-y-0 right-0 z-0 hidden w-32 bg-gradient-to-l from-[#f3f0fa]/90 to-transparent lg:block"
-          aria-hidden
-        />
+      <div className="pointer-events-none absolute -left-40 top-1/4 h-[500px] w-[500px] rounded-full bg-[#9333ea]/25 blur-[140px]" aria-hidden />
+      <div className="pointer-events-none absolute -right-32 bottom-1/4 h-[400px] w-[400px] rounded-full bg-[#7c3aed]/20 blur-[120px]" aria-hidden />
 
-        {/* Logo — canto superior esquerdo, respiro generoso */}
-        <header className="relative z-10 shrink-0 px-8 pt-10 sm:px-10 sm:pt-12 lg:px-14 lg:pt-14 xl:px-[4.5rem] xl:pt-16">
-          <div className="relative h-[52px] w-[min(100%,320px)] sm:h-[58px] lg:h-[64px]">
-            <Image
-              src="/login-brand-logo.png"
-              alt={BRAND_NAME}
-              fill
-              className="object-contain object-left"
-              sizes="320px"
-              priority
-            />
-          </div>
-        </header>
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        {STARS.map((st, i) => (
+          <span
+            key={i}
+            className="absolute rounded-full bg-white"
+            style={{
+              top: st.t,
+              left: st.l,
+              width: st.s,
+              height: st.s,
+              opacity: st.o,
+              boxShadow: `0 0 ${Number(st.s) * 3}px rgba(196,181,253,0.4)`,
+            }}
+          />
+        ))}
+      </div>
 
-        {/* Conteúdo — centralizado no eixo vertical da coluna */}
-        <div className="relative z-10 flex flex-1 flex-col justify-center px-8 pb-12 pt-6 sm:px-10 lg:px-14 lg:pb-20 lg:pt-4 xl:px-[4.5rem]">
-          <div className="mx-auto w-full max-w-[540px] lg:mx-0">
-            <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/50">
-              Plataforma de estudos
-            </p>
+      <MountainSilhouette />
 
-            <h1
-              className={cn(
-                display.className,
-                "text-[2rem] font-semibold leading-[1.18] tracking-[-0.02em] text-white sm:text-[2.35rem] sm:leading-[1.15] lg:text-[2.65rem] xl:text-[2.85rem]",
-              )}
-            >
-              Seu futuro começa com uma{" "}
-              <span className="bg-gradient-to-r from-white via-[#e8e0ff] to-[#c4b5fd] bg-clip-text font-semibold text-transparent">
-                decisão
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1600px] flex-col lg:flex-row">
+        {/* Coluna esquerda — conteúdo (~62%) */}
+        <div className="flex flex-1 flex-col justify-between px-6 pb-8 pt-8 sm:px-10 sm:pt-10 lg:w-[62%] lg:max-w-none lg:px-12 lg:pb-12 lg:pt-12 xl:px-16 xl:pt-14">
+          <header className="shrink-0">
+            <div className="relative h-[48px] w-[min(100%,300px)] sm:h-[54px] lg:h-[58px]">
+              <Image
+                src="/login-brand-logo.png"
+                alt={BRAND_NAME}
+                fill
+                className="object-contain object-left drop-shadow-[0_2px_24px_rgba(147,51,234,0.35)]"
+                sizes="300px"
+                priority
+              />
+            </div>
+          </header>
+
+          <div className="flex flex-1 flex-col justify-center py-10 lg:py-6">
+            <h1 className="max-w-[640px] text-balance text-3xl font-bold leading-[1.15] tracking-tight text-white sm:text-4xl lg:text-[2.65rem] lg:leading-[1.12] xl:text-[2.85rem]">
+              Seu futuro começa com{" "}
+              <span className="relative inline">
+                <span className="relative z-10 bg-gradient-to-r from-[#e9d5ff] via-white to-[#c084fc] bg-clip-text font-bold text-transparent drop-shadow-[0_0_28px_rgba(168,85,247,0.65)]">
+                  uma decisão
+                </span>
+                <span
+                  className="absolute -inset-1 -z-0 rounded-lg bg-[#9333ea]/25 blur-md"
+                  aria-hidden
+                />
               </span>
               .
             </h1>
 
-            <p className="mt-8 max-w-[480px] text-[17px] leading-[1.75] text-white/[0.82] lg:text-[18px]">
-              Estude com foco, consistência e estratégia. A aprovação é questão de tempo.
+            <p className="mt-6 max-w-[560px] text-[16px] leading-relaxed text-white/75 sm:text-[17px] lg:mt-8 lg:text-lg">
+              Estude com foco, persistência e estratégia. A{" "}
+              <strong className="font-semibold text-white">aprovação</strong> é uma questão de tempo.
             </p>
 
-            <ul className="mt-12 hidden space-y-4 border-l border-white/15 pl-6 sm:block">
-              {SUPPORT.map((line) => (
-                <li key={line} className="text-[15px] font-medium leading-snug tracking-wide text-white/70">
-                  {line}
-                </li>
+            <div className="mt-10 grid gap-4 sm:grid-cols-3 lg:mt-12">
+              {FEATURES.map(({ icon: Icon, title, text }) => (
+                <div
+                  key={title}
+                  className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm transition hover:border-[#9333ea]/40 hover:bg-white/[0.08]"
+                >
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#9333ea]/35 ring-1 ring-[#a855f7]/40">
+                    <Icon className="h-5 w-5 text-[#e9d5ff]" strokeWidth={2} />
+                  </div>
+                  <p className="text-sm font-bold text-white">{title}</p>
+                  <p className="mt-1.5 text-[13px] leading-snug text-white/60">{text}</p>
+                </div>
               ))}
-            </ul>
+            </div>
 
-            <p className="mt-8 text-[14px] font-medium leading-relaxed text-white/65 sm:hidden">{SUPPORT[0]}</p>
+            <div className="mt-10 hidden max-w-[520px] space-y-5 lg:mt-14 lg:block">
+              {QUOTES.map((q) => (
+                <div key={q} className="flex gap-3">
+                  <Quote className="mt-0.5 h-5 w-5 shrink-0 text-[#a855f7]" aria-hidden />
+                  <p className="text-[15px] font-medium leading-relaxed text-white/70">{q}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 space-y-3 lg:hidden">
+              {QUOTES.slice(0, 2).map((q) => (
+                <p key={q} className="flex gap-2 text-sm leading-relaxed text-white/65">
+                  <Quote className="mt-0.5 h-4 w-4 shrink-0 text-[#a855f7]" aria-hidden />
+                  {q}
+                </p>
+              ))}
+            </div>
           </div>
+
+          <footer className="shrink-0 pt-4 text-[11px] text-white/25">© {new Date().getFullYear()} {BRAND_NAME}</footer>
         </div>
 
-        <footer className="relative z-10 shrink-0 px-8 pb-8 pt-4 sm:px-10 lg:px-14 lg:pb-10 xl:px-[4.5rem]">
-          <p className="text-[12px] text-white/30">© {new Date().getFullYear()} {BRAND_NAME}</p>
-        </footer>
-      </section>
-
-      {/* ——— Coluna login (~42%) ——— */}
-      <section className="relative order-2 flex w-full flex-1 flex-col justify-center bg-[#f3f0fa] px-5 py-12 sm:px-8 lg:order-2 lg:w-[42%] lg:min-h-screen lg:px-10 lg:py-16 xl:px-14">
-        <div className="mx-auto w-full max-w-[480px]">
-          {/* Card premium */}
+        {/* Coluna direita — glass card (~38%) */}
+        <div className="flex w-full flex-shrink-0 items-center justify-center px-5 pb-10 pt-2 sm:px-8 lg:w-[38%] lg:px-8 lg:pb-12 lg:pt-12 xl:px-10">
           <div
             className={cn(
-              "rounded-[28px] border border-white/80 bg-[#fefeff]",
-              "shadow-[0_4px_8px_-2px_rgba(20,10,36,0.04),0_24px_64px_-16px_rgba(75,35,143,0.22),0_12px_40px_-12px_rgba(36,18,61,0.12)]",
+              "w-full max-w-[440px] rounded-[24px] border border-white/[0.12]",
+              "bg-[rgba(12,6,22,0.55)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.65)] backdrop-blur-2xl",
             )}
           >
-            <div className="p-9 sm:p-10 lg:p-11">
-              {/* Logo mobile */}
-              <div className="mb-9 flex items-center lg:hidden">
-                <div className="relative h-11 w-[min(100%,260px)]">
+            <div className="p-8 sm:p-9">
+              <div className="mb-2 lg:hidden">
+                <div className="relative mx-auto h-10 w-[min(100%,240px)]">
                   <Image
                     src="/login-brand-logo.png"
                     alt={BRAND_NAME}
                     fill
-                    className="object-contain object-left"
-                    sizes="260px"
+                    className="object-contain object-center"
+                    sizes="240px"
                   />
                 </div>
               </div>
 
-              <header className="mb-9">
-                <h2 className="text-[1.75rem] font-bold tracking-tight text-[#161026] sm:text-[1.85rem]">Bem-vindo de volta</h2>
-                <p className="mt-2.5 text-[15px] font-medium text-[#5c566f]">Faça login para continuar</p>
-              </header>
+              <h2 className="text-center text-2xl font-bold tracking-tight text-white sm:text-left lg:text-[1.65rem]">
+                Bem-vindo de volta!
+              </h2>
+              <p className="mt-2 text-center text-[14px] text-white/50 sm:text-left">
+                Faça login para continuar sua jornada.
+              </p>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[22px]" noValidate>
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-8 flex flex-col gap-5" noValidate>
                 <div>
-                  <label htmlFor="login" className="mb-2 block text-[13px] font-semibold text-[#3f3a4d]">
+                  <label htmlFor="login" className="mb-2 block text-[12px] font-semibold uppercase tracking-wide text-white/45">
                     E-mail ou CPF
                   </label>
-                  <input
-                    id="login"
-                    type="text"
-                    autoComplete="username"
-                    placeholder="nome@email.com ou 000.000.000-00"
-                    className={cn(
-                      "h-[52px] w-full rounded-[14px] border border-[#e6e2f0] bg-[#faf9fc] px-4 text-[15px] text-[#161026] outline-none transition",
-                      "placeholder:text-[#9e97ae]",
-                      "focus:border-[#9b82e8] focus:bg-white focus:ring-2 focus:ring-[#6d3df5]/18",
-                      errors.login && "border-red-400 focus:ring-red-200",
-                    )}
-                    {...register("login")}
-                  />
-                  {errors.login ? <p className="mt-2 text-[12px] font-medium text-red-600">{errors.login.message}</p> : null}
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/35" />
+                    <input
+                      id="login"
+                      type="text"
+                      autoComplete="username"
+                      placeholder="Digite seu e-mail ou CPF"
+                      className={cn(
+                        "h-[50px] w-full rounded-xl border border-white/10 bg-black/35 py-3 pl-11 pr-4 text-[15px] text-white outline-none transition placeholder:text-white/35",
+                        "focus:border-[#9333ea]/60 focus:bg-black/45 focus:ring-2 focus:ring-[#9333ea]/25",
+                        errors.login && "border-red-400/80 focus:ring-red-500/20",
+                      )}
+                      {...register("login")}
+                    />
+                  </div>
+                  {errors.login ? <p className="mt-1.5 text-xs font-medium text-red-300">{errors.login.message}</p> : null}
                 </div>
 
                 <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <label htmlFor="password" className="text-[13px] font-semibold text-[#3f3a4d]">
-                      Senha
-                    </label>
-                    <button
-                      type="button"
-                      className="text-[12px] font-semibold text-[#6346c4] underline-offset-2 hover:underline"
-                      onClick={() => toast.info("Em breve: recuperação de senha. Por ora, fale com o administrador.")}
-                    >
-                      Esqueci minha senha
-                    </button>
-                  </div>
+                  <label htmlFor="password" className="mb-2 block text-[12px] font-semibold uppercase tracking-wide text-white/45">
+                    Senha
+                  </label>
                   <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/35" />
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
-                      placeholder="••••••••"
+                      placeholder="Digite sua senha"
                       className={cn(
-                        "h-[52px] w-full rounded-[14px] border border-[#e6e2f0] bg-[#faf9fc] py-3 pl-4 pr-12 text-[15px] text-[#161026] outline-none transition",
-                        "placeholder:text-[#9e97ae]",
-                        "focus:border-[#9b82e8] focus:bg-white focus:ring-2 focus:ring-[#6d3df5]/18",
-                        errors.password && "border-red-400 focus:ring-red-200",
+                        "h-[50px] w-full rounded-xl border border-white/10 bg-black/35 py-3 pl-11 pr-12 text-[15px] text-white outline-none transition placeholder:text-white/35",
+                        "focus:border-[#9333ea]/60 focus:bg-black/45 focus:ring-2 focus:ring-[#9333ea]/25",
+                        errors.password && "border-red-400/80 focus:ring-red-500/20",
                       )}
                       {...register("password")}
                     />
                     <button
                       type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#9b95a8] transition hover:bg-[#f3f0fa] hover:text-[#5c566f]"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-white/40 transition hover:bg-white/5 hover:text-white/70"
                       onClick={() => setShowPassword((p) => !p)}
                       aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                     >
@@ -317,65 +363,84 @@ export default function LoginPage() {
                     </button>
                   </div>
                   {errors.password ? (
-                    <p className="mt-2 text-[12px] font-medium text-red-600">{errors.password.message}</p>
+                    <p className="mt-1.5 text-xs font-medium text-red-300">{errors.password.message}</p>
                   ) : null}
                 </div>
 
-                <label className="flex cursor-pointer items-center gap-3 select-none pt-1">
-                  <input
-                    type="checkbox"
-                    className="h-[18px] w-[18px] rounded-md border-[#d4cfe6] text-[#6d3df5] focus:ring-[#6d3df5]/25"
-                    {...register("remember")}
-                  />
-                  <span className="text-[14px] font-medium text-[#5c566f]">Lembrar-me</span>
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <label className="flex cursor-pointer items-center gap-2.5 select-none">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-white/20 bg-black/30 text-[#9333ea] focus:ring-[#9333ea]/40"
+                      {...register("remember")}
+                    />
+                    <span className="text-[13px] font-medium text-white/65">Lembrar-me</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="text-[13px] font-semibold text-[#c084fc] transition hover:text-[#e9d5ff]"
+                    onClick={() => toast.info("Em breve: recuperação de senha. Fale com o administrador.")}
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className={cn(
-                    "mt-1 flex h-[54px] w-full items-center justify-center rounded-[14px] text-[15px] font-bold text-white",
-                    "bg-gradient-to-b from-[#7c5ce0] to-[#5a3bb8]",
-                    "shadow-[0_4px_16px_-2px_rgba(109,61,245,0.45)]",
-                    "transition hover:brightness-[1.06] active:scale-[0.99]",
-                    "disabled:cursor-not-allowed disabled:opacity-60",
+                    "mt-1 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-[15px] font-bold text-white",
+                    "bg-gradient-to-r from-[#9333ea] to-[#7c3aed] shadow-[0_8px_32px_-4px_rgba(147,51,234,0.55)]",
+                    "transition hover:brightness-110 active:scale-[0.99]",
+                    "disabled:cursor-not-allowed disabled:opacity-55",
                   )}
                 >
                   {isSubmitting ? (
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   ) : (
-                    "Entrar"
+                    <>
+                      Entrar
+                      <ChevronRight className="h-5 w-5 opacity-90" strokeWidth={2.5} />
+                    </>
                   )}
                 </button>
 
+                <div className="relative my-1 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/15" />
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-white/35">ou</span>
+                  <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/15" />
+                </div>
+
                 <button
                   type="button"
-                  className="flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#e4dff0] bg-white text-[14px] font-semibold text-[#3f3a4d] shadow-sm transition hover:border-[#d4cce8] hover:bg-[#faf9fc]"
+                  className="flex h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-white/20 bg-black/25 text-[14px] font-semibold text-white/90 transition hover:border-white/30 hover:bg-black/35"
                   onClick={() => toast.info("Login com Google em breve.")}
                 >
-                  <Sparkles className="h-4 w-4 text-[#6d3df5]" aria-hidden />
+                  <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[13px] font-bold text-[#4285F4]">
+                    G
+                  </span>
                   Entrar com Google
                 </button>
               </form>
 
-              <p className="mt-9 text-center text-[14px] text-[#6f6a7e]">
-                Não tem conta?{" "}
+              <p className="mt-8 text-center text-[14px] text-white/50">
+                Ainda não tem uma conta?{" "}
                 <button
                   type="button"
-                  className="font-semibold text-[#5a3bb8] underline-offset-2 hover:underline"
+                  className="font-semibold text-[#c084fc] underline-offset-2 hover:text-[#e9d5ff] hover:underline"
                   onClick={() => toast.info("Contas são criadas pelo administrador da plataforma.")}
                 >
                   Criar conta
                 </button>
               </p>
 
-              <p className="mt-8 border-t border-[#f0ecf5] pt-8 text-center text-[12px] leading-relaxed text-[#9b96a8]">
+              <p className="mt-6 border-t border-white/[0.08] pt-6 text-center text-[11px] leading-relaxed text-white/35">
                 Acesso restrito. Sua conta pode ser habilitada pelo administrador.
               </p>
             </div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
