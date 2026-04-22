@@ -149,6 +149,7 @@ model City {
   competitions Competition[]
   questions    Question[]
   aiMetas      QuestionAiMeta[]
+  importedQuestionRows ImportedQuestion[]
 
   @@map("cities")
 }
@@ -166,6 +167,7 @@ model ExamBoard {
   competitions Competition[]
   questions    Question[]
   aiMetas      QuestionAiMeta[]
+  importedQuestionRows ImportedQuestion[]
 
   @@map("exam_boards")
 }
@@ -186,6 +188,7 @@ model JobRole {
   studentCompetitions StudentCompetition[]
   questions           Question[]
   aiMetas             QuestionAiMeta[]
+  importedQuestionRows ImportedQuestion[]
 
   @@map("job_roles")
 }
@@ -221,6 +224,7 @@ model Competition {
   pdfImports       PDFImport[]
   simulatedExams   SimulatedExam[]
   apostilas        Apostila[]
+  importedQuestionRows ImportedQuestion[]
 
   @@map("competitions")
 }
@@ -347,6 +351,7 @@ model Question {
   jobRoleId      String?
   year           Int?
   difficulty     Difficulty     @default(MEDIUM)
+  tags           String[]       @default([])
   hasImage       Boolean        @default(false)
   imageUrl       String?        @db.Text
   rawText        String?        @db.Text
@@ -631,8 +636,18 @@ model ImportedQuestion {
   content             String
   alternatives        Json
   correctAnswer       String?
+  /// Disciplina (revisão)
   suggestedSubjectId  String?
+  /// Assunto (revisão)
   suggestedTopicId    String?
+  /// Metadados por questão; null = herdar da importação (PDFImport) na publicação
+  year                 Int?
+  examBoardId          String?
+  competitionId        String?
+  cityId               String?
+  jobRoleId            String?
+  difficulty           Difficulty             @default(MEDIUM)
+  tags                 String[]             @default([])
   sourcePage          Int?
   sourcePosition      Int?
   hasImage            Boolean                @default(false)
@@ -645,9 +660,18 @@ model ImportedQuestion {
   publishedQuestionId String?
   createdAt           DateTime               @default(now())
 
-  pdfImport   PDFImport                 @relation(fields: [importId], references: [id], onDelete: Cascade)
-  assetLinks  ImportedQuestionAsset[]
+  pdfImport         PDFImport     @relation(fields: [importId], references: [id], onDelete: Cascade)
+  assetLinks        ImportedQuestionAsset[]
+  reviewExamBoard   ExamBoard?    @relation(fields: [examBoardId], references: [id], onDelete: SetNull)
+  reviewCompetition Competition?  @relation(fields: [competitionId], references: [id], onDelete: SetNull)
+  reviewCity        City?         @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  reviewJobRole     JobRole?      @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
 
+  @@index([suggestedSubjectId])
+  @@index([suggestedTopicId])
+  @@index([competitionId])
+  @@index([examBoardId])
+  @@index([year])
   @@map("imported_questions")
 }
 

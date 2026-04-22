@@ -26,14 +26,34 @@ import {
   missingAlternativeImageLinks,
   parseImportRawText,
 } from "@/lib/import/review-flags";
+import {
+  isImportedQuestionMetaComplete,
+  metaMissingLabels,
+} from "@/lib/import/imported-question-meta";
+import type { ImportContextMeta } from "@/lib/import/imported-question-meta";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
+type DifficultyChoice = "EASY" | "MEDIUM" | "HARD";
+
 interface ImportedQ {
-  id: string; content: string; alternatives: { letter: string; content: string }[];
-  correctAnswer?: string | null; suggestedSubjectId?: string | null;
-  sourcePage?: number | null; confidence?: number | null;
-  status: string; rawText?: string | null;
+  id: string;
+  content: string;
+  alternatives: { letter: string; content: string }[];
+  correctAnswer?: string | null;
+  suggestedSubjectId?: string | null;
+  suggestedTopicId?: string | null;
+  year?: number | null;
+  examBoardId?: string | null;
+  competitionId?: string | null;
+  cityId?: string | null;
+  jobRoleId?: string | null;
+  difficulty?: DifficultyChoice;
+  tags?: string[];
+  sourcePage?: number | null;
+  confidence?: number | null;
+  status: string;
+  rawText?: string | null;
   hasImage?: boolean;
   imageUrl?: string | null;
 }
@@ -160,6 +180,10 @@ interface ImportData {
   totalExtracted: number;
   storedPdfPath?: string | null;
   year?: number | null;
+  examBoardId?: string | null;
+  competitionId?: string | null;
+  cityId?: string | null;
+  jobRoleId?: string | null;
   competition?: { name: string } | null;
   examBoard?: { name: string; acronym: string } | null;
   subject?: { name: string } | null;
@@ -249,6 +273,36 @@ function canApproveImportQuestion(
       return { ok: false, message: `Faltam recortes nas alternativas: ${miss.join(", ")}` };
     }
   }
+  const importCtx: ImportContextMeta = {
+    year: imp.year ?? null,
+    examBoardId: imp.examBoardId ?? null,
+    competitionId: imp.competitionId ?? null,
+    cityId: imp.cityId ?? null,
+    jobRoleId: imp.jobRoleId ?? null,
+  };
+  const diff = (draft.difficulty === "EASY" || draft.difficulty === "MEDIUM" || draft.difficulty === "HARD"
+    ? draft.difficulty
+    : "MEDIUM") as "EASY" | "MEDIUM" | "HARD";
+  const metaOk = isImportedQuestionMetaComplete(
+    {
+      suggestedSubjectId: draft.suggestedSubjectId ?? null,
+      suggestedTopicId: draft.suggestedTopicId ?? null,
+      year: draft.year ?? null,
+      examBoardId: draft.examBoardId ?? null,
+      competitionId: draft.competitionId ?? null,
+      cityId: draft.cityId ?? null,
+      jobRoleId: draft.jobRoleId ?? null,
+      difficulty: diff,
+      tags: draft.tags ?? [],
+    },
+    importCtx,
+  );
+  if (!metaOk.ok) {
+    return {
+      ok: false,
+      message: `Metadados incompletos: ${metaMissingLabels(metaOk.missing).join(", ")}. Preencha e guarde a questão.`,
+    };
+  }
   return { ok: true };
 }
 
@@ -258,7 +312,11 @@ export default function RevisaoImportacaoPage() {
   const [imp, setImp] = useState<ImportData | null>(null);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
-  const [subjectMap, setSubjectMap] = useState<Record<string, string>>({});
+  const [examBoards, setExamBoards] = useState<{ id: string; name: string; acronym: string }[]>([]);
+  const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
+  const [cities, setCities] = useState<{ id: string; name: string; state: string }[]>([]);
+  const [jobRoles, setJobRoles] = useState<{ id: string; name: string }[]>([]);
+  const [topicBySubject, setTopicBySubject] = useState<Record<string, { id: string; name: string }[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedQ, setSelectedQ] = useState<string>("");
   const [drafts, setDrafts] = useState<Record<string, ImportedQ>>({});
@@ -313,21 +371,38 @@ export default function RevisaoImportacaoPage() {
     Promise.all([
       fetch(`/api/admin/imports/${id}`).then((r) => r.json()),
       fetch("/api/admin/subjects").then((r) => r.json()),
-    ]).then(([impData, subData]) => {
+      fetch("/api/admin/exam-boards").then((r) => r.json()),
+      fetch("/api/admin/competitions?limit=500&page=1").then((r) => r.json()),
+      fetch("/api/admin/cities").then((r) => r.json()),
+      fetch("/api/admin/job-roles").then((r) => r.json()),
+    ]).then(([impData, subData, eb, comp, cty, jr]) => {
       setImp(impData.import);
       setSubjects(subData.subjects ?? []);
+      setExamBoards(eb.examBoards ?? []);
+      setCompetitions(comp.competitions ?? []);
+      setCities(cty.cities ?? []);
+      setJobRoles(jr.jobRoles ?? []);
+      const imp = impData.import as ImportData;
       const initial: Record<string, Decision> = {};
-      const sm: Record<string, string> = {};
       impData.import.importedQuestions.forEach((q: ImportedQ) => {
         initial[q.id] = q.status === "PUBLISHED" ? "approve" : q.status === "REJECTED" ? "reject" : "pending";
-        sm[q.id] = q.suggestedSubjectId ?? "";
       });
       setDecisions(initial);
-      setSubjectMap(sm);
       setSelectedQ((prev) => prev || impData.import.importedQuestions?.[0]?.id || "");
       const ds: Record<string, ImportedQ> = {};
       impData.import.importedQuestions.forEach((q: ImportedQ) => {
-        ds[q.id] = { ...q, alternatives: q.alternatives?.map((a) => ({ ...a })) ?? [] };
+        const d0 = (q.difficulty as DifficultyChoice) || "MEDIUM";
+        ds[q.id] = {
+          ...q,
+          year: q.year ?? imp.year ?? null,
+          examBoardId: q.examBoardId ?? imp.examBoardId ?? null,
+          competitionId: q.competitionId ?? imp.competitionId ?? null,
+          cityId: q.cityId ?? imp.cityId ?? null,
+          jobRoleId: q.jobRoleId ?? imp.jobRoleId ?? null,
+          difficulty: d0,
+          tags: Array.isArray(q.tags) ? q.tags : [],
+          alternatives: q.alternatives?.map((a) => ({ ...a })) ?? [],
+        };
       });
       setDrafts(ds);
       setLoading(false);
@@ -443,7 +518,12 @@ export default function RevisaoImportacaoPage() {
     }
     const decided = Object.entries(decisions)
       .filter(([, d]) => d !== "pending")
-      .map(([qId, action]) => ({ questionId: qId, action, subjectId: subjectMap[qId] || undefined }));
+      .map(([qId, action]) => ({
+        questionId: qId,
+        action,
+        subjectId: drafts[qId]?.suggestedSubjectId || undefined,
+        topicId: drafts[qId]?.suggestedTopicId || undefined,
+      }));
     if (decided.length === 0) {
       toast.info("Nada para integrar: marque questões como aprovar ou rejeitar (pendentes permanecem na revisão).");
       return;
@@ -480,7 +560,7 @@ export default function RevisaoImportacaoPage() {
     const heurV = detectLikelyVisualAlternatives(d.alternatives ?? []);
     const visSave = alternativasVisuaisAtivas(rSave, heurV);
     // #region agent log
-    fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-save-question',location:'revisao/page.tsx:saveQuestion',message:'saving imported question edits',data:{importId:id,questionId,contentLen:d.content?.length ?? 0,alts:d.alternatives?.length ?? 0,correctAnswer:d.correctAnswer ?? null,subjectId:subjectMap[questionId] ?? ''},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-save-question',location:'revisao/page.tsx:saveQuestion',message:'saving imported question edits',data:{importId:id,questionId,contentLen:d.content?.length ?? 0,alts:d.alternatives?.length ?? 0,correctAnswer:d.correctAnswer ?? null,subjectId:d.suggestedSubjectId ?? ''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
       method: "PATCH",
@@ -489,7 +569,15 @@ export default function RevisaoImportacaoPage() {
         content: d.content,
         alternatives: d.alternatives,
         correctAnswer: d.correctAnswer ?? null,
-        suggestedSubjectId: subjectMap[questionId] || null,
+        suggestedSubjectId: d.suggestedSubjectId ?? null,
+        suggestedTopicId: d.suggestedTopicId ?? null,
+        year: d.year ?? null,
+        examBoardId: d.examBoardId ?? null,
+        competitionId: d.competitionId ?? null,
+        cityId: d.cityId ?? null,
+        jobRoleId: d.jobRoleId ?? null,
+        difficulty: d.difficulty ?? "MEDIUM",
+        tags: d.tags ?? [],
         sourcePage: d.sourcePage ?? null,
         confidence: d.confidence ?? null,
         rawText: d.rawText ?? null,
@@ -601,7 +689,7 @@ export default function RevisaoImportacaoPage() {
         content: second,
         alternatives: [],
         correctAnswer: null,
-        suggestedSubjectId: subjectMap[questionId] || null,
+        suggestedSubjectId: d.suggestedSubjectId || null,
         sourcePage: d.sourcePage ?? null,
       }),
     });
@@ -646,7 +734,7 @@ export default function RevisaoImportacaoPage() {
         content: second,
         alternatives: [],
         correctAnswer: null,
-        suggestedSubjectId: subjectMap[questionId] || null,
+        suggestedSubjectId: d.suggestedSubjectId || null,
         sourcePage: d.sourcePage ?? null,
         rawText: d.rawText ?? null,
       }),
@@ -658,6 +746,15 @@ export default function RevisaoImportacaoPage() {
     }
     toast.success("Dividido automaticamente (nova questão criada)");
     await refreshImport();
+  }
+
+  async function ensureTopics(subjectId: string) {
+    if (!subjectId || topicBySubject[subjectId]) return;
+    const r = await fetch(`/api/admin/topics?subjectId=${encodeURIComponent(subjectId)}`);
+    const data = (await r.json()) as { topics?: { id: string; name: string }[] };
+    if (r.ok && Array.isArray(data.topics)) {
+      setTopicBySubject((prev) => ({ ...prev, [subjectId]: data.topics! }));
+    }
   }
 
   async function mergeWithNext(questionId: string) {
@@ -882,14 +979,6 @@ export default function RevisaoImportacaoPage() {
           const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
-          const questionContext = buildImportMetaDisplay(imp, aiMeta?.meta ?? null, aiMeta?.materia ?? null);
-          const metaFields = [
-            { key: "Banca", value: questionContext.banca },
-            { key: "Concurso", value: questionContext.concurso },
-            { key: "Ano", value: questionContext.ano },
-            { key: "Matéria", value: questionContext.materia },
-            { key: "Cargo", value: questionContext.cargo },
-          ];
           const dep = mergedDepByQuestion[q.id];
           const { review: reviewFromDraft } = parseImportRawText(draft.rawText);
           const ext = getExtendedLinkFlags(imp.importAssets, q.id);
@@ -927,6 +1016,10 @@ export default function RevisaoImportacaoPage() {
             setApplyAlternativesMode(false);
             const willExpand = !isExpanded;
             setExpanded((prev) => ({ ...prev, [q.id]: willExpand }));
+            if (willExpand) {
+              const sid = drafts[q.id]?.suggestedSubjectId;
+              if (sid) void ensureTopics(sid);
+            }
             if (fromAutoText && willExpand) {
               const depM = mergedDepByQuestion[q.id];
               const ex = getExtendedLinkFlags(imp.importAssets, q.id);
@@ -1191,31 +1284,176 @@ export default function RevisaoImportacaoPage() {
                     </button>
                   </div>
                   <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
-                    <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados da questão</h3>
+                    <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados (por questão)</h3>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      Cadastro + inferência da IA. Matéria: título de seção no PDF (costuma vir antes do bloco de questões da disciplina). Campos vazios: “—”.
+                      Integração exige disciplina, assunto, ano, banca, concurso e nível. Campos vazios podem herdar o cadastro da importação. Guarde a questão após editar.
                     </p>
-                    <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                      {metaFields.map(({ key, value }) => {
-                        const show = value?.trim();
-                        return (
-                          <div
-                            key={`${q.id}-meta-${key}`}
-                            className="flex min-h-[4.25rem] min-w-0 flex-col justify-center rounded-xl border border-black/[0.06] bg-white/90 px-4 py-3 shadow-sm"
-                          >
-                            <dt className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-muted)]">{key}</dt>
-                            <dd
-                              className={cn(
-                                "mt-1.5 break-words text-sm font-semibold leading-snug",
-                                show ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]",
-                              )}
-                            >
-                              {show || "—"}
-                            </dd>
-                          </div>
-                        );
-                      })}
-                    </dl>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Disciplina</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.suggestedSubjectId ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value || null;
+                            if (v) void ensureTopics(v);
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [q.id]: { ...draft, suggestedSubjectId: v, suggestedTopicId: null },
+                            }));
+                          }}
+                        >
+                          <option value="">Selecione…</option>
+                          {subjects.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Assunto</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.suggestedTopicId ?? ""}
+                          disabled={!draft.suggestedSubjectId}
+                          onChange={(e) => {
+                            const v = e.target.value || null;
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, suggestedTopicId: v } }));
+                          }}
+                        >
+                          <option value="">{draft.suggestedSubjectId ? "Selecione…" : "—"}</option>
+                          {(draft.suggestedSubjectId ? topicBySubject[draft.suggestedSubjectId] : [])?.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Banca</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.examBoardId ?? ""}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, examBoardId: e.target.value || null } }))
+                          }
+                        >
+                          <option value="">(herdar da importação)</option>
+                          {examBoards.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.acronym} — {b.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Concurso</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.competitionId ?? ""}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, competitionId: e.target.value || null } }))
+                          }
+                        >
+                          <option value="">(herdar da importação)</option>
+                          {competitions.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Ano</label>
+                        <input
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          type="number"
+                          inputMode="numeric"
+                          placeholder="Ex: 2025"
+                          value={draft.year ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [q.id]: {
+                                ...draft,
+                                year: raw === "" ? null : parseInt(raw, 10) || null,
+                              },
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Cidade (opcional)</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.cityId ?? ""}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, cityId: e.target.value || null } }))
+                          }
+                        >
+                          <option value="">(herdar / vazio)</option>
+                          {cities.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} — {c.state}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Cargo (opcional)</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.jobRoleId ?? ""}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, jobRoleId: e.target.value || null } }))
+                          }
+                        >
+                          <option value="">(herdar / vazio)</option>
+                          {jobRoles.map((j) => (
+                            <option key={j.id} value={j.id}>
+                              {j.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="orbit-form-label text-[10px] uppercase">Nível</label>
+                        <select
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          value={draft.difficulty ?? "MEDIUM"}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [q.id]: {
+                                ...draft,
+                                difficulty: e.target.value as DifficultyChoice,
+                              },
+                            }))
+                          }
+                        >
+                          <option value="EASY">Fácil</option>
+                          <option value="MEDIUM">Médio</option>
+                          <option value="HARD">Difícil</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="orbit-form-label text-[10px] uppercase">Tags (opcional)</label>
+                        <input
+                          className="input mt-1 h-10 w-full min-w-0 text-sm"
+                          placeholder="separar por vírgula"
+                          value={(draft.tags ?? []).join(", ")}
+                          onChange={(e) => {
+                            const tags = e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean);
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, tags } }));
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {warnings.length > 0 && (

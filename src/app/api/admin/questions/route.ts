@@ -55,15 +55,21 @@ export async function GET(req: NextRequest) {
   const cityId = searchParams.get("cityId") ?? undefined;
   const jobRoleId = searchParams.get("jobRoleId") ?? undefined;
   const year = searchParams.get("year") ?? undefined;
+  const topicId = searchParams.get("topicId") ?? undefined;
+  const difficulty = searchParams.get("difficulty") ?? undefined;
+  const tag = searchParams.get("tag")?.trim() ?? undefined;
   const status = searchParams.get("status") ?? undefined;
 
   const where: Record<string, unknown> = {
     ...(search && { content: { contains: search, mode: "insensitive" } }),
     ...(competitionId && { competitionId }),
     ...(subjectId && { subjectId }),
+    ...(topicId && { topicId }),
     ...(examBoardId && { examBoardId }),
     ...(cityId && { cityId }),
     ...(jobRoleId && { jobRoleId }),
+    ...(difficulty && (difficulty === "EASY" || difficulty === "MEDIUM" || difficulty === "HARD") && { difficulty }),
+    ...(tag && { tags: { has: tag } }),
     ...(year && { year: parseYear(year) ?? undefined }),
     ...(status && { status }),
   };
@@ -73,6 +79,7 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         subject: { select: { name: true } },
+        topic: { select: { name: true } },
         competition: { select: { name: true } },
         examBoard: { select: { acronym: true } },
         city: { select: { name: true, state: true } },

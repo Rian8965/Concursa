@@ -17,6 +17,12 @@ import {
   parseImportRawText,
   reviewLinkStatsFromPrismaJoins,
 } from "@/lib/import/review-flags";
+import {
+  isImportedQuestionMetaComplete,
+  metaMissingLabels,
+  resolveImportedQuestionPublishMeta,
+  type ImportContextMeta,
+} from "@/lib/import/imported-question-meta";
 import { NextRequest, NextResponse } from "next/server";
 
 function isAdmin(r?: string) {
@@ -110,6 +116,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Importação não encontrada" }, { status: 404 });
     }
 
+    const importCtx: ImportContextMeta = {
+      year: importRow.year,
+      examBoardId: importRow.examBoardId,
+      competitionId: importRow.competitionId,
+      cityId: importRow.cityId,
+      jobRoleId: importRow.jobRoleId,
+    };
+
     try {
       const linkCols = await getQuestionOptionalLinkColumns(prisma);
       const decisionQids = [...new Set(decisions.map((d) => d.questionId))];
@@ -185,23 +199,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             );
           }
         }
+        const metaRes = isImportedQuestionMetaComplete(
+          {
+            suggestedSubjectId: iq.suggestedSubjectId,
+            suggestedTopicId: iq.suggestedTopicId,
+            year: iq.year,
+            examBoardId: iq.examBoardId,
+            competitionId: iq.competitionId,
+            cityId: iq.cityId,
+            jobRoleId: iq.jobRoleId,
+            difficulty: iq.difficulty,
+            tags: iq.tags ?? [],
+          },
+          importCtx,
+        );
+        if (!metaRes.ok) {
+          throw new Error(
+            `Questão ${d.questionId.slice(0, 8)}…: preencha os metadados: ${metaMissingLabels(metaRes.missing).join(", ")}. Guarde a questão antes de integrar.`,
+          );
+        }
       }
 
       afterReview = await prisma.$transaction(
         async (tx) => {
           for (const d of decisions) {
             if (d.action === "approve") {
-              const iq = iqById.get(d.questionId);
-              if (!iq) continue;
-              if (iq.status === "PUBLISHED" && iq.publishedQuestionId) continue;
+              const freshIq = await tx.importedQuestion.findUnique({ where: { id: d.questionId } });
+              if (!freshIq) continue;
+              if (freshIq.status === "PUBLISHED" && freshIq.publishedQuestionId) continue;
 
-              const alternatives = normalizeImportedAlternatives(iq.alternatives);
+              const alternatives = normalizeImportedAlternatives(freshIq.alternatives);
               if (alternatives.length === 0) {
                 throw new Error(
                   `Questão importada sem alternativas válidas (id: ${d.questionId}). Edite a questão e tente de novo.`,
                 );
               }
-              const assetLinks = linksByIqId.get(iq.id) ?? [];
+              const assetLinks = linksByIqId.get(freshIq.id) ?? [];
               const supportParts = assetLinks
                 .filter(
                   (l) =>
@@ -215,44 +248,61 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                 (l) => l.role === "FIGURE" && l.importAsset.kind === "IMAGE" && !l.alternativeLetter,
               );
               const imageFromAsset = mainFig?.importAsset?.imageDataUrl?.trim() || null;
-              const finalImageUrl = imageFromAsset || iq.imageUrl || null;
+              const finalImageUrl = imageFromAsset || freshIq.imageUrl || null;
               const finalHasImage = Boolean(finalImageUrl);
 
-              let subjectId: string | null = d.subjectId || iq.suggestedSubjectId || null;
+              const meta = resolveImportedQuestionPublishMeta(
+                {
+                  suggestedSubjectId: freshIq.suggestedSubjectId,
+                  suggestedTopicId: freshIq.suggestedTopicId,
+                  year: freshIq.year,
+                  examBoardId: freshIq.examBoardId,
+                  competitionId: freshIq.competitionId,
+                  cityId: freshIq.cityId,
+                  jobRoleId: freshIq.jobRoleId,
+                  difficulty: freshIq.difficulty,
+                  tags: freshIq.tags ?? [],
+                },
+                importCtx,
+              );
+
+              let subjectId: string | null = meta.subjectId;
               if (subjectId) {
                 const s = await tx.subject.findUnique({ where: { id: subjectId }, select: { id: true } });
                 if (!s) subjectId = null;
               }
 
-              let topicId: string | null = d.topicId || iq.suggestedTopicId || null;
+              let topicId: string | null = meta.topicId;
               if (topicId) {
                 const t = await tx.topic.findUnique({ where: { id: topicId }, select: { id: true } });
                 if (!t) topicId = null;
               }
 
-              let ca = (iq.correctAnswer ?? "A").trim().toUpperCase();
+              let ca = (freshIq.correctAnswer ?? "A").trim().toUpperCase();
               if (!alternatives.some((a) => a.letter === ca)) {
                 ca = alternatives[0]!.letter;
               }
 
               const q = await tx.question.create({
                 data: {
-                  content: iq.content,
+                  content: freshIq.content,
                   supportText,
                   correctAnswer: ca,
                   subjectId,
                   topicId,
-                  examBoardId: importRow.examBoardId ?? null,
-                  ...(linkCols.hasCityId ? { cityId: importRow.cityId ?? null } : {}),
-                  ...(linkCols.hasJobRoleId ? { jobRoleId: importRow.jobRoleId ?? null } : {}),
-                  year: importRow.year ?? null,
-                  competitionId: importRow.competitionId ?? null,
+                  examBoardId: meta.examBoardId,
+                  ...(linkCols.hasCityId ? { cityId: meta.cityId } : {}),
+                  ...(linkCols.hasJobRoleId ? { jobRoleId: meta.jobRoleId } : {}),
+                  year: meta.year,
+                  competitionId: meta.competitionId,
                   importId: id,
                   status: "ACTIVE",
-                  sourcePage: iq.sourcePage,
-                  sourcePosition: iq.sourcePosition,
+                  sourcePage: freshIq.sourcePage,
+                  sourcePosition: freshIq.sourcePosition,
                   hasImage: finalHasImage,
                   imageUrl: finalImageUrl,
+                  difficulty: meta.difficulty,
+                  tags: meta.tags,
                   alternatives: {
                     create: alternatives.map((a, i) => {
                       const L = a.letter.trim().toUpperCase().slice(0, 1);

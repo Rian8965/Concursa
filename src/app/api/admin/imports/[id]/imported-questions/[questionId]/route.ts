@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { normalizeTagsInput } from "@/lib/import/imported-question-meta";
+import type { Difficulty } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 function isAdmin(r?: string) {
@@ -21,6 +23,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     correctAnswer: string | null;
     suggestedSubjectId: string | null;
     suggestedTopicId: string | null;
+    year: number | null;
+    examBoardId: string | null;
+    competitionId: string | null;
+    cityId: string | null;
+    jobRoleId: string | null;
+    difficulty: Difficulty;
+    tags: string[];
     sourcePage: number | null;
     sourcePosition: number | null;
     confidence: number | null;
@@ -49,6 +58,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!ok) return NextResponse.json({ error: "alternatives inválido" }, { status: 400 });
   }
 
+  const parseDiff = (d: unknown): Difficulty | undefined => {
+    if (d === "EASY" || d === "MEDIUM" || d === "HARD") return d;
+    return undefined;
+  };
+
   const updated = await prisma.importedQuestion.update({
     where: { id: questionId },
     data: {
@@ -57,6 +71,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       correctAnswer: body.correctAnswer === undefined ? undefined : body.correctAnswer,
       suggestedSubjectId: body.suggestedSubjectId === undefined ? undefined : body.suggestedSubjectId,
       suggestedTopicId: body.suggestedTopicId === undefined ? undefined : body.suggestedTopicId,
+      year: body.year === undefined ? undefined : body.year,
+      examBoardId: body.examBoardId === undefined ? undefined : body.examBoardId,
+      competitionId: body.competitionId === undefined ? undefined : body.competitionId,
+      cityId: body.cityId === undefined ? undefined : body.cityId,
+      jobRoleId: body.jobRoleId === undefined ? undefined : body.jobRoleId,
+      difficulty: body.difficulty === undefined ? undefined : (parseDiff(body.difficulty) ?? "MEDIUM"),
+      tags: body.tags === undefined ? undefined : normalizeTagsInput(body.tags),
       sourcePage: body.sourcePage === undefined ? undefined : body.sourcePage,
       sourcePosition: body.sourcePosition === undefined ? undefined : body.sourcePosition,
       confidence: body.confidence === undefined ? undefined : body.confidence,
