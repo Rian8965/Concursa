@@ -688,16 +688,19 @@ enum ImportAssetScope {
 }
 
 /// Vínculo entre uma questão importada e um ativo (texto-base compartilhado, figura, etc.)
+/// `alternativeLetter` = "A"…"E" quando o recorte é imagem de alternativa; null = enunciado/apoio/figura principal
 model ImportedQuestionAsset {
   id                 String          @id @default(cuid())
   importedQuestionId String
   importAssetId      String
   role               ImportAssetRole
+  alternativeLetter  String?
 
   importedQuestion ImportedQuestion @relation(fields: [importedQuestionId], references: [id], onDelete: Cascade)
   importAsset      ImportAsset      @relation(fields: [importAssetId], references: [id], onDelete: Cascade)
 
   @@unique([importedQuestionId, importAssetId])
+  @@index([importedQuestionId, alternativeLetter])
   @@map("imported_question_assets")
 }
 

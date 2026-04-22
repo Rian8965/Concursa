@@ -20,7 +20,12 @@ export type ImportAssetDTO = {
   extractedText: string | null;
   imageDataUrl: string | null;
   label: string | null;
-  questionLinks: { id: string; importedQuestionId: string; role: "SUPPORT_TEXT" | "FIGURE" }[];
+  questionLinks: {
+    id: string;
+    importedQuestionId: string;
+    role: "SUPPORT_TEXT" | "FIGURE";
+    alternativeLetter?: string | null;
+  }[];
 };
 
 type QOpt = { id: string; label: string };
@@ -43,7 +48,14 @@ type Props = {
   linkType?: PdfLinkType;
   onBoxSelected?: (sel: { page: number; bbox: { x: number; y: number; w: number; h: number } }) => Promise<void> | void;
   layout?: "workspace" | "pdfOnly";
-  onLinkCreated?: (info: { assetId: string; role: "SUPPORT_TEXT" | "FIGURE"; page: number }) => void;
+  onLinkCreated?: (info: {
+    assetId: string;
+    role: "SUPPORT_TEXT" | "FIGURE";
+    page: number;
+    alternativeLetter?: string | null;
+  }) => void;
+  /** Quando setado (A–E), o próximo desenho vincula imagem àquela alternativa. Força recorte de imagem. */
+  targetAlternativeLetter?: string | null;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -68,6 +80,7 @@ export function ImportPdfMarkupPanel({
   onBoxSelected,
   layout = "workspace",
   onLinkCreated,
+  targetAlternativeLetter = null,
 }: Props) {
   const [page, setPage] = useState(() => {
     const p = initialPage;
@@ -120,7 +133,7 @@ export function ImportPdfMarkupPanel({
   const pageWidth = Math.max(280, Math.min(1400, Math.floor(wrapWidth * zoom)));
 
   const effectiveTargetQ = selectedQuestionId ?? targetQ;
-  const effectiveLinkType = linkType;
+  const effectiveLinkType = targetAlternativeLetter ? "IMAGE" : linkType;
   const computedKind: DrawMode = effectiveLinkType === "TEXT" ? "TEXT_BLOCK" : "IMAGE";
   const computedRole = computedKind === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE";
   const computedLabel =
@@ -327,6 +340,7 @@ export function ImportPdfMarkupPanel({
         if (!res.ok) throw new Error(data.error ?? "Erro ao criar região");
         const assetId = data.asset?.id as string;
         const role = uiMode === "linker" ? computedRole : (effectiveMode === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE");
+        const altL = targetAlternativeLetter?.trim().toUpperCase().slice(0, 1) ?? null;
         const lr = await fetch(`/api/admin/imports/${importId}/links`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -334,6 +348,7 @@ export function ImportPdfMarkupPanel({
             importedQuestionId: effectiveTargetQ,
             importAssetId: assetId,
             role,
+            ...(altL && /^[A-E]$/i.test(altL) ? { alternativeLetter: altL } : {}),
           }),
         });
         if (!lr.ok) {
@@ -341,7 +356,7 @@ export function ImportPdfMarkupPanel({
           throw new Error(err.error ?? "Erro ao vincular");
         }
         await onChanged();
-        onLinkCreated?.({ assetId, role, page });
+        onLinkCreated?.({ assetId, role, page, alternativeLetter: altL && /^[A-E]$/i.test(altL) ? altL : null });
       } catch (err) {
         console.error(err);
         alert(err instanceof Error ? err.message : "Erro");
@@ -349,7 +364,24 @@ export function ImportPdfMarkupPanel({
         setBusy(false);
       }
     },
-    [resizingAsset, draggingAsset, preview, drawing, uiMode, computedKind, computedLabel, computedRole, mode, page, importId, effectiveTargetQ, onChanged, onBoxSelected, onLinkCreated],
+    [
+      resizingAsset,
+      draggingAsset,
+      preview,
+      drawing,
+      uiMode,
+      computedKind,
+      computedLabel,
+      computedRole,
+      mode,
+      page,
+      importId,
+      effectiveTargetQ,
+      onChanged,
+      onBoxSelected,
+      onLinkCreated,
+      targetAlternativeLetter,
+    ],
   );
 
   const patchAssetText = async (assetId: string, extractedText: string) => {

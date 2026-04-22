@@ -14,9 +14,18 @@ import { StatsRow } from "@/components/admin/review/StatsRow";
 import { PdfQuestionLinkAssets } from "@/components/admin/review/PdfQuestionLinkAssets";
 import {
   analyzeEnunciadoHeuristic,
-  isQuestionVinculoComplete,
+  getDependencyBlockUserMessage,
   mergeDependencyOr,
 } from "@/lib/import/enunciado-dependency-core";
+import {
+  alternativasVisuaisAtivas,
+  detectLikelyVisualAlternatives,
+  getExtendedLinkFlags,
+  isVinculoSatisfiedForReview,
+  mergeReviewIntoRawText,
+  missingAlternativeImageLinks,
+  parseImportRawText,
+} from "@/lib/import/review-flags";
 
 // PDF viewer é encapsulado em `VisualizadorPDF` (dinâmico internamente).
 
@@ -205,12 +214,42 @@ function resolvePdfStartPageForQuestion(q: ImportedQ, assets: ImportAssetDTO[] |
   return 1;
 }
 
-function linkFlagsForQuestion(assets: ImportAssetDTO[] | undefined, qid: string) {
-  const linked = (assets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === qid));
-  return {
-    hasTextBlockLink: linked.some((a) => a.kind === "TEXT_BLOCK"),
-    hasFigureImageLink: linked.some((a) => a.kind === "IMAGE"),
-  };
+function canApproveImportQuestion(
+  imp: ImportData,
+  drafts: Record<string, ImportedQ>,
+  llmById: Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null,
+  qid: string,
+): { ok: true } | { ok: false; message: string } {
+  const draft = drafts[qid];
+  if (!draft) return { ok: false, message: "Rascunho indisponível" };
+  const c = draft.content ?? "";
+  const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
+  const { review } = parseImportRawText(draft.rawText);
+  const ext = getExtendedLinkFlags(imp.importAssets, qid);
+  const vg = isVinculoSatisfiedForReview(
+    dep.needsTextSupport,
+    dep.needsFigure,
+    ext.hasTextBlockLink,
+    ext.hasMainImageLink,
+    review,
+  );
+  if (!vg.ok) {
+    return { ok: false, message: getDependencyBlockUserMessage(vg.missing) };
+  }
+  const alts = draft.alternatives ?? [];
+  const heurVis = detectLikelyVisualAlternatives(alts);
+  if (alternativasVisuaisAtivas(review, heurVis)) {
+    const letters = alts.map((a) => a.letter.trim().toUpperCase().slice(0, 1));
+    const hasBy: Record<string, boolean> = {};
+    for (const L of letters) {
+      if (L) hasBy[L] = Boolean(ext.altImageByLetter[L]);
+    }
+    const miss = missingAlternativeImageLinks(letters, hasBy);
+    if (miss.length) {
+      return { ok: false, message: `Faltam recortes nas alternativas: ${miss.join(", ")}` };
+    }
+  }
+  return { ok: true };
 }
 
 export default function RevisaoImportacaoPage() {
@@ -237,11 +276,38 @@ export default function RevisaoImportacaoPage() {
   const [llmById, setLlmById] = useState<Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null>(null);
   const [llmAnalyzed, setLlmAnalyzed] = useState(false);
   const textDrawerAutoOpened = useRef<Set<string>>(new Set());
+  const [applyAlternativesMode, setApplyAlternativesMode] = useState(false);
+  const [activeAltLetter, setActiveAltLetter] = useState("A");
 
   const refreshImport = useCallback(async () => {
     const impData = await fetch(`/api/admin/imports/${id}`).then((r) => r.json());
     setImp(impData.import);
   }, [id]);
+
+  const patchImportedReview = useCallback(
+    async (questionId: string, patch: Parameters<typeof mergeReviewIntoRawText>[1]) => {
+      const d = drafts[questionId];
+      if (!d) return;
+      const nextRaw = mergeReviewIntoRawText(d.rawText, patch);
+      const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: nextRaw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(data.error?.trim() || "Erro ao guardar definição de revisão");
+        return;
+      }
+      setDrafts((prev) => {
+        const cur = prev[questionId];
+        if (!cur) return prev;
+        return { ...prev, [questionId]: { ...cur, rawText: nextRaw } };
+      });
+      await refreshImport();
+    },
+    [id, drafts, refreshImport],
+  );
 
   useEffect(() => {
     Promise.all([
@@ -320,16 +386,13 @@ export default function RevisaoImportacaoPage() {
 
   const reviewSaveBlock = useMemo(() => {
     if (!imp) return { blocked: false, hint: "" as string };
-    const assets = imp.importAssets ?? [];
     for (const [qid, dec] of Object.entries(decisions)) {
       if (dec !== "approve") continue;
-      const c = drafts[qid]?.content ?? imp.importedQuestions.find((q) => q.id === qid)?.content ?? "";
-      const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
-      const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(assets, qid);
-      if (!isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink).ok) {
+      const c = canApproveImportQuestion(imp, drafts, llmById, qid);
+      if (!c.ok) {
         return {
           blocked: true,
-          hint: "Há questões aprovadas sem vínculo obrigatório no PDF. Corrija ou mude a decisão antes de salvar.",
+          hint: "Há aprovações pendentes (vínculo no PDF, alternativas em imagem ou isenção). Ajuste antes de salvar.",
         };
       }
     }
@@ -344,14 +407,10 @@ export default function RevisaoImportacaoPage() {
       setDecisions(d);
       return;
     }
-    const assets = imp.importAssets ?? [];
     let skipped = 0;
     const next: Record<string, Decision> = { ...decisions };
     for (const q of imp.importedQuestions) {
-      const c = drafts[q.id]?.content ?? q.content;
-      const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[q.id] ?? null);
-      const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(assets, q.id);
-      if (isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink).ok) {
+      if (canApproveImportQuestion(imp, drafts, llmById, q.id).ok) {
         next[q.id] = "approve";
       } else {
         skipped += 1;
@@ -359,7 +418,7 @@ export default function RevisaoImportacaoPage() {
     }
     setDecisions(next);
     if (skipped) {
-      toast.info(`${skipped} questão(ões) exigem vínculo (texto/imagem no PDF) e não foram aprovadas automaticamente.`);
+      toast.info(`${skipped} questão(ões) com pendências de revisão não foram aprovadas automaticamente.`);
     }
   }
 
@@ -368,15 +427,9 @@ export default function RevisaoImportacaoPage() {
       setDecisions((p) => ({ ...p, [qid]: next }));
       return;
     }
-    const c = drafts[qid]?.content ?? imp.importedQuestions.find((q) => q.id === qid)?.content ?? "";
-    const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
-    const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(imp.importAssets, qid);
-    const g = isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink);
-    if (!g.ok) {
-      const msgs: string[] = [];
-      if (g.missing.includes("image")) msgs.push("Precisa vincular imagem");
-      if (g.missing.includes("text")) msgs.push("Precisa vincular texto de apoio no PDF");
-      toast.error(msgs.join(" · "));
+    const c = canApproveImportQuestion(imp, drafts, llmById, qid);
+    if (!c.ok) {
+      toast.error(c.message);
       return;
     }
     setDecisions((p) => ({ ...p, [qid]: "approve" }));
@@ -423,6 +476,9 @@ export default function RevisaoImportacaoPage() {
   async function saveQuestion(questionId: string) {
     const d = drafts[questionId];
     if (!d) return;
+    const { review: rSave } = parseImportRawText(d.rawText);
+    const heurV = detectLikelyVisualAlternatives(d.alternatives ?? []);
+    const visSave = alternativasVisuaisAtivas(rSave, heurV);
     // #region agent log
     fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-save-question',location:'revisao/page.tsx:saveQuestion',message:'saving imported question edits',data:{importId:id,questionId,contentLen:d.content?.length ?? 0,alts:d.alternatives?.length ?? 0,correctAnswer:d.correctAnswer ?? null,subjectId:subjectMap[questionId] ?? ''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
@@ -437,6 +493,7 @@ export default function RevisaoImportacaoPage() {
         sourcePage: d.sourcePage ?? null,
         confidence: d.confidence ?? null,
         rawText: d.rawText ?? null,
+        allowEmptyAlternativeText: visSave,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -664,10 +721,8 @@ export default function RevisaoImportacaoPage() {
     const base = onlyNeedsReview
       ? all.filter((q) => {
           if (computeReviewWarnings(drafts[q.id] ?? q).length > 0) return true;
-          const dep = mergedDepByQuestion[q.id];
-          if (!dep) return false;
-          const f = linkFlagsForQuestion(imp?.importAssets, q.id);
-          return !isQuestionVinculoComplete(dep, f.hasTextBlockLink, f.hasFigureImageLink).ok;
+          if (!imp) return false;
+          return !canApproveImportQuestion(imp, drafts, llmById, q.id).ok;
         })
       : all;
     const s = search.trim().toLowerCase();
@@ -695,7 +750,7 @@ export default function RevisaoImportacaoPage() {
       const hay = `${idx + 1} ${num} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, imp?.importedQuestions, imp?.importAssets, drafts, search, globalMetaDisplay, mergedDepByQuestion]);
+  }, [onlyNeedsReview, imp, drafts, search, globalMetaDisplay, llmById]);
 
   useLayoutEffect(() => {
     if (!imp || loading) return;
@@ -836,22 +891,46 @@ export default function RevisaoImportacaoPage() {
             { key: "Cargo", value: questionContext.cargo },
           ];
           const dep = mergedDepByQuestion[q.id];
-          const { hasTextBlockLink, hasFigureImageLink } = linkFlagsForQuestion(imp.importAssets, q.id);
-          const vComplete = dep
-            ? isQuestionVinculoComplete(dep, hasTextBlockLink, hasFigureImageLink)
-            : { ok: true, missing: [] as Array<"text" | "image"> };
-          const depNeedsImage = Boolean(dep?.needsFigure && !hasFigureImageLink);
-          const depNeedsText = Boolean(dep?.needsTextSupport && !hasTextBlockLink);
-          const vinculoIncomplete = Boolean(dep && !vComplete.ok);
+          const { review: reviewFromDraft } = parseImportRawText(draft.rawText);
+          const ext = getExtendedLinkFlags(imp.importAssets, q.id);
+          const vg = isVinculoSatisfiedForReview(
+            dep?.needsTextSupport ?? false,
+            dep?.needsFigure ?? false,
+            ext.hasTextBlockLink,
+            ext.hasMainImageLink,
+            reviewFromDraft,
+          );
+          const depNeedsImage = Boolean(
+            dep?.needsFigure && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem,
+          );
+          const depNeedsText = Boolean(
+            dep?.needsTextSupport && !ext.hasTextBlockLink && !reviewFromDraft.vinculoExcecao?.semTexto,
+          );
+          const vinculoIncomplete = dep ? !vg.ok : false;
+          const heurVis = detectLikelyVisualAlternatives(draft.alternatives ?? []);
+          const visOn = alternativasVisuaisAtivas(reviewFromDraft, heurVis);
+          const altLetters = (draft.alternatives ?? []).map((a) => a.letter.trim().toUpperCase().slice(0, 1));
+          const hasByLetter: Record<string, boolean> = {};
+          for (const L of altLetters) {
+            if (L) hasByLetter[L] = Boolean(ext.altImageByLetter[L]);
+          }
+          const missAlts = visOn ? missingAlternativeImageLinks(altLetters, hasByLetter) : [];
+          const altsPend = missAlts.length > 0;
+          const cap = canApproveImportQuestion(imp, drafts, llmById, q.id);
+          const anyPend = !cap.ok;
+          const vExAtiva = Boolean(
+            reviewFromDraft.vinculoExcecao?.semTexto && reviewFromDraft.vinculoExcecao?.semImagem,
+          );
 
           const openExpand = (fromAutoText: boolean) => {
             setSelectedQ(q.id);
+            setApplyAlternativesMode(false);
             const willExpand = !isExpanded;
             setExpanded((prev) => ({ ...prev, [q.id]: willExpand }));
             if (fromAutoText && willExpand) {
               const depM = mergedDepByQuestion[q.id];
-              const f = linkFlagsForQuestion(imp.importAssets, q.id);
-              if (depM?.needsTextSupport && !f.hasTextBlockLink && !textDrawerAutoOpened.current.has(q.id)) {
+              const ex = getExtendedLinkFlags(imp.importAssets, q.id);
+              if (depM?.needsTextSupport && !ex.hasTextBlockLink && !textDrawerAutoOpened.current.has(q.id)) {
                 textDrawerAutoOpened.current.add(q.id);
                 setLinkDrawerStartPage(resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp.importAssets));
                 setDrawerLinkType("TEXT");
@@ -866,10 +945,10 @@ export default function RevisaoImportacaoPage() {
               data-review-card={isFirstVisible ? "" : undefined}
               className={cn(
                 "min-w-0 rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
-                vinculoIncomplete && "ring-2 ring-rose-400/85",
-                !vinculoIncomplete && d === "approve" && "ring-2 ring-emerald-300/50",
-                !vinculoIncomplete && d === "reject" && "ring-2 ring-red-300/50",
-                !vinculoIncomplete && d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
+                anyPend && "ring-2 ring-rose-400/85",
+                !anyPend && d === "approve" && "ring-2 ring-emerald-300/50",
+                !anyPend && d === "reject" && "ring-2 ring-red-300/50",
+                !anyPend && d === "pending" && warnings.length > 0 && "ring-2 ring-amber-200/70",
               )}
             >
               <div className="border-b border-black/[0.06] bg-gradient-to-b from-slate-50/40 to-transparent p-5 sm:p-6">
@@ -912,6 +991,16 @@ export default function RevisaoImportacaoPage() {
                         {depNeedsText && (
                           <span className="inline-flex max-w-full items-center rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-950 ring-1 ring-orange-200/90 whitespace-normal">
                             Precisa vincular texto de apoio
+                          </span>
+                        )}
+                        {visOn && altsPend && (
+                          <span className="inline-flex max-w-full items-center rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+                            Alternativas em imagem: faltam {missAlts.join(", ")}
+                          </span>
+                        )}
+                        {visOn && !altsPend && (draft.alternatives?.length ?? 0) > 0 && (
+                          <span className="inline-flex max-w-full items-center rounded-full border border-slate-200/90 bg-slate-50/90 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                            Alts. visuais
                           </span>
                         )}
                         {q.confidence != null && (
@@ -969,13 +1058,13 @@ export default function RevisaoImportacaoPage() {
                       d === "approve"
                         ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
                         : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
-                      vinculoIncomplete && d !== "approve" && "opacity-55",
+                      anyPend && d !== "approve" && "opacity-55",
                     )}
                     onClick={() => {
                       if (d === "approve") setDecisions((prev) => ({ ...prev, [q.id]: "pending" }));
                       else setQuestionDecision(q.id, "approve");
                     }}
-                    title={vinculoIncomplete ? "Vincule no PDF o texto/imagem exigidos pelo enunciado" : "Aprovar"}
+                    title={!cap.ok ? cap.message : "Aprovar"}
                     aria-pressed={d === "approve"}
                   >
                     <Check className="h-5 w-5" strokeWidth={2.5} />
@@ -1012,15 +1101,95 @@ export default function RevisaoImportacaoPage() {
 
               {isExpanded && (
                 <div className="border-t border-black/[0.06] bg-white/60 px-5 py-8 sm:px-8 sm:py-10">
-                  {vinculoIncomplete && (
-                    <div className="mb-8 rounded-2xl border border-rose-300/90 bg-rose-50 p-5 text-sm text-rose-950 shadow-sm sm:p-6">
-                      <div className="text-base font-extrabold tracking-tight">Vínculos obrigatórios (enunciado)</div>
-                      <p className="mt-2 space-y-1.5 font-semibold leading-relaxed">
-                        {depNeedsImage ? <span className="block">Precisa vincular imagem (figura, gráfico, tabela, mapa, charge, etc.) no painel à direita.</span> : null}
-                        {depNeedsText ? <span className="block">Precisa vincular texto de apoio no PDF.</span> : null}
-                      </p>
+                  {(vinculoIncomplete || (visOn && altsPend)) && (
+                    <div className="mb-6 space-y-3">
+                      {vinculoIncomplete && (
+                        <div className="rounded-2xl border border-rose-300/90 bg-rose-50/95 p-4 text-sm text-rose-950 shadow-sm sm:p-5">
+                          <div className="text-sm font-extrabold tracking-tight">Vínculos obrigatórios (enunciado)</div>
+                          <p className="mt-2 space-y-1.5 text-[13px] font-semibold leading-relaxed">
+                            {depNeedsImage ? <span className="block">Ligue uma imagem (figura, gráfico, tabela, mapa, etc.) no painel à direita, ou use a isenção abaixo se não houver o que vincular.</span> : null}
+                            {depNeedsText ? <span className="block">Ligue o texto de apoio no PDF, ou a isenção de vínculo abaixo se não fizer sentido.</span> : null}
+                          </p>
+                        </div>
+                      )}
+                      {visOn && altsPend && (
+                        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-xs font-semibold text-amber-950 shadow-sm">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800/90">Alternativas visuais</span>
+                          <p className="mt-1.5 leading-relaxed">Falta(m) recorte(s) de imagem para: {missAlts.join(", ")}. Use “Aplicar alternativas” ou o vínculo por letra no painel do PDF.</p>
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-slate-600">
+                    <span className="w-full text-[9px] font-extrabold uppercase tracking-wider text-slate-400 sm:w-auto sm:pe-1">Revisão</span>
+                    <button
+                      type="button"
+                      className="rounded-md px-1 py-0.5 text-[10px] font-semibold text-slate-500 underline decoration-slate-300/90 underline-offset-[3px] transition hover:text-violet-800"
+                      title="Confirma manualmente que não é necessário vincular texto ou imagem do enunciado. Fica registrado com data."
+                      onClick={() =>
+                        void patchImportedReview(
+                          q.id,
+                          (vExAtiva
+                            ? { vinculoExcecao: null }
+                            : {
+                                vinculoExcecao: { at: new Date().toISOString(), semTexto: true, semImagem: true },
+                              }) as Parameters<typeof mergeReviewIntoRawText>[1],
+                        )
+                      }
+                    >
+                      {vExAtiva ? "Reativar exigência de vínculo" : "Não há texto/imagem a vincular"}
+                    </button>
+                    <span className="hidden sm:inline" aria-hidden>
+                      ·
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-md px-1 py-0.5 text-[10px] font-semibold text-slate-500 underline decoration-slate-300/90 underline-offset-[3px] transition hover:text-violet-800"
+                      title="Marca a questão como de alternativas em imagem (fórmulas, gráficos, etc.)"
+                      onClick={() => {
+                        const m = reviewFromDraft.alternativasVisuais?.revisorMarcou === true;
+                        void patchImportedReview(q.id, { alternativasVisuais: { revisorMarcou: !m } });
+                      }}
+                    >
+                      {reviewFromDraft.alternativasVisuais?.revisorMarcou ? "Desmarcar alternativas em imagem" : "Alternativas em imagem (manual)"}
+                    </button>
+                    {heurVis && !reviewFromDraft.alternativasVisuais?.revisorMarcou && (
+                      <span className="text-[9px] font-medium text-amber-700/90">(heurística ativa)</span>
+                    )}
+                    <span className="hidden sm:inline" aria-hidden>
+                      ·
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-md px-1 py-0.5 text-[10px] font-semibold text-slate-500 underline decoration-slate-300/90 underline-offset-[3px] transition hover:text-violet-800"
+                      title="Abre o PDF: recorte uma imagem para cada letra (A…E)."
+                      onClick={() => {
+                        if ((draft.alternatives?.length ?? 0) < 1) {
+                          toast.info("Defina pelo menos uma alternativa antes (ou use “Identificar alternativas no PDF”).");
+                          return;
+                        }
+                        setSelectedQ(q.id);
+                        setLinkDrawerStartPage(
+                          resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp.importAssets),
+                        );
+                        setDrawerLinkType("IMAGE");
+                        const Ls = (draft.alternatives ?? []).map((a) => a.letter.trim().toUpperCase().slice(0, 1));
+                        const order = ["A", "B", "C", "D", "E"] as const;
+                        const ex = getExtendedLinkFlags(imp.importAssets, q.id);
+                        const hasBy: Record<string, boolean> = {};
+                        for (const L of Ls) {
+                          if (L) hasBy[L] = Boolean(ex.altImageByLetter[L]);
+                        }
+                        const firstMiss = order.find((L) => Ls.includes(L) && !hasBy[L]);
+                        setActiveAltLetter(firstMiss ?? Ls[0] ?? "A");
+                        setApplyAlternativesMode(true);
+                        setDrawerOpen(true);
+                      }}
+                    >
+                      Aplicar alternativas
+                    </button>
+                  </div>
                   <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
                     <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados da questão</h3>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">
@@ -1152,6 +1321,7 @@ export default function RevisaoImportacaoPage() {
                                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Texto da alternativa</span>
                                     <textarea
                                       className="input min-h-[100px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
+                                      placeholder={visOn ? "Texto opcional — deixe vazio se a alternativa for só imagem no PDF" : undefined}
                                       value={alt.content}
                                       onChange={(e) => {
                                         const v = e.target.value;
@@ -1246,6 +1416,7 @@ export default function RevisaoImportacaoPage() {
                         assets={linkedAssets}
                         onRefresh={refreshImport}
                         onOpenLinkText={() => {
+                          setApplyAlternativesMode(false);
                           setSelectedQ(q.id);
                           setLinkDrawerStartPage(
                             resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
@@ -1254,6 +1425,7 @@ export default function RevisaoImportacaoPage() {
                           setDrawerOpen(true);
                         }}
                         onOpenLinkImage={() => {
+                          setApplyAlternativesMode(false);
                           setSelectedQ(q.id);
                           setLinkDrawerStartPage(
                             resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
@@ -1293,7 +1465,10 @@ export default function RevisaoImportacaoPage() {
 
       <ImportLinkDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false);
+          setApplyAlternativesMode(false);
+        }}
         importId={id}
         pdfAvailable={Boolean(imp.storedPdfPath)}
         questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
@@ -1304,6 +1479,25 @@ export default function RevisaoImportacaoPage() {
         onLinkTypeChange={setDrawerLinkType}
         onChanged={refreshImport}
         initialPage={linkDrawerStartPage}
+        applyAlternativesMode={applyAlternativesMode}
+        activeAlternativeLetter={activeAltLetter}
+        onActiveAlternativeLetterChange={setActiveAltLetter}
+        onAlternativeLinked={(info) => {
+          const d = drafts[selectedQ];
+          if (!d) return;
+          const letters = (d.alternatives ?? [])
+            .map((a) => a.letter.trim().toUpperCase().slice(0, 1))
+            .filter(Boolean);
+          const order = ["A", "B", "C", "D", "E"];
+          const linked = (info?.alternativeLetter ?? activeAltLetter).toString().trim().toUpperCase().slice(0, 1);
+          const start = order.indexOf(linked);
+          const next =
+            (start === -1 ? order : order.slice(start + 1)).find((L) => letters.includes(L)) ?? null;
+          if (next) setActiveAltLetter(next);
+          toast.success(
+            `Recorte vinculado (${linked})${next ? ` · selecionada: ${next}` : ""}.`,
+          );
+        }}
       />
 
       <ImportIdentifyAlternativesDrawer

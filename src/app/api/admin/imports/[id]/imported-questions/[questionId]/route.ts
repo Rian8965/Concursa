@@ -28,6 +28,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     hasImage: boolean;
     imageUrl: string | null;
     status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PUBLISHED";
+    /** Permite alternativas com texto vazio (imagem no PDF na revisão) */
+    allowEmptyAlternativeText: boolean;
   }>;
 
   const iq = await prisma.importedQuestion.findFirst({
@@ -37,13 +39,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!iq) return NextResponse.json({ error: "Questão importada não encontrada" }, { status: 404 });
 
   if (body.alternatives) {
-    const ok = Array.isArray(body.alternatives) && body.alternatives.length > 0 && body.alternatives.every((a) =>
-      a &&
-      typeof a.letter === "string" &&
-      typeof a.content === "string" &&
-      a.letter.trim().length >= 1 &&
-      a.letter.trim().length <= 3
-    );
+    const allowEmpty = body.allowEmptyAlternativeText === true;
+    const ok = Array.isArray(body.alternatives) && body.alternatives.length > 0 && body.alternatives.every((a) => {
+      if (!a || typeof a.letter !== "string" || typeof a.content !== "string") return false;
+      if (a.letter.trim().length < 1 || a.letter.trim().length > 3) return false;
+      if (allowEmpty) return true;
+      return a.content.trim().length > 0;
+    });
     if (!ok) return NextResponse.json({ error: "alternatives inválido" }, { status: 400 });
   }
 
