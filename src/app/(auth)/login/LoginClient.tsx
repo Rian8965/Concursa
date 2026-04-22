@@ -77,49 +77,65 @@ export function LoginClient() {
   }
 
   return (
-    <div className={cn(inter.className, "min-h-[100dvh] min-h-screen bg-[#5B21B6]")}>
-      <div className="mx-auto grid min-h-[100dvh] w-full max-w-[1280px] grid-cols-1 items-stretch gap-0 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:px-10 lg:py-12">
-        {/* Lado esquerdo */}
-        <section className="relative flex flex-col justify-center rounded-3xl bg-[#5B21B6] px-6 py-10 sm:px-10 lg:rounded-r-none lg:py-12">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="relative h-10 w-[220px] sm:h-11 sm:w-[260px]">
-              <Image src="/login-brand-logo.png" alt={BRAND_NAME} fill className="object-contain object-left" sizes="260px" priority />
+    <div className={cn(inter.className, "min-h-[100dvh] min-h-screen bg-[#f5f3ff]")}>
+      <div className="mx-auto grid min-h-[100dvh] w-full max-w-[1180px] grid-cols-1 items-stretch gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-8 lg:px-10 lg:py-12">
+        {/* Lado esquerdo (roxo claro) */}
+        <section className="relative overflow-hidden rounded-[28px] border border-violet-200/60 bg-[#ede9fe] px-7 py-10 shadow-[0_18px_48px_rgba(124,58,237,0.10)] sm:px-10 sm:py-12">
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative h-10 w-[220px] sm:h-11 sm:w-[280px]">
+              <Image src="/login-brand-logo.png" alt={BRAND_NAME} fill className="object-contain object-left" sizes="280px" priority />
             </div>
           </div>
 
-          <h1 className="max-w-[18ch] text-balance text-[40px] font-extrabold leading-[1.05] tracking-tight text-white sm:text-[52px]">
-            SEU FUTURO
-            <br />
-            COMEÇA COM
-            <br />
-            UMA DECISÃO.
-          </h1>
+          <div className="mt-10 max-w-[560px]">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700/70">Descomplique seu Concurso</p>
 
-          <div className="mt-8">
-            <span className="inline-flex rounded-full bg-fuchsia-500 px-6 py-2 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">
-              UI DESIGN
-            </span>
+            <h1 className="mt-4 text-balance text-4xl font-extrabold leading-[1.08] tracking-tight text-[#1f1635] sm:text-5xl">
+              Seu futuro começa com uma decisão.
+            </h1>
+            <p className="mt-5 max-w-prose text-[15px] leading-relaxed text-[#4b4662] sm:text-[16px]">
+              Estude com foco, consistência e estratégia. A aprovação é questão de tempo.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-violet-700 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-violet-800"
+                onClick={() => {
+                  const el = document.getElementById("login");
+                  el?.scrollIntoView({ block: "center", behavior: "smooth" });
+                  (el as HTMLInputElement | null)?.focus?.();
+                }}
+              >
+                Acessar
+              </button>
+              <span className="text-sm font-semibold text-violet-800/70">Acesse sua conta para continuar.</span>
+            </div>
           </div>
+
+          {/* detalhes sutis */}
+          <div className="pointer-events-none absolute -right-32 -top-32 h-72 w-72 rounded-full bg-violet-300/35 blur-[80px]" aria-hidden />
+          <div className="pointer-events-none absolute -left-24 bottom-[-120px] h-72 w-72 rounded-full bg-fuchsia-200/40 blur-[90px]" aria-hidden />
         </section>
 
-        {/* Lado direito */}
-        <section className="flex flex-col justify-center rounded-3xl bg-white px-6 py-10 shadow-[0_18px_48px_rgba(17,24,39,0.18)] sm:px-10 lg:rounded-l-none lg:py-12">
-          <div className="mx-auto w-full max-w-[420px]">
-            <h2 className="text-2xl font-extrabold tracking-tight text-[#111827]">Login</h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">Preencha os campos abaixo com os seus dados de acesso.</p>
+        {/* Lado direito (card clean) */}
+        <section className="flex flex-col justify-center">
+          <div className="rounded-[28px] border border-black/[0.06] bg-white px-7 py-10 shadow-[0_18px_48px_rgba(17,24,39,0.10)] sm:px-9 sm:py-12">
+            <div className="mx-auto w-full max-w-[420px]">
+              <h2 className="text-xl font-extrabold tracking-tight text-[#111827]">Faça login com email e senha</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">
+                Use seu e-mail ou CPF para entrar na plataforma.
+              </p>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4" noValidate>
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4" noValidate>
               <div>
-                <label htmlFor="login" className="sr-only">
-                  E-mail ou CPF
-                </label>
                 <input
                   id="login"
                   type="text"
                   autoComplete="username"
-                  placeholder="Digite o seu e-mail ou CPF"
+                  placeholder="E-mail ou CPF"
                   className={cn(
-                    "h-12 w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
+                    "h-12 w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
                     errors.login && "border-red-400 focus:border-red-400 focus:ring-red-100",
                   )}
                   {...register("login")}
@@ -128,17 +144,14 @@ export function LoginClient() {
               </div>
 
               <div>
-                <label htmlFor="password" className="sr-only">
-                  Senha
-                </label>
                 <div className="relative">
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
-                    placeholder="Digite sua senha"
+                    placeholder="Senha"
                     className={cn(
-                      "h-12 w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 pr-12 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
+                      "h-12 w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 pr-12 text-[15px] font-medium text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-violet-400 focus:ring-2 focus:ring-violet-200",
                       errors.password && "border-red-400 focus:border-red-400 focus:ring-red-100",
                     )}
                     {...register("password")}
@@ -176,7 +189,7 @@ export function LoginClient() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="mt-2 h-12 w-full rounded-xl bg-[#7C3AED] text-sm font-extrabold text-white shadow-sm transition hover:bg-[#6D28D9] disabled:opacity-60"
+                className="mt-2 h-12 w-full rounded-2xl bg-violet-700 text-sm font-extrabold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-60"
               >
                 {isSubmitting ? "Acessando…" : "Acessar"}
               </button>
@@ -186,6 +199,7 @@ export function LoginClient() {
               © {new Date().getFullYear()} {BRAND_NAME}
             </p>
           </div>
+        </div>
         </section>
       </div>
     </div>
