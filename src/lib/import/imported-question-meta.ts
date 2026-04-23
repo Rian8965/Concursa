@@ -46,7 +46,6 @@ const META_LABEL: Record<string, string> = {
   assunto: "assunto (tópico)",
   ano: "ano",
   banca: "banca",
-  concurso: "concurso",
 };
 
 export function metaMissingLabels(missing: string[]) {
@@ -54,8 +53,9 @@ export function metaMissingLabels(missing: string[]) {
 }
 
 /**
- * Obrigatórios: disciplina, assunto, ano, banca, concurso e nível (sempre há difficulty).
- * Cidade e cargo são herdados e opcionais. Tags são opcionais.
+ * Obrigatórios: disciplina, assunto, ano e banca.
+ * Concurso, cidade e cargo são opcionais (preenchidos pela IA quando identificáveis).
+ * Tags são opcionais.
  */
 export function isImportedQuestionMetaComplete(
   iq: ImportedQuestionMetaFields,
@@ -67,7 +67,6 @@ export function isImportedQuestionMetaComplete(
   if (!m.topicId) missing.push("assunto");
   if (m.year == null) missing.push("ano");
   if (!m.examBoardId) missing.push("banca");
-  if (!m.competitionId) missing.push("concurso");
   if (missing.length) return { ok: false, missing };
   return { ok: true };
 }

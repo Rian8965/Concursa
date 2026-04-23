@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -1394,7 +1394,7 @@ export default function RevisaoImportacaoPage() {
                   <div className="mb-8 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-white p-5 shadow-sm sm:p-6">
                     <h3 className="text-sm font-extrabold tracking-tight text-violet-950">Metadados (por questão)</h3>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      Integração exige disciplina, assunto, ano, banca, concurso e nível. Campos vazios podem herdar o cadastro da importação. Guarde a questão após editar.
+                      Integração exige disciplina, assunto, ano e banca. Concurso e cargo são opcionais. Campos vazios podem herdar o cadastro da importação. Guarde a questão após editar.
                     </p>
                     <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       <div>
