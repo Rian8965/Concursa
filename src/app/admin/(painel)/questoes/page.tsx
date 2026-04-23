@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Plus, Search, Edit2, Trash2, BookOpen, Filter } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, BookOpen, Filter, Eye, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface Question {
@@ -45,6 +45,7 @@ export default function AdminQuestoesPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     examBoardId: "",
@@ -297,6 +298,14 @@ export default function AdminQuestoesPage() {
                 <div className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
+                    onClick={() => setPreviewId(q.id)}
+                    className="orbit-icon-btn orbit-icon-btn--purple"
+                    title="Visualizar questão (como o aluno vê)"
+                  >
+                    <Eye className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditingId(q.id);
                       setShowForm(true);
@@ -373,6 +382,12 @@ export default function AdminQuestoesPage() {
             setEditingId(null);
             load(search);
           }}
+        />
+      )}
+      {previewId && (
+        <QuestionPreviewModal
+          id={previewId}
+          onClose={() => setPreviewId(null)}
         />
       )}
     </>
@@ -754,6 +769,207 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
           <button type="button" onClick={save} disabled={saving} className="btn btn-primary min-w-[110px] rounded-2xl">
             {saving ? "Salvando..." : "Salvar"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── QuestionPreviewModal ──────────────────────────────────────────────────────
+
+interface PreviewQuestion {
+  id: string;
+  content: string;
+  supportText?: string | null;
+  hasImage?: boolean;
+  imageUrl?: string | null;
+  difficulty: string;
+  year?: number | null;
+  subject?: { name: string } | null;
+  examBoard?: { acronym: string } | null;
+  competition?: { name: string } | null;
+  alternatives: { id: string; letter: string; content: string; imageUrl?: string | null; order?: number }[];
+}
+
+function diffColor(d: string): { bg: string; color: string } {
+  if (d === "EASY") return { bg: "#ECFDF5", color: "#059669" };
+  if (d === "HARD") return { bg: "#FEF2F2", color: "#DC2626" };
+  return { bg: "#FFFBEB", color: "#D97706" };
+}
+
+function QuestionPreviewModal({ id, onClose }: { id: string; onClose: () => void }) {
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const [question, setQuestion] = useState<PreviewQuestion | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/admin/questions/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setQuestion(d.question ?? null);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const q = question;
+  const dc = q ? diffColor(q.difficulty) : { bg: "#FFFBEB", color: "#D97706" };
+  const diffLabel = q?.difficulty === "EASY" ? "Fácil" : q?.difficulty === "HARD" ? "Difícil" : "Médio";
+  const showImage = Boolean(q?.imageUrl && String(q.imageUrl).trim().length > 0);
+
+  return (
+    <div
+      ref={backdropRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === backdropRef.current) onClose(); }}
+    >
+      <div
+        className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        style={{ maxHeight: "90vh" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Eye className="h-4 w-4 text-violet-600" />
+            <span className="text-sm font-semibold text-gray-800">Visualização — como o aluno vê</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto p-6" style={{ fontFamily: "var(--font-sans)" }}>
+          {loading && (
+            <div className="flex items-center justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-200 border-t-violet-600" />
+            </div>
+          )}
+          {!loading && !q && (
+            <p className="py-10 text-center text-sm text-gray-400">Questão não encontrada.</p>
+          )}
+          {!loading && q && (
+            <>
+              {/* Badges */}
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                {q.subject?.name && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20, letterSpacing: "0.02em" }}>
+                    {q.subject.name}
+                  </span>
+                )}
+                <span style={{ fontSize: 11, fontWeight: 600, color: dc.color, background: dc.bg, padding: "3px 10px", borderRadius: 20 }}>
+                  {diffLabel}
+                </span>
+                {q.year && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", background: "#F3F4F6", padding: "3px 10px", borderRadius: 20 }}>
+                    {q.year}
+                  </span>
+                )}
+                {q.examBoard?.acronym && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", background: "#F3F4F6", padding: "3px 10px", borderRadius: 20 }}>
+                    {q.examBoard.acronym}
+                  </span>
+                )}
+              </div>
+
+              {/* Question card */}
+              <div style={{ padding: "20px 24px", background: "#FFFFFF", borderRadius: 16, border: "1px solid #E5E7EB", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                {/* Support text */}
+                {q.supportText && (
+                  <div style={{ marginBottom: 16, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Texto de apoio</p>
+                    <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{q.supportText}</p>
+                  </div>
+                )}
+
+                {/* Content */}
+                <p style={{ fontSize: 15.5, color: "#1F2937", lineHeight: 1.7, fontWeight: 500, whiteSpace: "pre-wrap" }}>
+                  {q.content}
+                </p>
+
+                {/* Question image */}
+                {showImage && q.imageUrl && (
+                  <div style={{ marginTop: 12 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={q.imageUrl}
+                      alt=""
+                      style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Alternatives */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(q.alternatives ?? []).map((alt) => {
+                  const isSelected = selected === alt.letter;
+                  const bg = isSelected ? "#EDE9FE" : "#FFFFFF";
+                  const border = isSelected ? "#7C3AED" : "#E5E7EB";
+                  const color = isSelected ? "#5B21B6" : "#374151";
+                  const hasAltImage = Boolean(alt.imageUrl && String(alt.imageUrl).trim().length > 0);
+                  return (
+                    <button
+                      key={alt.letter}
+                      type="button"
+                      onClick={() => setSelected((prev) => (prev === alt.letter ? null : alt.letter))}
+                      style={{
+                        display: "flex", alignItems: "flex-start", gap: 14,
+                        padding: "14px 18px", borderRadius: 12,
+                        background: bg, border: `1.5px solid ${border}`, color,
+                        cursor: "pointer", transition: "all 0.15s", textAlign: "left",
+                        width: "100%", fontFamily: "inherit",
+                      }}
+                    >
+                      <span style={{
+                        width: 28, height: 28, minWidth: 28, borderRadius: 8, flexShrink: 0,
+                        background: isSelected ? "#7C3AED" : "#F3F4F6",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, fontWeight: 700,
+                        color: isSelected ? "#fff" : "#6B7280",
+                      }}>
+                        {alt.letter}
+                      </span>
+                      {hasAltImage && alt.imageUrl ? (
+                        <div style={{ flex: 1 }}>
+                          {alt.content && (
+                            <span style={{ fontSize: 14, lineHeight: 1.55, display: "block", marginBottom: 6 }}>{alt.content}</span>
+                          )}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={alt.imageUrl}
+                            alt={`Alternativa ${alt.letter}`}
+                            style={{ maxWidth: "100%", height: "auto", borderRadius: 8, border: "1px solid #E5E7EB" }}
+                          />
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 14, lineHeight: 1.55, paddingTop: 3 }}>{alt.content}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Note */}
+              <p style={{ marginTop: 16, fontSize: 11, color: "#9CA3AF", textAlign: "center" }}>
+                Clique em uma alternativa para destacar · Esta visualização é somente leitura
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
