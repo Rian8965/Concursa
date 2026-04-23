@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Plus, Search, Edit2, Trash2, BookOpen, Filter, Eye, X } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, BookOpen, Filter, Eye, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface Question {
@@ -37,7 +38,8 @@ function diffBadgeClass(d: string) {
   return "bg-gray-100 text-gray-700 ring-gray-200/80";
 }
 
-export default function AdminQuestoesPage() {
+function AdminQuestoesContent() {
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -47,18 +49,20 @@ export default function AdminQuestoesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
-    examBoardId: "",
-    year: "",
-    cityId: "",
-    jobRoleId: "",
-    subjectId: "",
-  });
+  const [filters, setFilters] = useState(() => ({
+    examBoardId: searchParams.get("examBoardId") ?? "",
+    year: searchParams.get("year") ?? "",
+    cityId: searchParams.get("cityId") ?? "",
+    jobRoleId: searchParams.get("jobRoleId") ?? "",
+    subjectId: searchParams.get("subjectId") ?? "",
+    topicId: searchParams.get("topicId") ?? "",
+  }));
   const [filterData, setFilterData] = useState({
     examBoards: [] as { id: string; acronym: string; name: string }[],
     cities: [] as { id: string; name: string; state: string }[],
     jobRoles: [] as { id: string; name: string }[],
-    subjects: [] as { id: string; name: string }[],
+    subjects: [] as { id: string; name: string; _count?: { topics: number; questions: number } }[],
+    topics: [] as { id: string; name: string; subjectId: string }[],
   });
 
   const filtersRef = useRef(filters);
@@ -75,6 +79,7 @@ export default function AdminQuestoesPage() {
     if (eff.cityId) sp.set("cityId", eff.cityId);
     if (eff.jobRoleId) sp.set("jobRoleId", eff.jobRoleId);
     if (eff.subjectId) sp.set("subjectId", eff.subjectId);
+    if (eff.topicId) sp.set("topicId", eff.topicId);
     const res = await fetch(`/api/admin/questions?${sp.toString()}`);
     const data = await res.json();
     setQuestions(data.questions ?? []);
@@ -82,22 +87,36 @@ export default function AdminQuestoesPage() {
     setLoading(false);
   }, []);
 
+  // Load with initial URL-param filters
   useEffect(() => {
-    load();
+    load("", filtersRef.current);
     Promise.all([
       fetch("/api/admin/exam-boards").then((r) => r.json()),
       fetch("/api/admin/cities").then((r) => r.json()),
       fetch("/api/admin/job-roles").then((r) => r.json()),
       fetch("/api/admin/subjects").then((r) => r.json()),
     ]).then(([bd, cd, jd, sd]) => {
-      setFilterData({
+      setFilterData((prev) => ({
+        ...prev,
         examBoards: bd.examBoards ?? [],
         cities: cd.cities ?? [],
         jobRoles: jd.jobRoles ?? [],
         subjects: sd.subjects ?? [],
-      });
+      }));
     });
   }, [load]);
+
+  // When subjectId filter changes, load its topics
+  useEffect(() => {
+    if (!filters.subjectId) {
+      setFilterData((prev) => ({ ...prev, topics: [] }));
+      return;
+    }
+    fetch(`/api/admin/topics?subjectId=${filters.subjectId}`)
+      .then((r) => r.json())
+      .then((d) => setFilterData((prev) => ({ ...prev, topics: d.topics ?? [] })))
+      .catch(() => {});
+  }, [filters.subjectId]);
 
   async function handleDelete(id: string) {
     if (!confirm("Excluir esta questão?")) return;
@@ -110,7 +129,15 @@ export default function AdminQuestoesPage() {
     setDeleting(null);
   }
 
-  const emptyFilters = { examBoardId: "", year: "", cityId: "", jobRoleId: "", subjectId: "" };
+  const emptyFilters = { examBoardId: "", year: "", cityId: "", jobRoleId: "", subjectId: "", topicId: "" };
+
+  // Resolved names for active preset filters
+  const activeSubjectName = filters.subjectId
+    ? filterData.subjects.find((s) => s.id === filters.subjectId)?.name
+    : null;
+  const activeTopicName = filters.topicId
+    ? filterData.topics.find((t) => t.id === filters.topicId)?.name
+    : null;
 
   return (
     <>
@@ -120,6 +147,40 @@ export default function AdminQuestoesPage() {
         title="Questões"
         description={`${total} questão${total !== 1 ? "ões" : ""} cadastrada${total !== 1 ? "s" : ""}`}
       >
+        {/* Active filter chips from URL navigation */}
+        {(activeSubjectName || activeTopicName) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {activeTopicName && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                <ArrowLeft className="h-3 w-3" />
+                Conteúdo: {activeTopicName}
+                <button
+                  type="button"
+                  className="ml-0.5 rounded-full hover:bg-violet-200 p-0.5"
+                  onClick={() => { const f = { ...filters, topicId: "" }; setFilters(f); load(search, f); }}
+                  aria-label="Remover filtro"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {activeSubjectName && !activeTopicName && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                <ArrowLeft className="h-3 w-3" />
+                Matéria: {activeSubjectName}
+                <button
+                  type="button"
+                  className="ml-0.5 rounded-full hover:bg-violet-200 p-0.5"
+                  onClick={() => { const f = { ...filters, subjectId: "", topicId: "" }; setFilters(f); load(search, f); }}
+                  aria-label="Remover filtro"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+      
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setFilterOpen((v) => !v)} className="btn btn-ghost inline-flex items-center gap-2 rounded-2xl">
             <Filter className="h-3.5 w-3.5" />
@@ -141,7 +202,7 @@ export default function AdminQuestoesPage() {
 
       {filterOpen && (
         <div className="orbit-card-premium">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div>
               <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Banca</label>
               <select className="input" value={filters.examBoardId} onChange={(e) => setFilters((p) => ({ ...p, examBoardId: e.target.value }))}>
@@ -181,11 +242,31 @@ export default function AdminQuestoesPage() {
             </div>
             <div>
               <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Matéria</label>
-              <select className="input" value={filters.subjectId} onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value }))}>
+              <select
+                className="input"
+                value={filters.subjectId}
+                onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value, topicId: "" }))}
+              >
                 <option value="">Todas</option>
                 {filterData.subjects.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Conteúdo</label>
+              <select
+                className="input"
+                value={filters.topicId}
+                onChange={(e) => setFilters((p) => ({ ...p, topicId: e.target.value }))}
+                disabled={!filters.subjectId}
+              >
+                <option value="">{filters.subjectId ? "Todos" : "— escolha matéria —"}</option>
+                {filterData.topics.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
                   </option>
                 ))}
               </select>
@@ -973,5 +1054,13 @@ function QuestionPreviewModal({ id, onClose }: { id: string; onClose: () => void
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminQuestoesPage() {
+  return (
+    <Suspense>
+      <AdminQuestoesContent />
+    </Suspense>
   );
 }

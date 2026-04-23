@@ -4,6 +4,27 @@ import { NextRequest, NextResponse } from "next/server";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const { id } = await params;
+  const subject = await prisma.subject.findUnique({
+    where: { id },
+    include: {
+      _count: { select: { questions: true, topics: true } },
+      topics: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        include: {
+          _count: { select: { questions: true } },
+        },
+      },
+    },
+  });
+  if (!subject) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
+  return NextResponse.json({ subject });
+}
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Plus, Edit2 } from "lucide-react";
+import { Plus, Edit2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface Subject {
@@ -12,9 +13,11 @@ interface Subject {
   description?: string | null;
   color?: string | null;
   isActive: boolean;
+  _count?: { questions: number; topics: number };
 }
 
 export default function AdminMateriasPage() {
+  const router = useRouter();
   const [items, setItems] = useState<Subject[]>([]);
   const [editing, setEditing] = useState<Subject | Partial<Subject> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -37,7 +40,11 @@ export default function AdminMateriasPage() {
     const isNew = !(editing as Subject).id;
     const url = isNew ? "/api/admin/subjects" : `/api/admin/subjects/${(editing as Subject).id}`;
     const method = isNew ? "POST" : "PUT";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(editing) });
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editing),
+    });
     if (res.ok) {
       toast.success(isNew ? "Matéria criada!" : "Atualizada!");
       load();
@@ -49,7 +56,11 @@ export default function AdminMateriasPage() {
   return (
     <div className="orbit-stack mx-auto w-full max-w-5xl animate-fade-up">
       <PageHeader eyebrow="Conteúdo" title="Matérias" description={`${items.length} matérias cadastradas`}>
-        <button type="button" onClick={() => setEditing({ name: "", description: "", color: "#7C3AED" })} className="btn btn-primary inline-flex items-center gap-2 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => setEditing({ name: "", description: "", color: "#7C3AED" })}
+          className="btn btn-primary inline-flex items-center gap-2 rounded-2xl"
+        >
           <Plus className="h-3.5 w-3.5" />
           Nova Matéria
         </button>
@@ -62,59 +73,85 @@ export default function AdminMateriasPage() {
           </div>
         </div>
       ) : (
-        <div className="orbit-data-table-scroll">
-          <div className="orbit-table-wrap">
-            <table className="orbit-admin-table">
-              <colgroup>
-                <col className="min-w-[160px] w-[28%]" />
-                <col className="min-w-[200px] w-[44%]" />
-                <col className="min-w-[88px] w-[12%]" />
-                <col className="min-w-[100px] w-[16%]" />
-              </colgroup>
-              <thead>
-                <tr>
-                  {["Matéria", "Descrição", "Cor", "Ações"].map((h) => (
-                    <th key={h} className={h === "Cor" ? "text-center" : h === "Ações" ? "text-right" : "text-left"}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((s) => (
-                  <tr key={s.id}>
-                    <td className="min-w-0">
-                      <p className="line-clamp-2 font-semibold leading-snug text-[var(--text-primary)]">{s.name}</p>
-                    </td>
-                    <td className="min-w-0">
-                      <p className="truncate text-[var(--text-secondary)]" title={s.description?.trim() ? s.description : undefined}>
-                        {s.description?.trim() ? s.description : "—"}
+        <div className="orbit-panel overflow-hidden p-0">
+          <ul className="divide-y divide-[var(--border-subtle)]">
+            {items.map((s) => {
+              const color = s.color ?? "#7C3AED";
+              const colorBg = `${color}18`;
+              const qCount = s._count?.questions ?? 0;
+              const tCount = s._count?.topics ?? 0;
+
+              return (
+                <li key={s.id}>
+                  <div className="group flex items-center gap-4 px-5 py-4">
+                    {/* Color chip */}
+                    <div
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06]"
+                      style={{ background: colorBg }}
+                    >
+                      <div
+                        className="h-4 w-4 rounded-full"
+                        style={{ background: color }}
+                      />
+                    </div>
+
+                    {/* Name + counters — clickable */}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/materias/${s.id}`)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="font-semibold leading-snug text-[var(--text-primary)] group-hover:text-violet-700 transition-colors">
+                        {s.name}
                       </p>
-                    </td>
-                    <td className="text-center">
-                      <div className="inline-flex h-10 w-10 items-center justify-center">
-                        <div
-                          className="h-8 w-8 rounded-lg border border-black/[0.08] shadow-sm"
-                          style={{ background: s.color ?? "#E5E7EB" }}
-                          title={s.color ?? undefined}
-                        />
-                      </div>
-                    </td>
-                    <td className="text-right">
-                      <button type="button" onClick={() => setEditing(s)} className="orbit-icon-btn" title="Editar">
+                      <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                        {qCount === 0 && tCount === 0
+                          ? s.description?.trim() || "Sem questões ainda"
+                          : [
+                              qCount > 0 ? `${qCount} ${qCount === 1 ? "questão" : "questões"}` : null,
+                              tCount > 0 ? `${tCount} ${tCount === 1 ? "conteúdo" : "conteúdos"}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")}
+                      </p>
+                    </button>
+
+                    {/* Actions */}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(s);
+                        }}
+                        className="orbit-icon-btn"
+                        title="Editar"
+                      >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/materias/${s.id}`)}
+                        className="orbit-icon-btn text-violet-500"
+                        title="Ver detalhes"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
+      {/* Edit / Create modal */}
       {editing && (
-        <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && setEditing(null)}>
+        <div
+          className="orbit-modal-backdrop z-[100]"
+          onClick={(e) => e.target === e.currentTarget && setEditing(null)}
+        >
           <div
             role="dialog"
             aria-modal="true"
@@ -127,7 +164,12 @@ export default function AdminMateriasPage() {
                 <h2 id="subject-modal-title" className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
                   {(editing as Subject).id ? "Editar" : "Nova"} Matéria
                 </h2>
-                <button type="button" className="orbit-modal-close shrink-0" onClick={() => setEditing(null)} aria-label="Fechar">
+                <button
+                  type="button"
+                  className="orbit-modal-close shrink-0"
+                  onClick={() => setEditing(null)}
+                  aria-label="Fechar"
+                >
                   ×
                 </button>
               </div>
@@ -136,7 +178,11 @@ export default function AdminMateriasPage() {
               <div className="orbit-form-stack">
                 <div>
                   <label className="orbit-form-label">Nome *</label>
-                  <input className="input" value={(editing as Subject).name ?? ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+                  <input
+                    className="input"
+                    value={(editing as Subject).name ?? ""}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
                 </div>
                 <div>
                   <label className="orbit-form-label">Descrição</label>
@@ -168,7 +214,12 @@ export default function AdminMateriasPage() {
               <button type="button" onClick={() => setEditing(null)} className="btn btn-ghost rounded-2xl">
                 Cancelar
               </button>
-              <button type="button" onClick={save} disabled={saving} className={cn("btn btn-primary min-w-[110px] rounded-2xl", saving && "opacity-70")}>
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className={cn("btn btn-primary min-w-[110px] rounded-2xl", saving && "opacity-70")}
+              >
                 {saving ? "Salvando..." : "Salvar"}
               </button>
             </div>

@@ -5,7 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
 export async function GET() {
-  const subjects = await prisma.subject.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  const subjects = await prisma.subject.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: {
+      _count: {
+        select: { questions: true, topics: true },
+      },
+    },
+  });
   return NextResponse.json({ subjects });
 }
 
