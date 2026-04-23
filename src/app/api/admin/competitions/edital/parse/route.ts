@@ -17,12 +17,18 @@ function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
 }
 
-type EditalDraft = {
+export type EditalDraft = {
   name: string;
   organization?: string | null;
   examBoard?: { acronym: string; name?: string | null } | null;
   cities?: Array<{ name: string; state: string }> | null;
-  jobRoles?: Array<{ name: string }> | null;
+  /** Cargos identificados, cada um com suas próprias matérias */
+  jobRoles?: Array<{
+    name: string;
+    subjects?: Array<{ name: string }> | null;
+  }> | null;
+  /** Etapas/fases do concurso (prova objetiva, TAF, psicológico, etc.) */
+  stages?: Array<{ name: string }> | null;
   examDate?: string | null; // YYYY-MM-DD
   year?: number | null;
   description?: string | null;
@@ -59,9 +65,9 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
     body: JSON.stringify({
       sessionId: "03dbee",
-      runId: "pre-fix",
+      runId: "post-fix",
       hypothesisId: "H-edital-parse",
-      location: "src/app/api/admin/competitions/edital/parse/route.ts:POST",
+      location: "edital/parse/route.ts:POST",
       message: "edital parse started",
       data: { bytes: bytes.length, projectId, location, processorId },
       timestamp: Date.now(),
@@ -85,7 +91,7 @@ export async function POST(req: Request) {
         sessionId: "03dbee",
         runId: "post-fix",
         hypothesisId: "H-docai-process",
-        location: "src/app/api/admin/competitions/edital/parse/route.ts:extractPdf:catch",
+        location: "edital/parse/route.ts:extractPdf:catch",
         message: "Document AI extract failed",
         data: { messageHead: message.slice(0, 500) },
         timestamp: Date.now(),
@@ -96,6 +102,8 @@ export async function POST(req: Request) {
   }
 
   const pageCount = result.pageCount;
+  const fullText = (result.document?.text ?? "").trim();
+
   // #region agent log
   fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
     method: "POST",
@@ -104,33 +112,63 @@ export async function POST(req: Request) {
       sessionId: "03dbee",
       runId: "post-fix",
       hypothesisId: "H-docai-process",
-      location: "src/app/api/admin/competitions/edital/parse/route.ts:processDocument:ok",
+      location: "edital/parse/route.ts:processDocument:ok",
       message: "Document AI ok",
-      data: { pageCount, textChars: (result.document?.text ?? "").length, usedChunking: result.usedChunking },
+      data: { pageCount, textChars: fullText.length, usedChunking: result.usedChunking },
       timestamp: Date.now(),
     }),
   }).catch(() => {});
   // #endregion
 
-  const fullText = (result.document?.text ?? "").trim();
-  const excerpt = fullText.slice(0, 20000);
+  // Envia até 80.000 chars para o LLM (editais longos têm até ~60k chars de texto).
+  // O Document AI já processou todas as páginas via chunking se necessário.
+  const MAX_CHARS = 80_000;
+  const excerpt = fullText.length > MAX_CHARS
+    ? fullText.slice(0, MAX_CHARS) + "\n\n[... texto truncado ...]"
+    : fullText;
 
   const system = [
-    "Você é um assistente que extrai dados estruturados de um EDITAL de concurso público no Brasil.",
-    "Retorne APENAS JSON válido.",
-    "Se um campo não existir, use null ou omita.",
-    "Se houver múltiplas cidades/estados/cargos, liste.",
-    "Se a banca tiver sigla (ex: FGV, CEBRASPE), preencha acronym.",
-    "Datas: use formato YYYY-MM-DD se possível.",
-    "Inclua confidence entre 0 e 1 (quão confiável está o preenchimento global).",
+    "Você é um assistente especializado em extrair dados estruturados de EDITAIS de concurso público no Brasil.",
+    "Retorne APENAS JSON válido, sem markdown, sem explicações.",
+    "Regras:",
+    "- Se um campo não existir no edital, use null ou omita.",
+    "- Se houver múltiplas cidades, liste todas em 'cities'.",
+    "- Para cada cargo (jobRole), identifique as matérias/disciplinas específicas daquele cargo.",
+    "- Matérias comuns a todos os cargos devem aparecer em TODOS os cargos onde se aplicam.",
+    "- Se o edital tiver um quadro de matérias genérico (sem separar por cargo), replique para todos os cargos.",
+    "- Identifique as etapas/fases do concurso (prova objetiva, discursiva, TAF, psicológico, investigação social, curso de formação, títulos, etc.).",
+    "- Banca com sigla (ex: FGV, CEBRASPE, VUNESP): preencha acronym.",
+    "- Datas: use formato YYYY-MM-DD.",
+    "- confidence: 0 a 1 (quão confiável é o preenchimento global).",
   ].join("\n");
 
   const user = [
-    "Texto (trecho inicial do edital; pode estar incompleto):",
+    "Texto do edital (pode estar incompleto se muito longo):",
+    "---",
     excerpt,
+    "---",
     "",
-    "Extraia um rascunho EditalDraft com os campos:",
-    "name, organization, examBoard{acronym,name}, cities[{name,state}], jobRoles[{name}], examDate, year, description, notes, confidence",
+    "Extraia o objeto EditalDraft com EXATAMENTE esta estrutura JSON:",
+    "{",
+    '  "name": "Nome completo do concurso",',
+    '  "organization": "Órgão/entidade contratante ou null",',
+    '  "examBoard": { "acronym": "SIGLA", "name": "Nome completo" } ou null,',
+    '  "cities": [{ "name": "Cidade", "state": "UF" }],',
+    '  "jobRoles": [',
+    '    {',
+    '      "name": "Nome do Cargo",',
+    '      "subjects": [{ "name": "Nome da Matéria" }]',
+    '    }',
+    '  ],',
+    '  "stages": [{ "name": "Nome da Etapa/Fase" }],',
+    '  "examDate": "YYYY-MM-DD ou null",',
+    '  "year": 2025 ou null,',
+    '  "description": "Resumo curto do concurso ou null",',
+    '  "notes": "Observações relevantes ou null",',
+    '  "confidence": 0.85',
+    "}",
+    "",
+    "IMPORTANTE: identifique matérias POR CARGO. Se não houver separação clara por cargo, aplique a lista de matérias a todos os cargos.",
   ].join("\n");
 
   const llm = await runLlmJson(system, user);
@@ -142,9 +180,9 @@ export async function POST(req: Request) {
       headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
       body: JSON.stringify({
         sessionId: "03dbee",
-        runId: "pre-fix",
+        runId: "post-fix",
         hypothesisId: "H-edital-parse",
-        location: "src/app/api/admin/competitions/edital/parse/route.ts:JSON",
+        location: "edital/parse/route.ts:JSON",
         message: "LLM returned invalid JSON",
         data: { provider: llm.provider, model: llm.model, jsonTextHead: llm.jsonText.slice(0, 800) },
         timestamp: Date.now(),
@@ -163,11 +201,20 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
     body: JSON.stringify({
       sessionId: "03dbee",
-      runId: "pre-fix",
+      runId: "post-fix",
       hypothesisId: "H-edital-parse",
-      location: "src/app/api/admin/competitions/edital/parse/route.ts:POST",
+      location: "edital/parse/route.ts:POST",
       message: "edital parse finished",
-      data: { elapsedMs, provider: llm.provider, model: llm.model, confidence: draft?.confidence ?? null },
+      data: {
+        elapsedMs,
+        provider: llm.provider,
+        model: llm.model,
+        confidence: draft?.confidence ?? null,
+        jobRolesCount: draft?.jobRoles?.length ?? 0,
+        stagesCount: draft?.stages?.length ?? 0,
+        textChars: fullText.length,
+        excerptChars: excerpt.length,
+      },
       timestamp: Date.now(),
     }),
   }).catch(() => {});
@@ -179,7 +226,7 @@ export async function POST(req: Request) {
       llm: { provider: llm.provider, model: llm.model },
       docaiChars: fullText.length,
       elapsedMs,
+      pageCount,
     },
   });
 }
-

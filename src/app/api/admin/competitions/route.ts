@@ -36,25 +36,92 @@ export async function POST(req: NextRequest) {
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const { name, cityId, organization, examBoardId, examBoardDefined, examDate, status, description, editalUrl, subjectIds } = body;
+  const {
+    name, cityId, organization, examBoardId, examBoardDefined,
+    examDate, status, description, editalUrl,
+    jobRolesWithSubjects,
+    stages,
+    // legacy flat subjectIds kept for backward compat
+    subjectIds,
+  } = body;
 
   const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  const competition = await prisma.competition.create({
-    data: {
-      name,
-      slug,
-      cityId,
-      organization: organization || null,
-      examBoardId: examBoardId || null,
-      examBoardDefined: examBoardDefined ?? false,
-      examDate: examDate ? new Date(examDate) : null,
-      status: status ?? "UPCOMING",
-      description: description || null,
-      editalUrl: editalUrl || null,
-      subjects: subjectIds?.length ? { create: subjectIds.map((id: string) => ({ subjectId: id })) } : undefined,
-    },
-    include: { city: true, examBoard: true },
+  const competition = await prisma.$transaction(async (tx) => {
+    const comp = await tx.competition.create({
+      data: {
+        name,
+        slug,
+        cityId,
+        organization: organization || null,
+        examBoardId: examBoardId || null,
+        examBoardDefined: examBoardDefined ?? false,
+        examDate: examDate ? new Date(examDate) : null,
+        status: status ?? "UPCOMING",
+        description: description || null,
+        editalUrl: editalUrl || null,
+      },
+      include: { city: true, examBoard: true },
+    });
+
+    // New: cargos + matérias por cargo
+    if (Array.isArray(jobRolesWithSubjects) && jobRolesWithSubjects.length > 0) {
+      const allSubjectIdsForLegacy = new Set<string>();
+      for (const jr of jobRolesWithSubjects as Array<{ name: string; subjectIds: string[] }>) {
+        if (!jr.name?.trim()) continue;
+        // Find or create job role by name
+        const slug = jr.name.toLowerCase().normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + `-${Date.now().toString(36).slice(-4)}`;
+        const existing = await tx.jobRole.findFirst({
+          where: { name: { equals: jr.name.trim(), mode: "insensitive" } },
+          select: { id: true },
+        });
+        const jobRoleId = existing?.id ?? (await tx.jobRole.create({
+          data: { name: jr.name.trim(), slug },
+          select: { id: true },
+        })).id;
+
+        await tx.competitionJobRole.upsert({
+          where: { competitionId_jobRoleId: { competitionId: comp.id, jobRoleId } },
+          create: { competitionId: comp.id, jobRoleId },
+          update: {},
+        });
+
+        for (const subjectId of jr.subjectIds ?? []) {
+          await tx.competitionJobRoleSubject.create({
+            data: { competitionId: comp.id, jobRoleId, subjectId },
+          }).catch(() => {}); // ignore unique constraint if duplicate
+          allSubjectIdsForLegacy.add(subjectId);
+        }
+      }
+      // Keep CompetitionSubject in sync (legacy)
+      if (allSubjectIdsForLegacy.size > 0) {
+        await tx.competitionSubject.createMany({
+          data: [...allSubjectIdsForLegacy].map((sid) => ({ competitionId: comp.id, subjectId: sid })),
+          skipDuplicates: true,
+        });
+      }
+    } else if (subjectIds?.length) {
+      // Legacy fallback: flat subject list (no specific cargo)
+      await tx.competitionSubject.createMany({
+        data: (subjectIds as string[]).map((sid) => ({ competitionId: comp.id, subjectId: sid })),
+      });
+    }
+
+    // Etapas
+    if (Array.isArray(stages)) {
+      let order = 0;
+      for (const s of stages as string[]) {
+        if (s?.trim()) {
+          await tx.competitionStage.create({
+            data: { competitionId: comp.id, name: s.trim(), order: order++ },
+          });
+        }
+      }
+    }
+
+    return comp;
   });
 
   return NextResponse.json({ competition }, { status: 201 });

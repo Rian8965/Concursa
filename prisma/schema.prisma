@@ -184,6 +184,7 @@ model JobRole {
   updatedAt   DateTime    @updatedAt
 
   competitions        CompetitionJobRole[]
+  competitionSubjects CompetitionJobRoleSubject[]
   subjects            JobRoleSubject[]
   studentCompetitions StudentCompetition[]
   questions           Question[]
@@ -218,6 +219,8 @@ model Competition {
   examBoard        ExamBoard?         @relation(fields: [examBoardId], references: [id])
   jobRoles         CompetitionJobRole[]
   subjects         CompetitionSubject[]
+  jobRoleSubjects  CompetitionJobRoleSubject[]
+  stages           CompetitionStage[]
   students         StudentCompetition[]
   questions        Question[]
   planCompetitions PlanCompetition[]
@@ -262,11 +265,12 @@ model Subject {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  topics       Topic[]
-  competitions CompetitionSubject[]
-  questions    Question[]
-  jobRoles     JobRoleSubject[]
-  aiMetas      QuestionAiMeta[]
+  topics              Topic[]
+  competitions        CompetitionSubject[]
+  competitionJobRoles CompetitionJobRoleSubject[]
+  questions           Question[]
+  jobRoles            JobRoleSubject[]
+  aiMetas             QuestionAiMeta[]
 
   @@map("subjects")
 }
@@ -311,6 +315,35 @@ model JobRoleSubject {
 
   @@id([jobRoleId, subjectId])
   @@map("job_role_subjects")
+}
+
+/// Vínculo 3 vias: cargo específico de um concurso + matéria desse cargo
+model CompetitionJobRoleSubject {
+  id            String @id @default(cuid())
+  competitionId String
+  jobRoleId     String
+  subjectId     String
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  jobRole     JobRole     @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  subject     Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, jobRoleId, subjectId])
+  @@map("competition_job_role_subjects")
+}
+
+/// Etapas/fases de um concurso (prova objetiva, TAF, investigação social, etc.)
+model CompetitionStage {
+  id            String   @id @default(cuid())
+  competitionId String
+  name          String
+  order         Int      @default(0)
+  description   String?
+  createdAt     DateTime @default(now())
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@map("competition_stages")
 }
 
 // ============================================================

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { saveEditalBuffer } from "@/lib/edital-storage";
+import { findOrCreateSubject, findOrCreateJobRole } from "@/lib/import/auto-create-meta";
 import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -10,12 +11,18 @@ function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
 }
 
+type JobRoleInDraft = {
+  name: string;
+  subjects?: Array<{ name: string }> | null;
+};
+
 type Draft = {
   name: string;
   organization?: string | null;
   examBoard?: { acronym: string; name?: string | null } | null;
   cities?: Array<{ name: string; state: string }> | null;
-  jobRoles?: Array<{ name: string }> | null;
+  jobRoles?: Array<JobRoleInDraft> | null;
+  stages?: Array<{ name: string }> | null;
   examDate?: string | null;
   description?: string | null;
   notes?: string | null;
@@ -54,7 +61,6 @@ async function ensureCity(c: { name: string; state: string } | undefined) {
   const name = norm(c.name);
   const state = norm(c.state).toUpperCase();
   if (!name || !state) return null;
-  // City não tem unique por (name,state); então busca first.
   const existing = await prisma.city.findFirst({ where: { name: { equals: name, mode: "insensitive" }, state } });
   if (existing) return { id: existing.id };
   return prisma.city.create({ data: { name, state }, select: { id: true } });
@@ -76,32 +82,11 @@ async function ensureCities(cities: Array<{ name: string; state: string }> | nul
   return out;
 }
 
-async function ensureJobRoles(jobRoles: Array<{ name: string }> | null | undefined) {
-  const out: Array<{ id: string }> = [];
-  const seen = new Set<string>();
-  for (const jr of jobRoles ?? []) {
-    const name = norm(jr.name);
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const slug = slugifyBase(name);
-    // slug é unique; garante unique final
-    const safeSlug = slug ? `${slug}-${Date.now().toString(36).slice(-4)}` : `cargo-${Date.now().toString(36)}`;
-    const existing = await prisma.jobRole.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
-    if (existing) {
-      out.push({ id: existing.id });
-    } else {
-      const created = await prisma.jobRole.create({ data: { name, slug: safeSlug }, select: { id: true } });
-      out.push({ id: created.id });
-    }
-  }
-  return out;
-}
-
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!session?.user || !isAdmin(session.user.role)) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
 
   const startedAt = Date.now();
   let body: { draft: Draft; pdfBase64: string } | null = null;
@@ -125,11 +110,17 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
     body: JSON.stringify({
       sessionId: "03dbee",
-      runId: "pre-fix",
+      runId: "post-fix",
       hypothesisId: "H-edital-confirm",
-      location: "src/app/api/admin/competitions/edital/confirm/route.ts:POST",
+      location: "edital/confirm/route.ts:POST",
       message: "edital confirm started",
-      data: { bytes: bytes.length, name: draft.name, cities: (draft.cities ?? []).length, jobRoles: (draft.jobRoles ?? []).length },
+      data: {
+        bytes: bytes.length,
+        name: draft.name,
+        cities: (draft.cities ?? []).length,
+        jobRoles: (draft.jobRoles ?? []).length,
+        stages: (draft.stages ?? []).length,
+      },
       timestamp: Date.now(),
     }),
   }).catch(() => {});
@@ -140,10 +131,31 @@ export async function POST(req: Request) {
     const cities = await ensureCities(draft.cities);
     const primaryCity = cities[0] ?? null;
     if (!primaryCity?.id) {
-      return NextResponse.json({ error: "Não foi possível identificar cidade/estado no edital. Ajuste no rascunho e tente novamente." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Não foi possível identificar cidade/estado no edital. Ajuste no rascunho e tente novamente." },
+        { status: 400 },
+      );
     }
 
-    const jobRoles = await ensureJobRoles(draft.jobRoles);
+    // Resolve/cria jobRoles e seus subjects antes da transação principal
+    type ResolvedJobRole = { jobRoleId: string; subjectIds: string[] };
+    const resolvedJobRoles: ResolvedJobRole[] = [];
+
+    for (const jr of draft.jobRoles ?? []) {
+      const jrName = norm(jr.name);
+      if (!jrName) continue;
+      const jobRoleId = await findOrCreateJobRole(jrName, prisma);
+      if (!jobRoleId) continue;
+
+      const subjectIds: string[] = [];
+      for (const s of jr.subjects ?? []) {
+        const sName = norm(s.name);
+        if (!sName) continue;
+        const subjectId = await findOrCreateSubject(sName, prisma);
+        if (subjectId) subjectIds.push(subjectId);
+      }
+      resolvedJobRoles.push({ jobRoleId, subjectIds });
+    }
 
     const base = slugifyBase(draft.name);
     const slug = `${base || "concurso"}-${Date.now()}`;
@@ -160,19 +172,43 @@ export async function POST(req: Request) {
           examDate: draft.examDate ? new Date(draft.examDate) : null,
           status: "UPCOMING",
           description: [norm(draft.description), norm(draft.notes)].filter(Boolean).join("\n\n") || null,
-          editalUrl: null, // setado após salvar arquivo
+          editalUrl: null,
         },
         select: { id: true },
       });
 
-      if (jobRoles.length) {
-        await tx.competitionJobRole.createMany({
-          data: jobRoles.map((jr) => ({ competitionId: competition.id, jobRoleId: jr.id })),
+      // CompetitionJobRole + CompetitionJobRoleSubject
+      for (const { jobRoleId, subjectIds } of resolvedJobRoles) {
+        await tx.competitionJobRole.upsert({
+          where: { competitionId_jobRoleId: { competitionId: competition.id, jobRoleId } },
+          create: { competitionId: competition.id, jobRoleId },
+          update: {},
+        });
+        for (const subjectId of subjectIds) {
+          await tx.competitionJobRoleSubject.create({
+            data: { competitionId: competition.id, jobRoleId, subjectId },
+          });
+        }
+      }
+
+      // CompetitionSubject: union de todas as matérias para manter compatibilidade
+      const allSubjectIds = [...new Set(resolvedJobRoles.flatMap((r) => r.subjectIds))];
+      if (allSubjectIds.length > 0) {
+        await tx.competitionSubject.createMany({
+          data: allSubjectIds.map((subjectId) => ({ competitionId: competition.id, subjectId })),
+          skipDuplicates: true,
         });
       }
 
-      // Vínculo "macio": cria StudentCompetition dummy? Não. Mantemos apenas primary city no model atual.
-      // As demais cidades ficam registradas via notes/description (por enquanto), até termos model de múltiplas cidades.
+      // CompetitionStage
+      let stageOrder = 0;
+      for (const stage of draft.stages ?? []) {
+        const stageName = norm(stage.name);
+        if (!stageName) continue;
+        await tx.competitionStage.create({
+          data: { competitionId: competition.id, name: stageName, order: stageOrder++ },
+        });
+      }
 
       const storedPath = await saveEditalBuffer(competition.id, bytes);
       const editalUrl = `/api/competitions/${competition.id}/edital`;
@@ -194,11 +230,11 @@ export async function POST(req: Request) {
       headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
       body: JSON.stringify({
         sessionId: "03dbee",
-        runId: "pre-fix",
+        runId: "post-fix",
         hypothesisId: "H-edital-confirm",
-        location: "src/app/api/admin/competitions/edital/confirm/route.ts:POST",
+        location: "edital/confirm/route.ts:POST",
         message: "edital confirm finished",
-        data: { elapsedMs, competitionId: created.id },
+        data: { elapsedMs, competitionId: created.id, jobRolesCount: resolvedJobRoles.length },
         timestamp: Date.now(),
       }),
     }).catch(() => {});
@@ -213,4 +249,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-
