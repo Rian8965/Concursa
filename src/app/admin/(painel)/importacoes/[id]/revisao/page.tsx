@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -434,7 +434,7 @@ export default function RevisaoImportacaoPage() {
           const sid = matchSubjectNameToId(mStr, subList);
           // #region agent log H-C
           if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
-            fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-C',location:'revisao/page.tsx:q0-match-materia',message:'matchSubjectNameToId result for materia',data:{mStr,matchedId:sid}},timestamp:Date.now())}).catch(()=>{});
+            fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-C',location:'revisao/page.tsx:q0-match-materia',message:'matchSubjectNameToId result for materia',data:{mStr,matchedId:sid},timestamp:Date.now()})}).catch(()=>{});
           }
           // #endregion
           if (sid) d.suggestedSubjectId = sid;
@@ -445,7 +445,7 @@ export default function RevisaoImportacaoPage() {
             const sid = matchSubjectNameToId(sug.subject, subList);
             // #region agent log H-E
             if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
-              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-E',location:'revisao/page.tsx:q0-match-suggestedsubject',message:'matchSubjectNameToId result for suggestedSubject',data:{sugText:sug.subject,matchedId:sid}},timestamp:Date.now())}).catch(()=>{});
+              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'debug',hypothesisId:'H-E',location:'revisao/page.tsx:q0-match-suggestedsubject',message:'matchSubjectNameToId result for suggestedSubject',data:{sugText:sug.subject,matchedId:sid},timestamp:Date.now()})}).catch(()=>{});
             }
             // #endregion
             if (sid) d.suggestedSubjectId = sid;
@@ -455,14 +455,17 @@ export default function RevisaoImportacaoPage() {
           const y = coerceMetaYear(pm.meta.ano, imp.year ?? null);
           if (y != null) d.year = y;
         }
-        if (!d.examBoardId && pm?.meta?.banca) {
-          const eid = matchExamBoardBancaToId(String(pm.meta.banca), ebList, imp.examBoardId ?? null);
-          // #region agent log H-BANCA
-          if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
-            fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-BANCA',location:'revisao/page.tsx:banca-match',message:'banca match result',data:{bancaText:String(pm.meta.banca),matchedEid:eid,fallback:imp.examBoardId??null,ebListCount:ebList.length,ebListSample:ebList.slice(0,5).map((b)=>({id:b.id,acronym:b.acronym,name:b.name}))},timestamp:Date.now()})}).catch(()=>{});
+        if (!d.examBoardId) {
+          const bancaTxt = typeof pm?.meta?.banca === "string" ? pm.meta.banca : null;
+          if (bancaTxt) {
+            const eid = matchExamBoardBancaToId(bancaTxt, ebList, imp.examBoardId ?? null);
+            // #region agent log H-BANCA
+            if (q === (impData.import.importedQuestions as ImportedQ[])[0]) {
+              fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'post-fix',hypothesisId:'H-BANCA',location:'revisao/page.tsx:banca-match',message:'banca match',data:{bancaTxt,matchedEid:eid,ebListCount:ebList.length},timestamp:Date.now()})}).catch(()=>{});
+            }
+            // #endregion
+            if (eid) d.examBoardId = eid;
           }
-          // #endregion
-          if (eid) d.examBoardId = eid;
         }
       }
       setDrafts(ds);
@@ -470,7 +473,7 @@ export default function RevisaoImportacaoPage() {
       const firstQId = (impData.import.importedQuestions as ImportedQ[])[0]?.id;
       if (firstQId && ds[firstQId]) {
         const fd = ds[firstQId]!;
-        fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-FINAL-DRAFT',location:'revisao/page.tsx:final-draft',message:'first question final draft state',data:{suggestedSubjectId:fd.suggestedSubjectId,suggestedTopicId:fd.suggestedTopicId,examBoardId:fd.examBoardId,year:fd.year,competitionId:fd.competitionId,cityId:fd.cityId,jobRoleId:fd.jobRoleId,difficulty:fd.difficulty},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'post-fix',hypothesisId:'H-FINAL-DRAFT',location:'revisao/page.tsx:final-draft',message:'first question final draft state',data:{suggestedSubjectId:fd.suggestedSubjectId,suggestedTopicId:fd.suggestedTopicId,examBoardId:fd.examBoardId,year:fd.year,competitionId:fd.competitionId,cityId:fd.cityId,jobRoleId:fd.jobRoleId,difficulty:fd.difficulty},timestamp:Date.now()})}).catch(()=>{});
       }
       // #endregion
       const sids = new Set<string>();

@@ -16,6 +16,13 @@ import {
   matchExamBoardBancaToId,
   matchSubjectNameToId,
 } from "@/lib/import/import-meta-match";
+import {
+  findOrCreateCity,
+  findOrCreateExamBoard,
+  findOrCreateJobRole,
+  findOrCreateSubject,
+  findOrCreateTopic,
+} from "@/lib/import/auto-create-meta";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
 
@@ -291,10 +298,11 @@ export async function POST(req: NextRequest) {
         "Você é um extrator de provas de concurso.",
         "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
         "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
+        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
         "REGRAS:",
         "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
-        "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria (ex.: 'LÍNGUA PORTUGUESA', 'RACIOCÍNIO LÓGICO', 'Conhecimentos Específicos — Informática'). Para CADA questão, preencha o campo 'materia' com a matéria vigente: repita a última matéria anunciada no OCR até aparecer outra seção. Não confunda com o enunciado da questão.",
+        "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria (ex.: 'LÍNGUA PORTUGUESA', 'RACIOCÍNIO LÓGICO', 'Conhecimentos Específicos — Informática'). Para CADA questão, preencha o campo 'materia' com a matéria vigente: repita a última matéria anunciada no OCR até aparecer outra seção. Não confunda com o enunciado da questão. O campo 'materia' é OBRIGATÓRIO.",
+        "- ASSUNTO: para cada questão, preencha o campo 'assunto' com o tópico específico abordado (ex: 'Concordância Verbal', 'Funções do 2º Grau', 'Direito Administrativo — Atos Administrativos'). Use o enunciado e as alternativas para inferir o assunto se não houver cabeçalho explícito.",
         "- meta: preencha banca, concurso, cargo, ano (4 dígitos se visível), city (cidade/UF) a partir da capa/cabeçalho global. meta.materia pode resumir a matéria predominante ou ficar omitido se só existir matéria por questão.",
         "- NÃO cole texto-base dentro do enunciado. Se houver 'texto-base' compartilhado por várias questões, crie um item em baseTexts e aponte baseTextId nas questões relacionadas.",
         "- Ignore blocos que sejam só instruções gerais da prova (comandos para o candidato); não os coloquem em meta nem como enunciado de questão.",
@@ -447,11 +455,32 @@ export async function POST(req: NextRequest) {
       const bancaStr = typeof mm.banca === "string" ? mm.banca : null;
       const materiaGlobal = typeof mm.materia === "string" ? mm.materia : null;
       const yGlobal = coerceMetaYear(mm.ano, yearHint) ?? yearHint;
-      const examIdGlobal = matchExamBoardBancaToId(bancaStr, examBoardRows, impRow?.examBoardId ?? null);
-      const subjFromGlobal = matchSubjectNameToId(materiaGlobal, subjectRows) ?? (subjectId || null);
+      const examIdMatchGlobal = matchExamBoardBancaToId(bancaStr, examBoardRows, null);
+      const examIdGlobal =
+        examIdMatchGlobal ??
+        (bancaStr ? await findOrCreateExamBoard(bancaStr, prisma) : null) ??
+        impRow?.examBoardId ??
+        null;
+
+      const subjMatchGlobal = matchSubjectNameToId(materiaGlobal, subjectRows);
+      const subjFromGlobal =
+        subjMatchGlobal ??
+        (materiaGlobal ? await findOrCreateSubject(materiaGlobal, prisma) : null) ??
+        (subjectId || null);
+
+      const cityStr = typeof mm.city === "string" ? mm.city : null;
+      const cargoStr = typeof mm.cargo === "string" ? mm.cargo : null;
+      const cityIdGlobal =
+        cityStr
+          ? await findOrCreateCity(cityStr, prisma).then((id) => id ?? impRow?.cityId ?? null)
+          : impRow?.cityId ?? null;
+      const jobRoleIdGlobal =
+        cargoStr
+          ? await findOrCreateJobRole(cargoStr, prisma).then((id) => id ?? impRow?.jobRoleId ?? null)
+          : impRow?.jobRoleId ?? null;
 
       // #region agent log H-SRV-GLOBAL
-      fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-SRV-GLOBAL',location:'process/route.ts:global-meta',message:'AI pipeline global meta resolved',data:{bancaStr,materiaGlobal,yGlobal,examIdGlobal,subjFromGlobal,subjectRowsCount:subjectRows.length,subjectRowsNames:subjectRows.slice(0,5).map((s)=>s.name),impRowExamBoardId:impRow?.examBoardId,questionsCount:questions.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'post-fix',hypothesisId:'H-SRV-GLOBAL',location:'process/route.ts:global-meta',message:'AI pipeline global meta resolved',data:{bancaStr,materiaGlobal,yGlobal,examIdGlobal,subjFromGlobal,cityStr,cityIdGlobal,cargoStr,jobRoleIdGlobal,questionsCount:questions.length},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
 
       // 3.2) Criar questões importadas e (se aplicável) vínculos com o texto-base compartilhado
@@ -467,6 +496,8 @@ export async function POST(req: NextRequest) {
         const commentary = typeof q?.commentary === "string" ? q.commentary.trim() : null;
         const materiaQuestao =
           typeof q?.materia === "string" && q.materia.trim() ? q.materia.trim() : null;
+        const assuntoQuestao =
+          typeof q?.assunto === "string" && q.assunto.trim() ? q.assunto.trim() : null;
 
         const altsRaw = Array.isArray(q?.alternatives) ? q.alternatives : [];
         const alternatives = normalizeAlternatives(
@@ -490,12 +521,22 @@ export async function POST(req: NextRequest) {
 
         const confidence = computeHeuristicConfidence({ statement, alternatives, correctAnswer, number: number ?? undefined });
 
-        const perSubjFromQ = materiaQuestao ? matchSubjectNameToId(materiaQuestao, subjectRows) : null;
-        const perSubj = perSubjFromQ ?? subjFromGlobal;
+        const perSubjMatch = materiaQuestao ? matchSubjectNameToId(materiaQuestao, subjectRows) : null;
+        const perSubj =
+          perSubjMatch ??
+          (materiaQuestao && materiaQuestao !== materiaGlobal
+            ? await findOrCreateSubject(materiaQuestao, prisma)
+            : null) ??
+          subjFromGlobal;
+
+        let perTopicId: string | null = null;
+        if (assuntoQuestao && perSubj) {
+          perTopicId = await findOrCreateTopic(assuntoQuestao, perSubj, prisma);
+        }
 
         // #region agent log H-SRV-PER-Q
         if (idx === 0) {
-          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'initial',hypothesisId:'H-SRV-PER-Q',location:'process/route.ts:per-q',message:'first question meta',data:{idx,materiaQuestao,perSubjFromQ,perSubj,yGlobal,examIdGlobal,qNumber:number},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'post-fix',hypothesisId:'H-SRV-PER-Q',location:'process/route.ts:per-q',message:'first question meta post-fix',data:{idx,materiaQuestao,assuntoQuestao,perSubjMatch,perSubj,perTopicId,yGlobal,examIdGlobal,qNumber:number},timestamp:Date.now()})}).catch(()=>{});
         }
         // #endregion
 
@@ -506,11 +547,12 @@ export async function POST(req: NextRequest) {
             alternatives,
             correctAnswer,
             suggestedSubjectId: perSubj,
+            suggestedTopicId: perTopicId,
             year: yGlobal,
             examBoardId: examIdGlobal,
             competitionId: impRow?.competitionId ?? null,
-            cityId: impRow?.cityId ?? null,
-            jobRoleId: impRow?.jobRoleId ?? null,
+            cityId: cityIdGlobal,
+            jobRoleId: jobRoleIdGlobal,
             sourcePage: null,
             sourcePosition: idx + 1,
             hasImage: false,
@@ -522,6 +564,7 @@ export async function POST(req: NextRequest) {
               commentary,
               meta: mergedMeta,
               materia: materiaQuestao ?? undefined,
+              assunto: assuntoQuestao ?? undefined,
               answerSource: resolved.answerSource,
               gabaritoMatchNumber: resolved.gabaritoMatchNumber ?? undefined,
             }),

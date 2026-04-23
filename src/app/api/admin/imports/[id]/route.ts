@@ -25,6 +25,11 @@ import {
   type ImportContextMeta,
   type ImportedQuestionMetaFields,
 } from "@/lib/import/imported-question-meta";
+import {
+  findOrCreateExamBoard,
+  findOrCreateSubject,
+  findOrCreateTopic,
+} from "@/lib/import/auto-create-meta";
 import { NextRequest, NextResponse } from "next/server";
 
 function isAdmin(r?: string) {
@@ -167,6 +172,56 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const decByQid = new Map((decisions ?? []).map((d) => [d.questionId, d] as const));
 
+    /** Parse meta from rawText stored at import time (LLM pipeline format). */
+    function parseRawMeta(rawText: string | null): {
+      materia?: string | null;
+      assunto?: string | null;
+      banca?: string | null;
+      meta?: { banca?: string | null; materia?: string | null; cargo?: string | null } | null;
+    } | null {
+      if (!rawText) return null;
+      try {
+        return JSON.parse(rawText) as ReturnType<typeof parseRawMeta>;
+      } catch {
+        return null;
+      }
+    }
+
+    /**
+     * For questions missing IDs (old imports), try to auto-create/resolve
+     * metadata from rawText before the transaction.
+     */
+    async function autoFillMissingMeta(
+      iq: { id: string; suggestedSubjectId: string | null; suggestedTopicId: string | null; examBoardId: string | null; rawText: string | null },
+      decMeta: typeof decByQid extends Map<string, infer V> ? V : never,
+    ): Promise<{ suggestedSubjectId?: string | null; suggestedTopicId?: string | null; examBoardId?: string | null }> {
+      const out: { suggestedSubjectId?: string | null; suggestedTopicId?: string | null; examBoardId?: string | null } = {};
+      const raw = parseRawMeta(iq.rawText);
+      const subjectIdFinal = iq.suggestedSubjectId ?? decMeta?.suggestedSubjectId ?? decMeta?.subjectId ?? null;
+      if (!subjectIdFinal) {
+        const materiaText = raw?.materia ?? (typeof raw?.meta?.materia === "string" ? raw.meta.materia : null);
+        if (materiaText) {
+          out.suggestedSubjectId = await findOrCreateSubject(materiaText, prisma);
+        }
+      }
+      const resolvedSubjectId = out.suggestedSubjectId ?? subjectIdFinal;
+      const topicIdFinal = iq.suggestedTopicId ?? decMeta?.suggestedTopicId ?? decMeta?.topicId ?? null;
+      if (!topicIdFinal && resolvedSubjectId) {
+        const assuntoText = raw?.assunto ?? null;
+        if (assuntoText) {
+          out.suggestedTopicId = await findOrCreateTopic(assuntoText, resolvedSubjectId, prisma);
+        }
+      }
+      const examBoardIdFinal = iq.examBoardId ?? decMeta?.examBoardId ?? null;
+      if (!examBoardIdFinal) {
+        const bancaText = (typeof raw?.banca === "string" ? raw.banca : null) ?? (typeof raw?.meta?.banca === "string" ? raw.meta.banca : null);
+        if (bancaText) {
+          out.examBoardId = await findOrCreateExamBoard(bancaText, prisma);
+        }
+      }
+      return out;
+    }
+
     try {
       const linkCols = await getQuestionOptionalLinkColumns(prisma);
       const decisionQids = [...new Set(decisions.map((d) => d.questionId))];
@@ -243,7 +298,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }
         }
         const decMeta = decByQid.get(d.questionId);
-        const mergedIq = mergeImportedMetaWithApprovePayload(importedRowToMeta(iq), decMeta);
+        const autoFill = await autoFillMissingMeta(iq, decMeta as Parameters<typeof autoFillMissingMeta>[1]);
+        if (autoFill.suggestedSubjectId ?? autoFill.suggestedTopicId ?? autoFill.examBoardId) {
+          await prisma.importedQuestion.update({
+            where: { id: iq.id },
+            data: {
+              ...(autoFill.suggestedSubjectId !== undefined ? { suggestedSubjectId: autoFill.suggestedSubjectId } : {}),
+              ...(autoFill.suggestedTopicId !== undefined ? { suggestedTopicId: autoFill.suggestedTopicId } : {}),
+              ...(autoFill.examBoardId !== undefined ? { examBoardId: autoFill.examBoardId } : {}),
+            },
+          });
+          iqById.set(iq.id, {
+            ...iq,
+            ...(autoFill.suggestedSubjectId !== undefined ? { suggestedSubjectId: autoFill.suggestedSubjectId } : {}),
+            ...(autoFill.suggestedTopicId !== undefined ? { suggestedTopicId: autoFill.suggestedTopicId } : {}),
+            ...(autoFill.examBoardId !== undefined ? { examBoardId: autoFill.examBoardId } : {}),
+          });
+        }
+        const mergedIq = mergeImportedMetaWithApprovePayload(
+          importedRowToMeta(iqById.get(iq.id) ?? iq),
+          decMeta,
+        );
         const metaRes = isImportedQuestionMetaComplete(mergedIq, importCtx);
         if (!metaRes.ok) {
           throw new Error(
