@@ -6,16 +6,46 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { competitionId, subjectIds, difficulty, quantity = 10 } = await req.json();
+  const { competitionId, subjectIds, difficulty, quantity = 10 } = await req.json() as {
+    competitionId?: string;
+    subjectIds?: string[];
+    difficulty?: string;
+    quantity?: number;
+  };
 
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
+
+  // Determina quais subject IDs são permitidos para este aluno+concurso
+  let allowedSubjectIds: string[] | null = null;
+  if (competitionId) {
+    const enrollment = await prisma.studentCompetition.findUnique({
+      where: {
+        studentProfileId_competitionId: { studentProfileId: profile.id, competitionId },
+      },
+      select: { jobRoleId: true },
+    });
+    if (enrollment?.jobRoleId) {
+      const links = await prisma.competitionJobRoleSubject.findMany({
+        where: { competitionId, jobRoleId: enrollment.jobRoleId },
+        select: { subjectId: true },
+      });
+      allowedSubjectIds = links.map((l) => l.subjectId);
+    }
+  }
+
+  // Se o aluno selecionou matérias, intersectar com as permitidas
+  const effectiveSubjectIds = subjectIds?.length
+    ? allowedSubjectIds
+      ? subjectIds.filter((id) => allowedSubjectIds!.includes(id))
+      : subjectIds
+    : allowedSubjectIds ?? undefined;
 
   const where: Record<string, unknown> = {
     status: "ACTIVE",
     alternatives: { some: {} },
     ...(competitionId && { competitionId }),
-    ...(subjectIds?.length && { subjectId: { in: subjectIds } }),
+    ...(effectiveSubjectIds?.length && { subjectId: { in: effectiveSubjectIds } }),
     ...(difficulty && difficulty !== "ALL" && { difficulty }),
   };
 
@@ -38,9 +68,9 @@ export async function POST(req: NextRequest) {
     data: {
       studentProfileId: profile.id,
       competitionId: competitionId || null,
-      subjectId: subjectIds?.length === 1 ? subjectIds[0] : null,
+      subjectId: (effectiveSubjectIds?.length === 1 ? effectiveSubjectIds[0] : null) ?? null,
       totalQuestions: shuffled.length,
-      filters: { subjectIds, difficulty, quantity },
+      filters: { subjectIds: effectiveSubjectIds, difficulty, quantity },
     },
   });
 

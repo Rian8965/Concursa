@@ -22,6 +22,7 @@ import {
   LogOut,
   Menu,
   X,
+  AlertTriangle,
 } from "lucide-react";
 
 const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -46,6 +47,7 @@ const navGroups = [
       { label: "Matérias", href: "/admin/materias", icon: BookOpen },
       { label: "Questões", href: "/admin/questoes", icon: HelpCircle },
       { label: "Importar PDF", href: "/admin/importacoes", icon: Upload },
+      { label: "Denúncias", href: "/admin/denuncias", icon: AlertTriangle },
     ],
   },
   {

@@ -6,16 +6,45 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { competitionId, subjectIds, quantity = 20, timeLimitMinutes = 60 } = await req.json();
+  const { competitionId, subjectIds, quantity = 20, timeLimitMinutes = 60 } = await req.json() as {
+    competitionId?: string;
+    subjectIds?: string[];
+    quantity?: number;
+    timeLimitMinutes?: number;
+  };
 
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
+
+  // Filtra matérias pelo cargo do aluno neste concurso
+  let allowedSubjectIds: string[] | null = null;
+  if (competitionId) {
+    const enrollment = await prisma.studentCompetition.findUnique({
+      where: {
+        studentProfileId_competitionId: { studentProfileId: profile.id, competitionId },
+      },
+      select: { jobRoleId: true },
+    });
+    if (enrollment?.jobRoleId) {
+      const links = await prisma.competitionJobRoleSubject.findMany({
+        where: { competitionId, jobRoleId: enrollment.jobRoleId },
+        select: { subjectId: true },
+      });
+      allowedSubjectIds = links.map((l) => l.subjectId);
+    }
+  }
+
+  const effectiveSubjectIds = subjectIds?.length
+    ? allowedSubjectIds
+      ? subjectIds.filter((id) => allowedSubjectIds!.includes(id))
+      : subjectIds
+    : allowedSubjectIds ?? undefined;
 
   const where: Record<string, unknown> = {
     status: "ACTIVE",
     alternatives: { some: {} },
     ...(competitionId && { competitionId }),
-    ...(subjectIds?.length && { subjectId: { in: subjectIds } }),
+    ...(effectiveSubjectIds?.length && { subjectId: { in: effectiveSubjectIds } }),
   };
 
   const total = await prisma.question.count({ where });
@@ -33,12 +62,16 @@ export async function POST(req: NextRequest) {
 
   const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, quantity);
 
+  // timeLimitMinutes === 0 significa modo livre (sem limite)
+  const isFreeMode = !timeLimitMinutes || timeLimitMinutes <= 0;
+  const timeAllowedSeconds = isFreeMode ? null : timeLimitMinutes * 60;
+
   const exam = await prisma.simulatedExam.create({
     data: {
       studentProfileId: profile.id,
       competitionId: competitionId || null,
       totalQuestions: shuffled.length,
-      timeAllowedSeconds: timeLimitMinutes * 60,
+      timeAllowedSeconds,
       status: "IN_PROGRESS",
       questions: {
         create: shuffled.map((q, i) => ({ questionId: q.id, order: i + 1 })),
@@ -48,7 +81,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     examId: exam.id,
-    timeLimitSeconds: timeLimitMinutes * 60,
+    timeLimitSeconds: timeAllowedSeconds,
     questions: shuffled.map((q, i) => ({
       id: q.id,
       order: i + 1,

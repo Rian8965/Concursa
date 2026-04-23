@@ -97,6 +97,7 @@ model StudentProfile {
   simulatedExams      SimulatedExam[]
   apostilas           Apostila[]
   usedQuestions       UsedQuestion[]
+  questionReports     QuestionReport[]
 
   @@map("student_profiles")
 }
@@ -406,11 +407,14 @@ model Question {
   pdfImport    PDFImport?  @relation(fields: [importId], references: [id])
   aiMeta       QuestionAiMeta?
 
+  isMarkedSuspect  Boolean @default(false)
+
   alternatives      Alternative[]
   studentAnswers    StudentAnswer[]
   examQuestions     SimulatedExamQuestion[]
   apostilaQuestions ApostilaQuestion[]
   usedBy            UsedQuestion[]
+  questionReports   QuestionReport[]
 
   @@map("questions")
 }
@@ -771,6 +775,68 @@ enum ImportedQuestionStatus {
   APPROVED
   REJECTED
   PUBLISHED
+}
+
+// ============================================================
+// DENÚNCIAS DE QUESTÕES
+// ============================================================
+
+enum QuestionReportCategory {
+  INCOMPLETE_STATEMENT
+  MISSING_TEXT
+  MISSING_IMAGE
+  MISSING_ALTERNATIVE
+  FORMAT_ERROR
+  WRONG_ANSWER
+  AMBIGUOUS_ANSWER
+  INCONSISTENT_CONTENT
+  OTHER
+}
+
+enum QuestionReportStatus {
+  PENDING
+  AI_REVIEWED
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+model QuestionReport {
+  id               String                 @id @default(cuid())
+  studentProfileId String
+  questionId       String
+  category         QuestionReportCategory
+  description      String?                @db.Text
+  /// "during" = durante a prova (só estrutural); "after" = após finalizar
+  phase            String
+  sessionId        String?
+  sessionType      String?
+  status           QuestionReportStatus   @default(PENDING)
+  adminNote        String?                @db.Text
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  studentProfile StudentProfile          @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  question       Question                @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  aiReview       QuestionReportAiReview?
+
+  @@map("question_reports")
+}
+
+model QuestionReportAiReview {
+  id         String   @id @default(cuid())
+  reportId   String   @unique
+  /// "ANSWER_IS_CORRECT" | "ANSWER_MAY_BE_WRONG" | "ANSWER_IS_WRONG" | "AMBIGUOUS"
+  verdict    String
+  analysis   String   @db.Text
+  confidence Float?
+  createdAt  DateTime @default(now())
+
+  report QuestionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("question_report_ai_reviews")
 }
 
 // ============================================================

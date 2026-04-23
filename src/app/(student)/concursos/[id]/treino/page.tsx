@@ -5,8 +5,170 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Play, CheckCircle2, XCircle, ArrowRight, ArrowLeft,
-  Trophy, Target, BookOpen, RotateCcw, Zap,
+  Trophy, RotateCcw, AlertTriangle, Send, X, Bot,
 } from "lucide-react";
+
+type ReportCategory =
+  | "INCOMPLETE_STATEMENT" | "MISSING_TEXT" | "MISSING_IMAGE"
+  | "MISSING_ALTERNATIVE" | "FORMAT_ERROR"
+  | "WRONG_ANSWER" | "AMBIGUOUS_ANSWER" | "INCONSISTENT_CONTENT" | "OTHER";
+
+const REPORT_CATEGORIES: { value: ReportCategory; label: string; structural?: boolean }[] = [
+  { value: "INCOMPLETE_STATEMENT", label: "Enunciado incompleto", structural: true },
+  { value: "MISSING_TEXT", label: "Texto faltando", structural: true },
+  { value: "MISSING_IMAGE", label: "Imagem faltando", structural: true },
+  { value: "MISSING_ALTERNATIVE", label: "Alternativa faltando", structural: true },
+  { value: "FORMAT_ERROR", label: "Erro de formatação", structural: true },
+  { value: "WRONG_ANSWER", label: "Resposta possivelmente errada" },
+  { value: "AMBIGUOUS_ANSWER", label: "Resposta ambígua/dupla" },
+  { value: "INCONSISTENT_CONTENT", label: "Conteúdo inconsistente" },
+  { value: "OTHER", label: "Outro problema" },
+];
+
+interface ReportModalProps {
+  questionId: string;
+  sessionId: string;
+  onClose: () => void;
+}
+
+function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
+  const [category, setCategory] = useState<ReportCategory | "">("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [aiResult, setAiResult] = useState<{ verdict: string; analysis: string } | null>(null);
+
+  const VERDICT_LABELS: Record<string, { label: string; color: string }> = {
+    ANSWER_IS_CORRECT: { label: "Gabarito está correto", color: "#059669" },
+    ANSWER_MAY_BE_WRONG: { label: "Pode estar errado — revisão recomendada", color: "#D97706" },
+    ANSWER_IS_WRONG: { label: "Gabarito possivelmente errado", color: "#DC2626" },
+    AMBIGUOUS: { label: "Questão ambígua", color: "#7C3AED" },
+  };
+
+  async function submit() {
+    if (!category) { toast.error("Selecione uma categoria"); return; }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/question-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId, category,
+          description: description.trim() || undefined,
+          phase: "after",
+          sessionId,
+          sessionType: "TRAINING",
+        }),
+      });
+      const data = await res.json() as { ok: boolean; reportId?: string };
+      if (!res.ok) throw new Error();
+      setSubmitted(true);
+      toast.success("Denúncia registrada");
+
+      if (category === "WRONG_ANSWER" && data.reportId) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const reviewRes = await fetch(`/api/question-reports?questionId=${questionId}`);
+        const reviewData = await reviewRes.json() as { reports: { aiReview?: { verdict: string; analysis: string } }[] };
+        const report = reviewData.reports?.[0];
+        if (report?.aiReview) setAiResult(report.aiReview);
+      }
+    } catch {
+      toast.error("Erro ao enviar denúncia");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+      zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%",
+        maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle style={{ width: 18, height: 18, color: "#D97706" }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Denunciar questão</h3>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}>
+            <X style={{ width: 18, height: 18 }} />
+          </button>
+        </div>
+
+        {!submitted ? (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+              {REPORT_CATEGORIES.map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => setCategory(c.value)}
+                  style={{
+                    padding: "9px 14px", borderRadius: 8, fontSize: 13, textAlign: "left",
+                    border: category === c.value ? "2px solid #7C3AED" : "1.5px solid #E5E7EB",
+                    background: category === c.value ? "#EDE9FE" : "#F9FAFB",
+                    color: category === c.value ? "#5B21B6" : "#374151",
+                    cursor: "pointer", fontFamily: "var(--font-sans)",
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            {(category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER" || category === "OTHER") && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                  {category === "WRONG_ANSWER" ? "Descreva por que a resposta pode estar errada:" : "Detalhes (opcional):"}
+                </p>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1.5px solid #E5E7EB", resize: "vertical", fontFamily: "var(--font-sans)", outline: "none" }}
+                />
+                {category === "WRONG_ANSWER" && (
+                  <p style={{ fontSize: 11, color: "#6B7280", marginTop: 4 }}>A IA analisará e emitirá um veredito honesto.</p>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1, height: 40 }}>Cancelar</button>
+              <button onClick={submit} disabled={!category || submitting} className="btn btn-primary" style={{ flex: 2, height: 40 }}>
+                {submitting ? "Enviando..." : <><Send style={{ width: 13, height: 13 }} /> Enviar</>}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign: "center" }}>
+            <CheckCircle2 style={{ width: 36, height: 36, color: "#059669", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Denúncia registrada!</p>
+            {category === "WRONG_ANSWER" && !aiResult && (
+              <div style={{ marginBottom: 12, padding: 10, background: "#EDE9FE", borderRadius: 8 }}>
+                <Bot style={{ width: 14, height: 14, color: "#7C3AED", margin: "0 auto 4px" }} />
+                <p style={{ fontSize: 12, color: "#5B21B6" }}>IA analisando...</p>
+              </div>
+            )}
+            {aiResult && (
+              <div style={{ marginBottom: 12, padding: 14, background: "#F9FAFB", borderRadius: 10, textAlign: "left", border: "1px solid #E5E7EB" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <Bot style={{ width: 13, height: 13, color: "#7C3AED" }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#374151" }}>ANÁLISE DA IA</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: VERDICT_LABELS[aiResult.verdict]?.color }}>{VERDICT_LABELS[aiResult.verdict]?.label ?? aiResult.verdict}</span>
+                </div>
+                <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.65 }}>{aiResult.analysis}</p>
+              </div>
+            )}
+            <button onClick={onClose} className="btn btn-primary" style={{ width: "100%", height: 40 }}>Fechar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Phase = "config" | "loading" | "training" | "summary";
 
@@ -29,7 +191,7 @@ interface AnswerState {
 
 const QUANTITIES = [5, 10, 15, 20];
 const DIFFICULTIES = [
-  { value: "ALL", label: "Todas as dificuldades" },
+  { value: "ALL", label: "Todas" },
   { value: "EASY", label: "Fácil" },
   { value: "MEDIUM", label: "Médio" },
   { value: "HARD", label: "Difícil" },
@@ -50,12 +212,25 @@ export default function TreinoPage() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [startTime, setStartTime] = useState(0);
+  const [reportModal, setReportModal] = useState<{ questionId: string } | null>(null);
 
   useEffect(() => {
-    fetch(`/api/admin/subjects`)
+    fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
       .then((r) => r.json())
-      .then((d) => setSubjects(d.subjects ?? []));
-  }, []);
+      .then((d: { subjects?: { id: string; name: string }[] }) => {
+        if (d.subjects?.length) setSubjects(d.subjects);
+        else {
+          fetch("/api/admin/subjects")
+            .then((r) => r.json())
+            .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
+        }
+      })
+      .catch(() => {
+        fetch("/api/admin/subjects")
+          .then((r) => r.json())
+          .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
+      });
+  }, [competitionId]);
 
   async function startTraining() {
     setPhase("loading");
@@ -348,6 +523,14 @@ export default function TreinoPage() {
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto" }}>
+      {reportModal && sessionId && (
+        <ReportModal
+          questionId={reportModal.questionId}
+          sessionId={sessionId}
+          onClose={() => setReportModal(null)}
+        />
+      )}
+
       {/* Progress bar */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -462,18 +645,35 @@ export default function TreinoPage() {
           >
             <p style={{ fontSize: 11, fontWeight: 700, color: "#B45309", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Por que errou</p>
             <p style={{ fontSize: 14, color: "#78350F", lineHeight: 1.65 }}>{ans.aiExplanation}</p>
+
           </div>
         ) : null}
 
       {/* Actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button
-          onClick={() => router.push(`/concursos/${competitionId}`)}
-          className="btn btn-ghost"
-          style={{ fontSize: 13 }}
-        >
-          <ArrowLeft style={{ width: 14, height: 14 }} /> Sair
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={() => router.push(`/concursos/${competitionId}`)}
+            className="btn btn-ghost"
+            style={{ fontSize: 13 }}
+          >
+            <ArrowLeft style={{ width: 14, height: 14 }} /> Sair
+          </button>
+
+          {ans?.revealed && (
+            <button
+              onClick={() => setReportModal({ questionId: q.id })}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 12, color: "#9CA3AF", fontFamily: "var(--font-sans)", fontWeight: 600,
+              }}
+            >
+              <AlertTriangle style={{ width: 12, height: 12 }} />
+              Denunciar
+            </button>
+          )}
+        </div>
 
         {ans?.revealed && (
           <button
