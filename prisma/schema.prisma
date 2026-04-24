@@ -210,6 +210,7 @@ model Competition {
   examDate         DateTime?
   status           CompetitionStatus @default(UPCOMING)
   editalUrl        String?
+  editalText       String?
   description      String?
   bannerUrl        String?
   isActive         Boolean           @default(true)
@@ -335,12 +336,14 @@ model CompetitionJobRoleSubject {
 
 /// Etapas/fases de um concurso (prova objetiva, TAF, investigação social, etc.)
 model CompetitionStage {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   competitionId String
   name          String
-  order         Int      @default(0)
+  order         Int       @default(0)
   description   String?
-  createdAt     DateTime @default(now())
+  dateStart     DateTime?
+  dateEnd       DateTime?
+  createdAt     DateTime  @default(now())
 
   competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
 

@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, Target, BarChart3, History, Download,
   Clock, MapPin, Building2, Calendar, Briefcase,
-  ArrowRight, Play, Trophy, FileText,
+  ArrowRight, Play, Trophy, FileText, Sparkles,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
@@ -22,6 +22,7 @@ const tabs = [
   { label: "Treino", href: "/treino", icon: Play },
   { label: "Simulado", href: "/simulado", icon: Target },
   { label: "Apostilas", href: "/apostilas", icon: FileText },
+  { label: "Quiz do Edital", href: "/quiz", icon: Sparkles },
   { label: "Desempenho", href: "/desempenho", icon: BarChart3 },
   { label: "Histórico", href: "/historico", icon: History },
 ];

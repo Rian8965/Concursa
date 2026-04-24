@@ -19,7 +19,13 @@ export type EditalDraft = {
     name: string;
     subjects?: Array<{ name: string }> | null;
   }> | null;
-  stages?: Array<{ name: string }> | null;
+  stages?: Array<{
+    name: string;
+    /** Data de início no formato YYYY-MM-DD — null se não mencionado */
+    dateStart?: string | null;
+    /** Data de término no formato YYYY-MM-DD — null se evento de dia único ou não mencionado */
+    dateEnd?: string | null;
+  }> | null;
   examDate?: string | null;
   year?: number | null;
   description?: string | null;
@@ -55,7 +61,13 @@ const USER_PROMPT = [
   '      "subjects": [{ "name": "Nome da Matéria" }]',
   '    }',
   '  ],',
-  '  "stages": [{ "name": "Nome da Etapa/Fase" }],',
+  '  "stages": [',
+  '    {',
+  '      "name": "Nome da Etapa (ex: Inscrições, Prova Objetiva, Resultado Preliminar)",',
+  '      "dateStart": "YYYY-MM-DD ou null",',
+  '      "dateEnd": "YYYY-MM-DD ou null (null se evento de dia único)"',
+  '    }',
+  '  ],',
   '  "examDate": "YYYY-MM-DD ou null",',
   '  "year": 2025 ou null,',
   '  "description": "Resumo curto do concurso ou null",',
@@ -63,7 +75,11 @@ const USER_PROMPT = [
   '  "confidence": 0.85',
   "}",
   "",
-  "IMPORTANTE: identifique matérias POR CARGO. Se não houver separação clara por cargo, aplique a lista de matérias a todos os cargos.",
+  "IMPORTANTE:",
+  "- Identifique matérias POR CARGO. Se não houver separação clara por cargo, aplique a lista a todos os cargos.",
+  "- Para cada etapa, extraia as datas mencionadas no cronograma do edital (dateStart e dateEnd em YYYY-MM-DD).",
+  "- Se uma etapa tiver apenas uma data (evento único), coloque em dateStart e deixe dateEnd como null.",
+  "- Se a etapa não tiver data, coloque ambos como null.",
 ].join("\n");
 
 // ─── Gemini direto com PDF ────────────────────────────────────────────────────

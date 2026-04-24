@@ -11,6 +11,12 @@ function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
 }
 
+type StageInDraft = {
+  name: string;
+  dateStart?: string | null;
+  dateEnd?: string | null;
+};
+
 type JobRoleInDraft = {
   name: string;
   subjects?: Array<{ name: string }> | null;
@@ -22,7 +28,7 @@ type Draft = {
   examBoard?: { acronym: string; name?: string | null } | null;
   cities?: Array<{ name: string; state: string }> | null;
   jobRoles?: Array<JobRoleInDraft> | null;
-  stages?: Array<{ name: string }> | null;
+  stages?: Array<StageInDraft> | null;
   examDate?: string | null;
   description?: string | null;
   notes?: string | null;
@@ -41,6 +47,16 @@ function slugifyBase(name: string) {
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function safeDate(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  try {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
 }
 
 async function upsertExamBoard(examBoard: Draft["examBoard"]) {
@@ -82,13 +98,58 @@ async function ensureCities(cities: Array<{ name: string; state: string }> | nul
   return out;
 }
 
+/** Constrói um texto resumido do edital para usar como contexto no Quiz da IA */
+function buildEditalText(draft: Draft): string {
+  const lines: string[] = [];
+  lines.push(`CONCURSO: ${draft.name}`);
+  if (draft.organization) lines.push(`ÓRGÃO: ${draft.organization}`);
+  if (draft.examBoard?.acronym) lines.push(`BANCA: ${draft.examBoard.acronym}${draft.examBoard.name ? ` — ${draft.examBoard.name}` : ""}`);
+
+  const cityLine = (draft.cities ?? [])
+    .map((c) => `${norm(c.name)}/${norm(c.state).toUpperCase()}`)
+    .filter(Boolean)
+    .join(", ");
+  if (cityLine) lines.push(`CIDADE: ${cityLine}`);
+  if (draft.examDate) lines.push(`DATA DA PROVA: ${draft.examDate}`);
+  if (draft.description) lines.push(`\nDESCRIÇÃO:\n${draft.description}`);
+  if (draft.notes) lines.push(`\nOBSERVAÇÕES:\n${draft.notes}`);
+
+  if ((draft.stages ?? []).length > 0) {
+    lines.push("\nCRONOGRAMA / ETAPAS:");
+    for (const s of draft.stages ?? []) {
+      const n = norm(s.name);
+      if (!n) continue;
+      const dateStr = s.dateStart
+        ? s.dateEnd
+          ? `${s.dateStart} a ${s.dateEnd}`
+          : s.dateStart
+        : "";
+      lines.push(`  • ${n}${dateStr ? ` — ${dateStr}` : ""}`);
+    }
+  }
+
+  if ((draft.jobRoles ?? []).length > 0) {
+    lines.push("\nCARGOS E MATÉRIAS:");
+    for (const jr of draft.jobRoles ?? []) {
+      const jn = norm(jr.name);
+      if (!jn) continue;
+      lines.push(`  Cargo: ${jn}`);
+      const subjects = (jr.subjects ?? []).map((s) => norm(s.name)).filter(Boolean);
+      if (subjects.length > 0) {
+        lines.push(`    Matérias: ${subjects.join(", ")}`);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
-  const startedAt = Date.now();
   let body: { draft: Draft; pdfBase64: string } | null = null;
   try {
     body = (await req.json()) as { draft: Draft; pdfBase64: string };
@@ -104,28 +165,6 @@ export async function POST(req: Request) {
 
   const bytes = Buffer.from(pdfBase64, "base64");
 
-  // #region agent log
-  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-    body: JSON.stringify({
-      sessionId: "03dbee",
-      runId: "post-fix",
-      hypothesisId: "H-edital-confirm",
-      location: "edital/confirm/route.ts:POST",
-      message: "edital confirm started",
-      data: {
-        bytes: bytes.length,
-        name: draft.name,
-        cities: (draft.cities ?? []).length,
-        jobRoles: (draft.jobRoles ?? []).length,
-        stages: (draft.stages ?? []).length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   try {
     const examBoard = await upsertExamBoard(draft.examBoard);
     const cities = await ensureCities(draft.cities);
@@ -137,7 +176,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Resolve/cria jobRoles e seus subjects antes da transação principal
     type ResolvedJobRole = { jobRoleId: string; subjectIds: string[] };
     const resolvedJobRoles: ResolvedJobRole[] = [];
 
@@ -146,7 +184,6 @@ export async function POST(req: Request) {
       if (!jrName) continue;
       const jobRoleId = await findOrCreateJobRole(jrName, prisma);
       if (!jobRoleId) continue;
-
       const subjectIds: string[] = [];
       for (const s of jr.subjects ?? []) {
         const sName = norm(s.name);
@@ -159,6 +196,7 @@ export async function POST(req: Request) {
 
     const base = slugifyBase(draft.name);
     const slug = `${base || "concurso"}-${Date.now()}`;
+    const editalText = buildEditalText(draft);
 
     const created = await prisma.$transaction(async (tx) => {
       const competition = await tx.competition.create({
@@ -173,6 +211,7 @@ export async function POST(req: Request) {
           status: "UPCOMING",
           description: [norm(draft.description), norm(draft.notes)].filter(Boolean).join("\n\n") || null,
           editalUrl: null,
+          editalText,
         },
         select: { id: true },
       });
@@ -191,7 +230,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // CompetitionSubject: union de todas as matérias para manter compatibilidade
+      // CompetitionSubject: union de todas as matérias
       const allSubjectIds = [...new Set(resolvedJobRoles.flatMap((r) => r.subjectIds))];
       if (allSubjectIds.length > 0) {
         await tx.competitionSubject.createMany({
@@ -200,13 +239,19 @@ export async function POST(req: Request) {
         });
       }
 
-      // CompetitionStage
+      // CompetitionStage (com datas)
       let stageOrder = 0;
       for (const stage of draft.stages ?? []) {
         const stageName = norm(stage.name);
         if (!stageName) continue;
         await tx.competitionStage.create({
-          data: { competitionId: competition.id, name: stageName, order: stageOrder++ },
+          data: {
+            competitionId: competition.id,
+            name: stageName,
+            order: stageOrder++,
+            dateStart: safeDate(stage.dateStart),
+            dateEnd: safeDate(stage.dateEnd),
+          },
         });
       }
 
@@ -222,30 +267,13 @@ export async function POST(req: Request) {
       return { id: competition.id, editalUrl, storedPath };
     });
 
-    const elapsedMs = Date.now() - startedAt;
-
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "post-fix",
-        hypothesisId: "H-edital-confirm",
-        location: "edital/confirm/route.ts:POST",
-        message: "edital confirm finished",
-        data: { elapsedMs, competitionId: created.id, jobRolesCount: resolvedJobRoles.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     return NextResponse.json({ competitionId: created.id, editalUrl: created.editalUrl }, { status: 201 });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       return NextResponse.json({ error: `Erro Prisma: ${e.code}` }, { status: 500 });
     }
     const msg = e instanceof Error ? e.message : "Erro ao criar concurso";
+    console.error("[edital/confirm]", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
