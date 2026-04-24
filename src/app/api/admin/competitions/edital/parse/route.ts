@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
-import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { auth } from "@/lib/auth";
-import { runLlmJson } from "@/lib/ai/llm";
 import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
-import { extractPdfFullTextWithDocumentAi } from "@/lib/docai/extract-pdf-fulltext";
 
 export const runtime = "nodejs";
-
-function requiredEnv(name: string) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
-}
+// Editais podem ser grandes — 2 min de timeout
+export const maxDuration = 120;
 
 function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
@@ -22,19 +15,202 @@ export type EditalDraft = {
   organization?: string | null;
   examBoard?: { acronym: string; name?: string | null } | null;
   cities?: Array<{ name: string; state: string }> | null;
-  /** Cargos identificados, cada um com suas próprias matérias */
   jobRoles?: Array<{
     name: string;
     subjects?: Array<{ name: string }> | null;
   }> | null;
-  /** Etapas/fases do concurso (prova objetiva, TAF, psicológico, etc.) */
   stages?: Array<{ name: string }> | null;
-  examDate?: string | null; // YYYY-MM-DD
+  examDate?: string | null;
   year?: number | null;
   description?: string | null;
   notes?: string | null;
-  confidence?: number | null; // 0..1
+  confidence?: number | null;
 };
+
+const SYSTEM_PROMPT = [
+  "Você é um assistente especializado em extrair dados estruturados de EDITAIS de concurso público no Brasil.",
+  "Retorne APENAS JSON válido, sem markdown, sem explicações.",
+  "Regras:",
+  "- Se um campo não existir no edital, use null ou omita.",
+  "- Se houver múltiplas cidades, liste todas em 'cities'.",
+  "- Para cada cargo (jobRole), identifique as matérias/disciplinas específicas daquele cargo.",
+  "- Matérias comuns a todos os cargos devem aparecer em TODOS os cargos onde se aplicam.",
+  "- Se o edital tiver um quadro de matérias genérico (sem separar por cargo), replique para todos os cargos.",
+  "- Identifique etapas/fases do concurso (prova objetiva, discursiva, TAF, psicológico, investigação social, curso de formação, títulos, etc.).",
+  "- Banca com sigla (ex: FGV, CEBRASPE, VUNESP): preencha acronym.",
+  "- Datas: use formato YYYY-MM-DD.",
+  "- confidence: 0 a 1 (quão confiável é o preenchimento global).",
+].join("\n");
+
+const USER_PROMPT = [
+  "Leia o edital em PDF anexo e extraia o objeto EditalDraft com EXATAMENTE esta estrutura JSON:",
+  "{",
+  '  "name": "Nome completo do concurso",',
+  '  "organization": "Órgão/entidade contratante ou null",',
+  '  "examBoard": { "acronym": "SIGLA", "name": "Nome completo" } ou null,',
+  '  "cities": [{ "name": "Cidade", "state": "UF" }],',
+  '  "jobRoles": [',
+  '    {',
+  '      "name": "Nome do Cargo",',
+  '      "subjects": [{ "name": "Nome da Matéria" }]',
+  '    }',
+  '  ],',
+  '  "stages": [{ "name": "Nome da Etapa/Fase" }],',
+  '  "examDate": "YYYY-MM-DD ou null",',
+  '  "year": 2025 ou null,',
+  '  "description": "Resumo curto do concurso ou null",',
+  '  "notes": "Observações relevantes ou null",',
+  '  "confidence": 0.85',
+  "}",
+  "",
+  "IMPORTANTE: identifique matérias POR CARGO. Se não houver separação clara por cargo, aplique a lista de matérias a todos os cargos.",
+].join("\n");
+
+// ─── Gemini direto com PDF ────────────────────────────────────────────────────
+
+/** Tamanho máximo para inline (18 MB — margem abaixo do limite de 20 MB do Gemini). */
+const MAX_INLINE_BYTES = 18 * 1024 * 1024;
+
+/** Faz upload via Gemini Files API e retorna o URI do arquivo. */
+async function uploadToGeminiFiles(
+  pdfBytes: Buffer,
+  apiKey: string,
+): Promise<string> {
+  // Passo 1 — inicia o upload resumável
+  const initRes = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(pdfBytes.length),
+        "X-Goog-Upload-Header-Content-Type": "application/pdf",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file: { display_name: "edital.pdf" } }),
+    },
+  );
+  if (!initRes.ok) {
+    const t = await initRes.text().catch(() => "");
+    throw new Error(`Gemini Files API init failed (${initRes.status}): ${t.slice(0, 300)}`);
+  }
+
+  const uploadUrl = initRes.headers.get("x-goog-upload-url");
+  if (!uploadUrl) throw new Error("Gemini Files API: upload URL não retornada");
+
+  // Passo 2 — envia o arquivo
+  const uploadRes = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Length": String(pdfBytes.length),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+    },
+    body: pdfBytes,
+  });
+  if (!uploadRes.ok) {
+    const t = await uploadRes.text().catch(() => "");
+    throw new Error(`Gemini Files API upload failed (${uploadRes.status}): ${t.slice(0, 300)}`);
+  }
+
+  const fileData = (await uploadRes.json()) as { file?: { uri?: string; state?: string } };
+  const uri = fileData.file?.uri;
+  if (!uri) throw new Error("Gemini Files API: URI de arquivo não retornada");
+
+  // Aguarda até o arquivo estar ACTIVE (normalmente alguns segundos)
+  for (let i = 0; i < 12; i++) {
+    if (fileData.file?.state !== "PROCESSING") break;
+    await new Promise((r) => setTimeout(r, 3000));
+    const checkRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/files/${uri.split("/").pop()}?key=${encodeURIComponent(apiKey)}`,
+    );
+    const checkData = (await checkRes.json()) as { state?: string };
+    if (checkData.state !== "PROCESSING") break;
+  }
+
+  return uri;
+}
+
+/** Analisa o edital PDF diretamente com Gemini (sem Document AI). */
+async function analyzeEditalWithGemini(
+  pdfBytes: Buffer,
+  apiKey: string,
+): Promise<{ jsonText: string; model: string; pagesHandledBy: string }> {
+  const isLarge = pdfBytes.length > MAX_INLINE_BYTES;
+
+  let pdfPart: Record<string, unknown>;
+  let pagesHandledBy: string;
+
+  if (isLarge) {
+    // Arquivo grande → Files API
+    const fileUri = await uploadToGeminiFiles(pdfBytes, apiKey);
+    pdfPart = { file_data: { mime_type: "application/pdf", file_uri: fileUri } };
+    pagesHandledBy = "files-api";
+  } else {
+    // Inline (maioria dos editais)
+    pdfPart = {
+      inline_data: { mime_type: "application/pdf", data: pdfBytes.toString("base64") },
+    };
+    pagesHandledBy = "inline";
+  }
+
+  const preferredModels = [
+    "gemini-2.0-flash",
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+  ];
+
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [
+      {
+        role: "user",
+        parts: [pdfPart, { text: USER_PROMPT }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+    },
+  });
+
+  let lastError = "";
+  for (const model of preferredModels) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body },
+    );
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      lastError = `Gemini ${model} (${res.status}): ${t.slice(0, 500)}`;
+      // Modelo não encontrado → tenta o próximo
+      if (res.status === 404 || t.includes("NOT_FOUND")) continue;
+      // Outro erro não-recuperável → lança imediatamente
+      throw new Error(lastError);
+    }
+
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const jsonText =
+      data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+
+    if (!jsonText.trim()) {
+      lastError = `Gemini ${model}: resposta vazia`;
+      continue;
+    }
+
+    return { jsonText, model, pagesHandledBy };
+  }
+
+  throw new Error(lastError || "Nenhum modelo Gemini disponível para análise de PDF");
+}
+
+// ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -45,112 +221,58 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
   const form = await req.formData();
   const file = form.get("file");
+
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Envie um PDF no campo 'file' (multipart/form-data)." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Envie um PDF no campo 'file' (multipart/form-data)." },
+      { status: 400 },
+    );
   }
   if ((file.type || "application/pdf") !== "application/pdf") {
-    return NextResponse.json({ error: "Apenas PDF é suportado (application/pdf)." }, { status: 415 });
+    return NextResponse.json({ error: "Apenas PDF é suportado." }, { status: 415 });
   }
 
-  const projectId = process.env.DOC_AI_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? "concursa-docai";
-  const location = requiredEnv("DOC_AI_LOCATION").trim().toLowerCase();
-  const processorId = requiredEnv("DOC_AI_PROCESSOR_ID").trim();
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return NextResponse.json(
+      { error: "GEMINI_API_KEY não configurada. Configure a variável de ambiente para usar esta função." },
+      { status: 500 },
+    );
+  }
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  const client = new DocumentProcessorServiceClient({ apiEndpoint: `${location}-documentai.googleapis.com` });
-  const name = client.processorPath(projectId, location, processorId);
-
-  let result: Awaited<ReturnType<typeof extractPdfFullTextWithDocumentAi>>;
+  let result: { jsonText: string; model: string; pagesHandledBy: string };
   try {
-    result = await extractPdfFullTextWithDocumentAi(client, name, bytes);
+    result = await analyzeEditalWithGemini(bytes, geminiKey);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error("[edital/parse] Document AI failed:", message);
+    console.error("[edital/parse] Gemini failed:", message);
     return NextResponse.json(
-      { error: `Falha ao ler o PDF (Document AI): ${message}`.slice(0, 900) },
+      { error: `Falha ao analisar o PDF: ${message}`.slice(0, 900) },
       { status: 502 },
     );
   }
 
-  const fullText = (result.document?.text ?? "").trim();
-  const pageCount = result.pageCount;
-
-  if (!fullText) {
+  const robust = parseLlmJsonRobustly(result.jsonText);
+  if (!robust.ok) {
+    console.error("[edital/parse] JSON inválido:", robust.message);
     return NextResponse.json(
-      { error: "O PDF não contém texto legível. Verifique se o arquivo é um edital textual (não apenas imagens)." },
-      { status: 422 },
+      { error: `IA retornou JSON inválido: ${robust.message}` },
+      { status: 500 },
     );
   }
 
-  // Envia até 80.000 chars para o LLM (editais longos têm até ~60k chars de texto).
-  const MAX_CHARS = 80_000;
-  const excerpt =
-    fullText.length > MAX_CHARS
-      ? fullText.slice(0, MAX_CHARS) + "\n\n[... texto truncado ...]"
-      : fullText;
-
-  const system = [
-    "Você é um assistente especializado em extrair dados estruturados de EDITAIS de concurso público no Brasil.",
-    "Retorne APENAS JSON válido, sem markdown, sem explicações.",
-    "Regras:",
-    "- Se um campo não existir no edital, use null ou omita.",
-    "- Se houver múltiplas cidades, liste todas em 'cities'.",
-    "- Para cada cargo (jobRole), identifique as matérias/disciplinas específicas daquele cargo.",
-    "- Matérias comuns a todos os cargos devem aparecer em TODOS os cargos onde se aplicam.",
-    "- Se o edital tiver um quadro de matérias genérico (sem separar por cargo), replique para todos os cargos.",
-    "- Identifique as etapas/fases do concurso (prova objetiva, discursiva, TAF, psicológico, investigação social, curso de formação, títulos, etc.).",
-    "- Banca com sigla (ex: FGV, CEBRASPE, VUNESP): preencha acronym.",
-    "- Datas: use formato YYYY-MM-DD.",
-    "- confidence: 0 a 1 (quão confiável é o preenchimento global).",
-  ].join("\n");
-
-  const user = [
-    "Texto do edital (pode estar incompleto se muito longo):",
-    "---",
-    excerpt,
-    "---",
-    "",
-    "Extraia o objeto EditalDraft com EXATAMENTE esta estrutura JSON:",
-    "{",
-    '  "name": "Nome completo do concurso",',
-    '  "organization": "Órgão/entidade contratante ou null",',
-    '  "examBoard": { "acronym": "SIGLA", "name": "Nome completo" } ou null,',
-    '  "cities": [{ "name": "Cidade", "state": "UF" }],',
-    '  "jobRoles": [',
-    '    {',
-    '      "name": "Nome do Cargo",',
-    '      "subjects": [{ "name": "Nome da Matéria" }]',
-    '    }',
-    '  ],',
-    '  "stages": [{ "name": "Nome da Etapa/Fase" }],',
-    '  "examDate": "YYYY-MM-DD ou null",',
-    '  "year": 2025 ou null,',
-    '  "description": "Resumo curto do concurso ou null",',
-    '  "notes": "Observações relevantes ou null",',
-    '  "confidence": 0.85',
-    "}",
-    "",
-    "IMPORTANTE: identifique matérias POR CARGO. Se não houver separação clara por cargo, aplique a lista de matérias a todos os cargos.",
-  ].join("\n");
-
-  const llm = await runLlmJson(system, user);
-  const robust = parseLlmJsonRobustly(llm.jsonText);
-  if (!robust.ok) {
-    console.error("[edital/parse] LLM returned invalid JSON:", robust.message);
-    return NextResponse.json({ error: `IA retornou JSON inválido: ${robust.message}` }, { status: 500 });
-  }
   const draft = robust.value as EditalDraft;
   const elapsedMs = Date.now() - startedAt;
 
   return NextResponse.json({
     draft,
     meta: {
-      llm: { provider: llm.provider, model: llm.model },
-      docaiChars: fullText.length,
+      llm: { provider: "gemini", model: result.model },
+      pagesHandledBy: result.pagesHandledBy,
+      fileSizeBytes: bytes.length,
       elapsedMs,
-      pageCount,
-      usedChunking: result.usedChunking,
     },
   });
 }
