@@ -72,9 +72,12 @@ export default async function StudentDashboardPage() {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
-  const mainCompetition = profile?.studentCompetitions[0];
-  const daysLeft = mainCompetition?.competition?.examDate
-    ? Math.max(0, Math.floor((mainCompetition.competition.examDate.getTime() - Date.now()) / 86400000))
+  const mainCompetition = profile?.studentCompetitions?.[0];
+  const mainExamDateMs = mainCompetition?.competition?.examDate
+    ? new Date(mainCompetition.competition.examDate).getTime()
+    : NaN;
+  const daysLeft = !isNaN(mainExamDateMs)
+    ? Math.max(0, Math.floor((mainExamDateMs - Date.now()) / 86400000))
     : null;
 
   return (
@@ -162,8 +165,9 @@ export default async function StudentDashboardPage() {
             ) : (
               profile?.studentCompetitions.map((sc, i) => {
                 const comp = sc.competition;
-                const days = comp.examDate
-                  ? Math.max(0, Math.floor((comp.examDate.getTime() - Date.now()) / 86400000))
+                const examMs = comp.examDate ? new Date(comp.examDate).getTime() : NaN;
+                const days = !isNaN(examMs)
+                  ? Math.max(0, Math.floor((examMs - Date.now()) / 86400000))
                   : null;
                 const pct = days !== null ? Math.min(100, ((365 - days) / 365) * 100) : 0;
 

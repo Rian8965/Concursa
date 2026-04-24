@@ -87,10 +87,9 @@ export default async function CompetitionsPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
           {studentCompetitions.map((sc) => {
             const comp = sc.competition;
-            const daysLeft = comp.examDate
-              ? Math.floor(
-                  (comp.examDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-                )
+            const examDateMs = comp.examDate ? new Date(comp.examDate).getTime() : NaN;
+            const daysLeft = !isNaN(examDateMs)
+              ? Math.floor((examDateMs - Date.now()) / (1000 * 60 * 60 * 24))
               : null;
 
             return (

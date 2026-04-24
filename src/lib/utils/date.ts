@@ -1,27 +1,60 @@
 import { format, formatDistanceToNow, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-export function formatDate(date: Date | string, pattern = "dd/MM/yyyy") {
-  return format(new Date(date), pattern, { locale: ptBR });
+/** Returns true if the value can be converted to a valid (non-NaN) Date */
+function isValidDate(date: unknown): boolean {
+  if (date === null || date === undefined || date === "") return false;
+  const d = new Date(date as Date | string | number);
+  return !isNaN(d.getTime());
 }
 
-export function formatDateTime(date: Date | string) {
-  return format(new Date(date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+export function formatDate(date: Date | string | null | undefined, pattern = "dd/MM/yyyy"): string {
+  if (!isValidDate(date)) return "—";
+  try {
+    return format(new Date(date as Date | string), pattern, { locale: ptBR });
+  } catch {
+    return "—";
+  }
 }
 
-export function formatRelative(date: Date | string) {
-  return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (!isValidDate(date)) return "—";
+  try {
+    return format(new Date(date as Date | string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  } catch {
+    return "—";
+  }
 }
 
-export function daysUntil(date: Date | string): number {
-  return differenceInDays(new Date(date), new Date());
+export function formatRelative(date: Date | string | null | undefined): string {
+  if (!isValidDate(date)) return "—";
+  try {
+    return formatDistanceToNow(new Date(date as Date | string), { addSuffix: true, locale: ptBR });
+  } catch {
+    return "—";
+  }
 }
 
-export function isExpired(date: Date | string): boolean {
-  return isPast(new Date(date));
+export function daysUntil(date: Date | string | null | undefined): number {
+  if (!isValidDate(date)) return 0;
+  try {
+    return differenceInDays(new Date(date as Date | string), new Date());
+  } catch {
+    return 0;
+  }
 }
 
-export function formatCountdown(targetDate: Date | string): string {
+export function isExpired(date: Date | string | null | undefined): boolean {
+  if (!isValidDate(date)) return false;
+  try {
+    return isPast(new Date(date as Date | string));
+  } catch {
+    return false;
+  }
+}
+
+export function formatCountdown(targetDate: Date | string | null | undefined): string {
+  if (!isValidDate(targetDate)) return "—";
   const days = daysUntil(targetDate);
   if (days < 0) return "Prova realizada";
   if (days === 0) return "Prova hoje!";
