@@ -12,7 +12,11 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000"],
+      allowedOrigins: [
+        "localhost:3000",
+        "descompliqueseuconcurso.com.br",
+        "www.descompliqueseuconcurso.com.br",
+      ],
     },
   },
 };

@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
-import { getPostLogoutUrl } from "@/lib/auth/post-logout-url";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
@@ -206,7 +205,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
 
           <button
             type="button"
-            onClick={() => void signOut({ callbackUrl: getPostLogoutUrl(), redirect: true })}
+            onClick={() => void signOut({ redirect: false }).then(() => { window.location.href = "/login"; })}
             className="btn-logout"
           >
             <LogOut className="h-[13px] w-[13px]" />
