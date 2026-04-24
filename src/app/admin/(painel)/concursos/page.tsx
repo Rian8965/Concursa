@@ -108,7 +108,14 @@ export default function AdminConcursosPage() {
       if (!res.ok) throw new Error(data?.error ?? "Falha ao analisar edital");
 
       const ab = await editalFile.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(ab)));
+      // Converte em chunks de 32 KB para não explodir a call stack com PDFs grandes
+      const bytes = new Uint8Array(ab);
+      const CHUNK = 0x8000;
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      }
+      const b64 = btoa(binary);
       setPdfBase64(b64);
 
       const d: EditalDraft = data.draft ?? {};
