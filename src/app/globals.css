@@ -1057,6 +1057,35 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-secondary);
 }
 
+/* Campo de input usado na tela de revisão do edital */
+.field-input {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 1.5px solid #E5E7EB;
+  background: #F9FAFB;
+  padding: 9px 13px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: #111827;
+  line-height: 1.5;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  outline: none;
+  font-family: inherit;
+}
+.field-input::placeholder {
+  color: #9CA3AF;
+  font-weight: 400;
+}
+.field-input:hover {
+  border-color: #D1D5DB;
+}
+.field-input:focus {
+  border-color: #8B5CF6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+}
+
 .orbit-form-stack {
   display: flex;
   flex-direction: column;
