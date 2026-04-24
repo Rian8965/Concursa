@@ -107,7 +107,7 @@ async function uploadToGeminiFiles(
       "X-Goog-Upload-Offset": "0",
       "X-Goog-Upload-Command": "upload, finalize",
     },
-    body: pdfBytes,
+    body: new Uint8Array(pdfBytes),
   });
   if (!uploadRes.ok) {
     const t = await uploadRes.text().catch(() => "");
