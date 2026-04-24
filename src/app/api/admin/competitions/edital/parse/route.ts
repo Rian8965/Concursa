@@ -132,6 +132,29 @@ async function uploadToGeminiFiles(
   return uri;
 }
 
+/** Lista modelos Gemini disponíveis para a chave fornecida. */
+async function listGeminiModels(apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      models?: { name?: string; supportedGenerationMethods?: string[] }[];
+    };
+    return (data.models ?? [])
+      .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+      .map((m) => {
+        const n = m.name ?? "";
+        return n.startsWith("models/") ? n.slice("models/".length) : n;
+      })
+      .filter(Boolean)
+      .filter((m) => !m.includes("lite") && !m.includes("computer") && !m.includes("embedding"));
+  } catch {
+    return [];
+  }
+}
+
 /** Analisa o edital PDF diretamente com Gemini (sem Document AI). */
 async function analyzeEditalWithGemini(
   pdfBytes: Buffer,
@@ -143,71 +166,79 @@ async function analyzeEditalWithGemini(
   let pagesHandledBy: string;
 
   if (isLarge) {
-    // Arquivo grande → Files API
     const fileUri = await uploadToGeminiFiles(pdfBytes, apiKey);
     pdfPart = { file_data: { mime_type: "application/pdf", file_uri: fileUri } };
     pagesHandledBy = "files-api";
   } else {
-    // Inline (maioria dos editais)
     pdfPart = {
       inline_data: { mime_type: "application/pdf", data: pdfBytes.toString("base64") },
     };
     pagesHandledBy = "inline";
   }
 
-  const preferredModels = [
-    "gemini-2.0-flash",
-    "gemini-1.5-pro-latest",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro",
-    "gemini-1.5-flash",
-  ];
-
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [
-      {
-        role: "user",
-        parts: [pdfPart, { text: USER_PROMPT }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    },
+    contents: [{ role: "user", parts: [pdfPart, { text: USER_PROMPT }] }],
+    generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
   });
 
-  let lastError = "";
-  for (const model of preferredModels) {
+  // Lista estática com preferência de modelos mais capazes para PDF
+  const staticCandidates = [
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-001",
+  ];
+
+  async function tryModel(model: string): Promise<string | null> {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
       { method: "POST", headers: { "Content-Type": "application/json" }, body },
     );
-
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      lastError = `Gemini ${model} (${res.status}): ${t.slice(0, 500)}`;
-      // Modelo não encontrado → tenta o próximo
-      if (res.status === 404 || t.includes("NOT_FOUND")) continue;
-      // Outro erro não-recuperável → lança imediatamente
-      throw new Error(lastError);
+      // 404 / NOT_FOUND = modelo não disponível nesta chave → tenta próximo
+      if (res.status === 404 || t.includes("NOT_FOUND")) return null;
+      // Computer Use ou outros → também pula
+      if (t.includes("Computer Use") || t.includes("computer-use")) return null;
+      throw new Error(`Gemini ${model} (${res.status}): ${t.slice(0, 500)}`);
     }
-
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const jsonText =
       data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-
-    if (!jsonText.trim()) {
-      lastError = `Gemini ${model}: resposta vazia`;
-      continue;
-    }
-
-    return { jsonText, model, pagesHandledBy };
+    return jsonText.trim() || null;
   }
 
-  throw new Error(lastError || "Nenhum modelo Gemini disponível para análise de PDF");
+  // 1ª passagem — modelos estáticos preferidos
+  for (const model of staticCandidates) {
+    const jsonText = await tryModel(model);
+    if (jsonText) return { jsonText, model, pagesHandledBy };
+  }
+
+  // 2ª passagem — descobre dinamicamente todos os modelos disponíveis
+  const discovered = await listGeminiModels(apiKey);
+  // Ordena: prefere modelos mais novos / pro
+  const preferredOrder = ["2.0", "1.5-pro", "1.5-flash", "pro", "flash"];
+  discovered.sort((a, b) => {
+    const ia = preferredOrder.findIndex((p) => a.includes(p));
+    const ib = preferredOrder.findIndex((p) => b.includes(p));
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  for (const model of discovered.slice(0, 15)) {
+    if (staticCandidates.includes(model)) continue; // já tentado
+    const jsonText = await tryModel(model);
+    if (jsonText) return { jsonText, model, pagesHandledBy };
+  }
+
+  throw new Error(
+    "Nenhum modelo Gemini disponível para análise de PDF. Verifique a GEMINI_API_KEY e os modelos habilitados no seu projeto.",
+  );
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
