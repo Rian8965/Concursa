@@ -16,30 +16,54 @@ export default async function StudentDashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const profile = await prisma.studentProfile.findUnique({
-    where: { userId: session.user.id },
-    include: {
-      plan: true,
-      studentCompetitions: {
-        where: { isActive: true },
-        include: {
-          competition: { include: { city: true, examBoard: true } },
-          jobRole: true,
+  // #region agent log - H1/H3
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let profile: any = null;
+  try {
+    profile = await prisma.studentProfile.findUnique({
+      where: { userId: session.user.id },
+      include: {
+        plan: true,
+        studentCompetitions: {
+          where: { isActive: true },
+          include: {
+            competition: { include: { city: true, examBoard: true } },
+            jobRole: true,
+          },
+          take: 4,
         },
-        take: 4,
       },
-    },
-  });
+    });
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:profile-query",message:"profile query ok",data:{hasProfile:!!profile,competitions:profile?.studentCompetitions?.length??0},hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
+  } catch (err) {
+    console.error("[dashboard] profile query failed:", err);
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:profile-query-error",message:"profile query FAILED",data:{error:String(err)},hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
+    throw err;
+  }
+  // #endregion
 
   const profileId = profile?.id ?? "";
 
-  const [totalAnswered, correctAnswers, trainingSessions, simulatedExams] =
-    await Promise.all([
-      prisma.studentAnswer.count({ where: { studentProfileId: profileId } }),
-      prisma.studentAnswer.count({ where: { studentProfileId: profileId, isCorrect: true } }),
-      prisma.trainingSession.count({ where: { studentProfileId: profileId } }),
-      prisma.simulatedExam.count({ where: { studentProfileId: profileId, status: "COMPLETED" } }),
-    ]);
+  // #region agent log - H3
+  let totalAnswered = 0;
+  let correctAnswers = 0;
+  let trainingSessions = 0;
+  let simulatedExams = 0;
+  try {
+    [totalAnswered, correctAnswers, trainingSessions, simulatedExams] =
+      await Promise.all([
+        prisma.studentAnswer.count({ where: { studentProfileId: profileId } }),
+        prisma.studentAnswer.count({ where: { studentProfileId: profileId, isCorrect: true } }),
+        prisma.trainingSession.count({ where: { studentProfileId: profileId } }),
+        prisma.simulatedExam.count({ where: { studentProfileId: profileId, status: "COMPLETED" } }),
+      ]);
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:counts",message:"counts ok",data:{totalAnswered,correctAnswers,trainingSessions,simulatedExams},hypothesisId:"H3",timestamp:Date.now()})}).catch(()=>{});
+  } catch (err) {
+    console.error("[dashboard] counts query failed:", err);
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:counts-error",message:"counts FAILED",data:{error:String(err)},hypothesisId:"H3",timestamp:Date.now()})}).catch(()=>{});
+    throw err;
+  }
+  // #endregion
 
   const accuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
   const firstName = session.user.name?.split(" ")[0] ?? "Aluno";
@@ -165,9 +189,11 @@ export default async function StudentDashboardPage() {
                           </p>
 
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[#6B7280]">
-                            <span className="inline-flex items-center gap-1">
-                              <span aria-hidden>📍</span> {comp.city.name}, {comp.city.state}
-                            </span>
+                            {comp.city && (
+                              <span className="inline-flex items-center gap-1">
+                                <span aria-hidden>📍</span> {comp.city.name}, {comp.city.state}
+                              </span>
+                            )}
                             {sc.jobRole && (
                               <span className="inline-flex items-center gap-1">
                                 <span aria-hidden>💼</span> {sc.jobRole.name}

@@ -40,20 +40,31 @@ export default async function CompetitionsPage() {
 
   if (!profile) redirect("/dashboard");
 
-  const studentCompetitions = await prisma.studentCompetition.findMany({
-    where: { studentProfileId: profile.id, isActive: true },
-    include: {
-      competition: {
-        include: {
-          city: true,
-          examBoard: true,
-          subjects: { include: { subject: true } },
+  // #region agent log - H1/H4
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let studentCompetitions: any[] = [];
+  try {
+    studentCompetitions = await prisma.studentCompetition.findMany({
+      where: { studentProfileId: profile.id, isActive: true },
+      include: {
+        competition: {
+          include: {
+            city: true,
+            examBoard: true,
+            subjects: { include: { subject: true } },
+          },
         },
+        jobRole: true,
       },
-      jobRole: true,
-    },
-    orderBy: { enrolledAt: "desc" },
-  });
+      orderBy: { enrolledAt: "desc" },
+    });
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"concursos/page.tsx:query",message:"query ok",data:{count:studentCompetitions.length},hypothesisId:"H4",timestamp:Date.now()})}).catch(()=>{});
+  } catch (err) {
+    console.error("[concursos] studentCompetition query failed:", err);
+    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"concursos/page.tsx:query-error",message:"query FAILED",data:{error:String(err)},hypothesisId:"H4",timestamp:Date.now()})}).catch(()=>{});
+    throw err;
+  }
+  // #endregion
 
   return (
     <div className="orbit-stack animate-fade-in">
@@ -119,10 +130,12 @@ export default async function CompetitionsPage() {
                   )}
 
                   <div className="space-y-1.5 mb-5">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                      {comp.city.name}, {comp.city.state}
-                    </div>
+                    {comp.city && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        {comp.city.name}, {comp.city.state}
+                      </div>
+                    )}
                     {sc.jobRole && (
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Briefcase className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
