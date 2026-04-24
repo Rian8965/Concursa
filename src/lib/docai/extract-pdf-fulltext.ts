@@ -1,13 +1,14 @@
 import type { protos } from "@google-cloud/documentai";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
+import { PDFDocument } from "pdf-lib";
 import { DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS, DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "./process-options";
 
 /**
- * Limite **por chamada** ao `processDocument` online (processor OCR típico).
- * Mesmo com `imagelessMode`, muitos projetos continuam com teto de 15 páginas por request — valores maiores geram
- * `At most 15 pages in one call` ou equivalente.
+ * Limite de páginas por chamada ao Document AI (online processing).
+ * Mesmo com imagelessMode: true, muitos processadores mantêm o limite em 15.
+ * Usamos 14 para ter margem de segurança.
  */
-const ONLINE_CHUNK_PAGES = 15;
+const CHUNK_PAGES = 14;
 
 export function isDocumentAiOnlinePageLimitError(message: string): boolean {
   return (
@@ -19,81 +20,52 @@ export function isDocumentAiOnlinePageLimitError(message: string): boolean {
   );
 }
 
-function parseGotPageCount(message: string): number | null {
-  const m = message.match(/got\s+(\d+)/i);
-  if (!m) return null;
-  const n = parseInt(m[1], 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-async function processRange(
-  client: DocumentProcessorServiceClient,
-  processorName: string,
-  pdfBytes: Buffer,
-  fromStart: number,
-  fromEnd: number,
-): Promise<protos.google.cloud.documentai.v1.IProcessResponse> {
-  const [res] = await client.processDocument({
-    name: processorName,
-    rawDocument: { content: pdfBytes.toString("base64"), mimeType: "application/pdf" },
-    imagelessMode: true,
-    processOptions: {
-      ...DOCUMENT_AI_IMAGELESS_PROCESS_OPTIONS,
-      fromStart,
-      fromEnd,
-    },
-  });
-  return res;
-}
-
 function mergeText(chunks: string[]) {
-  return chunks.map((t) => t.trim()).filter(Boolean).join("\n\n");
-}
-
-function estimatePdfPageCount(pdfBytes: Buffer): number {
-  // Heurística leve (sem pdf.js no servidor). Ordem: /NumPages (metadado) → contagem de /Type /Page.
-  try {
-    const s = pdfBytes.toString("latin1");
-    const numPages = s.match(/\/NumPages\s+(\d+)/);
-    if (numPages) {
-      const n = parseInt(numPages[1], 10);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
-    const m = s.match(/\/Type\s*\/Page(?!s)\b/g);
-    const n = m?.length ?? 0;
-    return n > 0 ? n : 1;
-  } catch {
-    return 1;
-  }
-}
-
-async function runChunked(
-  client: DocumentProcessorServiceClient,
-  processorName: string,
-  pdfBytes: Buffer,
-  totalPages: number,
-): Promise<{
-  document: protos.google.cloud.documentai.v1.IDocument;
-  pageCount: number;
-  usedChunking: boolean;
-}> {
-  const texts: string[] = [];
-  const total = Math.max(1, totalPages);
-  for (let start = 1; start <= total; start += ONLINE_CHUNK_PAGES) {
-    const end = Math.min(start + ONLINE_CHUNK_PAGES - 1, total);
-    const res = await processRange(client, processorName, pdfBytes, start, end);
-    texts.push(res.document?.text ?? "");
-  }
-  return {
-    document: { text: mergeText(texts), pages: [] },
-    pageCount: total,
-    usedChunking: true,
-  };
+  return chunks
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**
- * Extrai texto do PDF via Document AI. Usa faixas de página quando o PDF passa
- * do limite de uma única requisição online ou quando a API ainda acusa limite.
+ * Divide um PDF em sub-PDFs de até `chunkSize` páginas cada.
+ * Retorna buffers prontos para enviar ao Document AI.
+ */
+async function splitPdfIntoChunks(pdfBytes: Buffer, chunkSize: number): Promise<Buffer[]> {
+  const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const totalPages = srcDoc.getPageCount();
+  const chunks: Buffer[] = [];
+
+  for (let start = 0; start < totalPages; start += chunkSize) {
+    const end = Math.min(start + chunkSize, totalPages); // exclusive
+    const chunkDoc = await PDFDocument.create();
+    const pageIndices = Array.from({ length: end - start }, (_, i) => start + i);
+    const copiedPages = await chunkDoc.copyPages(srcDoc, pageIndices);
+    copiedPages.forEach((p) => chunkDoc.addPage(p));
+    const chunkBytes = await chunkDoc.save();
+    chunks.push(Buffer.from(chunkBytes));
+  }
+
+  return chunks;
+}
+
+async function processSingleBuffer(
+  client: DocumentProcessorServiceClient,
+  processorName: string,
+  pdfBytes: Buffer,
+): Promise<string> {
+  const [res] = await client.processDocument({
+    name: processorName,
+    rawDocument: { content: pdfBytes.toString("base64"), mimeType: "application/pdf" },
+    ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
+  });
+  return (res.document?.text ?? "").trim();
+}
+
+/**
+ * Extrai texto completo de um PDF via Document AI.
+ * PDFs com mais de CHUNK_PAGES páginas são divididos em pedaços menores
+ * (cada pedaço é um PDF independente) para contornar o limite de páginas por chamada.
  */
 export async function extractPdfFullTextWithDocumentAi(
   client: DocumentProcessorServiceClient,
@@ -104,27 +76,54 @@ export async function extractPdfFullTextWithDocumentAi(
   pageCount: number;
   usedChunking: boolean;
 }> {
-  const pageCount = Math.max(1, estimatePdfPageCount(pdfBytes));
-
-  if (pageCount > ONLINE_CHUNK_PAGES) {
-    return runChunked(client, processorName, pdfBytes, pageCount);
+  // Carrega o PDF para obter a contagem real de páginas
+  let pageCount = 1;
+  try {
+    const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    pageCount = srcDoc.getPageCount();
+  } catch {
+    // Se pdf-lib não conseguir ler, tenta direto e deixa o Document AI reclamar
   }
 
-  try {
-    const [res] = await client.processDocument({
-      name: processorName,
-      rawDocument: { content: pdfBytes.toString("base64"), mimeType: "application/pdf" },
-      ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
-    });
-    return { document: res.document ?? {}, pageCount, usedChunking: false };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    if (!isDocumentAiOnlinePageLimitError(message)) {
+  // PDF pequeno — tenta como chamada única; se falhar por limite, cai no chunking
+  if (pageCount <= CHUNK_PAGES) {
+    try {
+      const text = await processSingleBuffer(client, processorName, pdfBytes);
+      return {
+        document: { text },
+        pageCount,
+        usedChunking: false,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Se o erro não for de limite de páginas, repropaga
+      if (!isDocumentAiOnlinePageLimitError(msg)) throw e;
+      // Caso contrário, cai no chunking abaixo
+    }
+  }
+
+  // PDF grande (ou fallback): dividir em pedaços e processar separadamente
+  const chunks = await splitPdfIntoChunks(pdfBytes, CHUNK_PAGES);
+  const texts: string[] = [];
+
+  for (const chunk of chunks) {
+    try {
+      const text = await processSingleBuffer(client, processorName, chunk);
+      texts.push(text);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Erro de limite (improvável, mas defensivo): pula o chunk com aviso
+      if (isDocumentAiOnlinePageLimitError(msg)) {
+        console.warn("[docai] chunk still exceeds page limit — skipping:", msg);
+        continue;
+      }
       throw e;
     }
-    const fromErr = parseGotPageCount(message);
-    // Se a heurística subestimou as páginas, o erro não traz o total: reprocessa em fatias até 500 págs.
-    const totalForChunk = fromErr ?? Math.min(500, Math.max(pageCount + 1, 32));
-    return runChunked(client, processorName, pdfBytes, Math.max(pageCount, totalForChunk));
   }
+
+  return {
+    document: { text: mergeText(texts) },
+    pageCount,
+    usedChunking: true,
+  };
 }

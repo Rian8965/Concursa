@@ -48,8 +48,7 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Envie um PDF no campo 'file' (multipart/form-data)." }, { status: 400 });
   }
-  const mimeType = file.type || "application/pdf";
-  if (mimeType !== "application/pdf") {
+  if ((file.type || "application/pdf") !== "application/pdf") {
     return NextResponse.json({ error: "Apenas PDF é suportado (application/pdf)." }, { status: 415 });
   }
 
@@ -59,22 +58,6 @@ export async function POST(req: Request) {
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  // #region agent log
-  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-    body: JSON.stringify({
-      sessionId: "03dbee",
-      runId: "post-fix",
-      hypothesisId: "H-edital-parse",
-      location: "edital/parse/route.ts:POST",
-      message: "edital parse started",
-      data: { bytes: bytes.length, projectId, location, processorId },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const client = new DocumentProcessorServiceClient({ apiEndpoint: `${location}-documentai.googleapis.com` });
   const name = client.processorPath(projectId, location, processorId);
 
@@ -83,49 +66,29 @@ export async function POST(req: Request) {
     result = await extractPdfFullTextWithDocumentAi(client, name, bytes);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "post-fix",
-        hypothesisId: "H-docai-process",
-        location: "edital/parse/route.ts:extractPdf:catch",
-        message: "Document AI extract failed",
-        data: { messageHead: message.slice(0, 500) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return NextResponse.json({ error: `Falha ao ler o PDF (Document AI): ${message}`.slice(0, 900) }, { status: 502 });
+    console.error("[edital/parse] Document AI failed:", message);
+    return NextResponse.json(
+      { error: `Falha ao ler o PDF (Document AI): ${message}`.slice(0, 900) },
+      { status: 502 },
+    );
   }
 
-  const pageCount = result.pageCount;
   const fullText = (result.document?.text ?? "").trim();
+  const pageCount = result.pageCount;
 
-  // #region agent log
-  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-    body: JSON.stringify({
-      sessionId: "03dbee",
-      runId: "post-fix",
-      hypothesisId: "H-docai-process",
-      location: "edital/parse/route.ts:processDocument:ok",
-      message: "Document AI ok",
-      data: { pageCount, textChars: fullText.length, usedChunking: result.usedChunking },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
+  if (!fullText) {
+    return NextResponse.json(
+      { error: "O PDF não contém texto legível. Verifique se o arquivo é um edital textual (não apenas imagens)." },
+      { status: 422 },
+    );
+  }
 
   // Envia até 80.000 chars para o LLM (editais longos têm até ~60k chars de texto).
-  // O Document AI já processou todas as páginas via chunking se necessário.
   const MAX_CHARS = 80_000;
-  const excerpt = fullText.length > MAX_CHARS
-    ? fullText.slice(0, MAX_CHARS) + "\n\n[... texto truncado ...]"
-    : fullText;
+  const excerpt =
+    fullText.length > MAX_CHARS
+      ? fullText.slice(0, MAX_CHARS) + "\n\n[... texto truncado ...]"
+      : fullText;
 
   const system = [
     "Você é um assistente especializado em extrair dados estruturados de EDITAIS de concurso público no Brasil.",
@@ -174,51 +137,11 @@ export async function POST(req: Request) {
   const llm = await runLlmJson(system, user);
   const robust = parseLlmJsonRobustly(llm.jsonText);
   if (!robust.ok) {
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "post-fix",
-        hypothesisId: "H-edital-parse",
-        location: "edital/parse/route.ts:JSON",
-        message: "LLM returned invalid JSON",
-        data: { provider: llm.provider, model: llm.model, jsonTextHead: llm.jsonText.slice(0, 800) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    console.error("[edital/parse] LLM returned invalid JSON:", robust.message);
     return NextResponse.json({ error: `IA retornou JSON inválido: ${robust.message}` }, { status: 500 });
   }
   const draft = robust.value as EditalDraft;
-
   const elapsedMs = Date.now() - startedAt;
-
-  // #region agent log
-  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-    body: JSON.stringify({
-      sessionId: "03dbee",
-      runId: "post-fix",
-      hypothesisId: "H-edital-parse",
-      location: "edital/parse/route.ts:POST",
-      message: "edital parse finished",
-      data: {
-        elapsedMs,
-        provider: llm.provider,
-        model: llm.model,
-        confidence: draft?.confidence ?? null,
-        jobRolesCount: draft?.jobRoles?.length ?? 0,
-        stagesCount: draft?.stages?.length ?? 0,
-        textChars: fullText.length,
-        excerptChars: excerpt.length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
 
   return NextResponse.json({
     draft,
@@ -227,6 +150,7 @@ export async function POST(req: Request) {
       docaiChars: fullText.length,
       elapsedMs,
       pageCount,
+      usedChunking: result.usedChunking,
     },
   });
 }
