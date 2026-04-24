@@ -168,7 +168,7 @@ export default async function CompetitionsPage() {
                   {/* Matérias preview */}
                   {comp.subjects.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-5">
-                      {comp.subjects.slice(0, 4).map((cs) => (
+                      {comp.subjects.slice(0, 4).map((cs: { subjectId: string; subject: { name: string } }) => (
                         <span
                           key={cs.subjectId}
                           className="rounded-lg border border-gray-200/80 bg-gray-50/90 px-2.5 py-1 text-xs font-medium text-gray-600"

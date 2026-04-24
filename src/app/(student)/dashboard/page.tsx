@@ -163,7 +163,8 @@ export default async function StudentDashboardPage() {
                 </p>
               </div>
             ) : (
-              profile?.studentCompetitions.map((sc, i) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              profile?.studentCompetitions.map((sc: any, i: number) => {
                 const comp = sc.competition;
                 const examMs = comp.examDate ? new Date(comp.examDate).getTime() : NaN;
                 const days = !isNaN(examMs)
