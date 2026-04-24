@@ -3,25 +3,14 @@ import { prisma } from "@/lib/db/prisma";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  BookOpen,
-  Target,
-  BarChart3,
-  History,
-  Download,
-  Clock,
-  MapPin,
-  Building2,
-  Calendar,
-  Briefcase,
-  ArrowRight,
-  Play,
-  Trophy,
-  FileText,
+  BookOpen, Target, BarChart3, History, Download,
+  Clock, MapPin, Building2, Calendar, Briefcase,
+  ArrowRight, Play, Trophy, FileText,
 } from "lucide-react";
-import { formatDate, formatCountdown } from "@/lib/utils/date";
+import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
 
 interface CompetitionPageProps {
   params: Promise<{ id: string }>;
@@ -42,171 +31,144 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const profile = await prisma.studentProfile.findUnique({
-    where: { userId: session.user.id },
-  });
+  const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) redirect("/dashboard");
 
-  const studentCompetition = await prisma.studentCompetition.findUnique({
-    where: {
-      studentProfileId_competitionId: {
-        studentProfileId: profile.id,
-        competitionId: id,
-      },
-    },
+  const enrollment = await prisma.studentCompetition.findUnique({
+    where: { studentProfileId_competitionId: { studentProfileId: profile.id, competitionId: id } },
     include: {
-      competition: {
-        include: {
-          city: true,
-          examBoard: true,
-          subjects: {
-            include: {
-              subject: true,
-            },
-          },
-        },
-      },
-      jobRole: true,
+      competition: { include: { city: true, examBoard: true } },
+      jobRole: { select: { id: true, name: true } },
     },
   });
+  if (!enrollment) notFound();
 
-  if (!studentCompetition) notFound();
+  const comp = enrollment.competition;
 
-  const comp = studentCompetition.competition;
+  // Busca subjects pelo cargo (prioritário) ou todos do concurso (fallback)
+  let displaySubjects: { id: string; name: string; color?: string | null }[] = [];
 
-  // Desempenho por matéria
+  if (enrollment.jobRoleId) {
+    const links = await prisma.competitionJobRoleSubject.findMany({
+      where: { competitionId: id, jobRoleId: enrollment.jobRoleId },
+      include: { subject: { select: { id: true, name: true, color: true } } },
+      orderBy: { subject: { name: "asc" } },
+    });
+    displaySubjects = links.map((l) => l.subject);
+  } else {
+    const links = await prisma.competitionSubject.findMany({
+      where: { competitionId: id },
+      include: { subject: { select: { id: true, name: true, color: true } } },
+      orderBy: { subject: { name: "asc" } },
+    });
+    displaySubjects = links.map((l) => l.subject);
+  }
+
+  // Desempenho por matéria (sem filtro de competitionId nas questões)
   const subjectStats = await Promise.all(
-    comp.subjects.slice(0, 6).map(async (cs) => {
+    displaySubjects.slice(0, 6).map(async (subject) => {
       const [total, correct] = await Promise.all([
         prisma.studentAnswer.count({
-          where: {
-            studentProfileId: profile.id,
-            question: {
-              competitionId: id,
-              subjectId: cs.subjectId,
-            },
-          },
+          where: { studentProfileId: profile.id, question: { subjectId: subject.id } },
         }),
         prisma.studentAnswer.count({
-          where: {
-            studentProfileId: profile.id,
-            isCorrect: true,
-            question: {
-              competitionId: id,
-              subjectId: cs.subjectId,
-            },
-          },
+          where: { studentProfileId: profile.id, isCorrect: true, question: { subjectId: subject.id } },
         }),
       ]);
-
-      return {
-        subject: cs.subject,
-        total,
-        correct,
-        accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
-      };
-    })
+      return { subject, total, correct, accuracy: total > 0 ? Math.round((correct / total) * 100) : 0 };
+    }),
   );
 
   const totalAnswered = subjectStats.reduce((acc, s) => acc + s.total, 0);
   const totalCorrect = subjectStats.reduce((acc, s) => acc + s.correct, 0);
-  const overallAccuracy =
-    totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+  const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
-  const daysLeft =
-    comp.examDate
-      ? Math.max(
-          0,
-          Math.floor((comp.examDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-        )
-      : null;
+  // Conta questões disponíveis para o aluno
+  const subjectIds = displaySubjects.map((s) => s.id);
+  const questionsAvailable = subjectIds.length > 0
+    ? await prisma.question.count({
+        where: { status: "ACTIVE", alternatives: { some: {} }, subjectId: { in: subjectIds } },
+      })
+    : 0;
+
+  // Dias restantes para a prova
+  let daysLeft: number | null = null;
+  if (comp.examDate) {
+    try {
+      const d = new Date(comp.examDate);
+      if (!isNaN(d.getTime())) {
+        daysLeft = Math.max(0, Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+      }
+    } catch { /* ignorado */ }
+  }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-5 pb-8">
       {/* Hero do concurso */}
-      <div className="card overflow-hidden" style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            height: 3,
-            background: "linear-gradient(90deg, #7C3AED 0%, #A855F7 100%)",
-          }}
-        />
-        <div style={{ padding: "24px 28px" }}>
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex-1">
-              <div className="flex flex-wrap gap-2" style={{ marginBottom: 12 }}>
+      <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-sm">
+        <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              {/* Badges */}
+              <div className="mb-3 flex flex-wrap gap-1.5">
                 <Badge variant={comp.status === "ACTIVE" ? "active" : "upcoming"}>
                   {comp.status === "ACTIVE" ? "Ativo" : "Em breve"}
                 </Badge>
-                {comp.examBoard && (
-                  <Badge variant="secondary">{comp.examBoard.acronym}</Badge>
-                )}
-                {!comp.examBoardDefined && (
-                  <Badge variant="warning">Banca não definida</Badge>
-                )}
+                {comp.examBoard && <Badge variant="secondary">{comp.examBoard.acronym}</Badge>}
+                {!comp.examBoardDefined && <Badge variant="warning">Banca não definida</Badge>}
               </div>
 
-              <h1
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  color: "#111827",
-                  letterSpacing: "-0.03em",
-                  marginBottom: 4,
-                }}
-              >
+              <h1 className="text-xl font-extrabold tracking-tight text-[#111827] sm:text-[22px]">
                 {comp.name}
               </h1>
               {comp.organization && (
-                <p style={{ fontSize: 14, color: "#6B7280" }}>{comp.organization}</p>
+                <p className="mt-1 text-[13px] text-[#6B7280]">{comp.organization}</p>
               )}
 
-              <div
-                className="flex flex-wrap gap-x-5 gap-y-2"
-                style={{ marginTop: 14, fontSize: 13.5, color: "#6B7280" }}
-              >
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4" style={{ color: "#D1D5DB" }} />
-                  {comp.city.name}, {comp.city.state}
-                </span>
-                {studentCompetition.jobRole && (
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-[#6B7280]">
+                {comp.city && (
                   <span className="flex items-center gap-1.5">
-                    <Briefcase className="w-4 h-4" style={{ color: "#D1D5DB" }} />
-                    {studentCompetition.jobRole.name}
+                    <MapPin className="h-3.5 w-3.5 text-[#D1D5DB]" />
+                    {comp.city.name}{comp.city.state ? `, ${comp.city.state}` : ""}
+                  </span>
+                )}
+                {enrollment.jobRole && (
+                  <span className="flex items-center gap-1.5">
+                    <Briefcase className="h-3.5 w-3.5 text-[#D1D5DB]" />
+                    {enrollment.jobRole.name}
                   </span>
                 )}
                 {comp.examBoard && (
                   <span className="flex items-center gap-1.5">
-                    <Building2 className="w-4 h-4" style={{ color: "#D1D5DB" }} />
+                    <Building2 className="h-3.5 w-3.5 text-[#D1D5DB]" />
                     {comp.examBoard.name}
                   </span>
                 )}
                 {comp.examDate && (
                   <span className="flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4" style={{ color: "#D1D5DB" }} />
+                    <Calendar className="h-3.5 w-3.5 text-[#D1D5DB]" />
                     {formatDate(comp.examDate)}
                   </span>
                 )}
               </div>
+
+              {/* Stats rápidos */}
+              <div className="mt-4 flex flex-wrap gap-3">
+                <span className="rounded-lg bg-violet-50 px-3 py-1.5 text-[12px] font-semibold text-violet-700">
+                  {displaySubjects.length} matéria{displaySubjects.length !== 1 ? "s" : ""}
+                </span>
+                <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700">
+                  {questionsAvailable} questão{questionsAvailable !== 1 ? "ões" : ""} disponível{questionsAvailable !== 1 ? "is" : ""}
+                </span>
+              </div>
             </div>
 
-            {daysLeft !== null && comp.examDate && (
-              <div
-                className="hidden md:flex flex-col items-center"
-                style={{
-                  background: "linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)",
-                  borderRadius: 16,
-                  padding: "18px 22px",
-                  color: "#fff",
-                  minWidth: 130,
-                  boxShadow: "0 4px 16px rgba(124,58,237,0.25)",
-                }}
-              >
-                <Clock className="w-5 h-5" style={{ color: "rgba(255,255,255,0.6)", marginBottom: 6 }} />
-                <p style={{ fontSize: 40, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.04em" }}>
-                  {daysLeft}
-                </p>
-                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", marginTop: 4 }}>
+            {daysLeft !== null && (
+              <div className="hidden shrink-0 flex-col items-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 p-4 text-white shadow-md md:flex">
+                <Clock className="mb-1.5 h-4 w-4 opacity-60" />
+                <p className="text-[36px] font-extrabold leading-none tracking-tight">{daysLeft}</p>
+                <p className="mt-1 text-[10px] font-medium opacity-70">
                   {daysLeft === 1 ? "dia restante" : "dias restantes"}
                 </p>
               </div>
@@ -214,24 +176,13 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
           </div>
 
           {totalAnswered > 0 && (
-            <div
-              style={{
-                marginTop: 20,
-                padding: "14px 16px",
-                background: "#F8F7FF",
-                borderRadius: 12,
-                border: "1px solid #EDE9FE",
-              }}
-            >
-              <div
-                className="flex items-center justify-between"
-                style={{ fontSize: 13, marginBottom: 8 }}
-              >
-                <span style={{ fontWeight: 600, color: "#374151" }}>Desempenho geral</span>
-                <span style={{ fontWeight: 800, color: "#7C3AED" }}>{overallAccuracy}%</span>
+            <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
+              <div className="mb-1.5 flex items-center justify-between text-[13px]">
+                <span className="font-semibold text-[#374151]">Desempenho geral</span>
+                <span className="font-extrabold text-violet-700">{overallAccuracy}%</span>
               </div>
-              <Progress value={overallAccuracy} className="h-2" />
-              <p style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 6 }}>
+              <Progress value={overallAccuracy} className="h-1.5" />
+              <p className="mt-1.5 text-[11px] text-[#9CA3AF]">
                 {totalAnswered} questões respondidas · {totalCorrect} acertos
               </p>
             </div>
@@ -239,168 +190,72 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
         </div>
       </div>
 
+      {/* Edital */}
       {comp.editalUrl && (
-        <div className="card" style={{ padding: "14px 16px", marginBottom: 16 }}>
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p style={{ fontSize: 12, fontWeight: 800, color: "#111827", letterSpacing: "-0.01em" }}>
-                Edital oficial
-              </p>
-              <p style={{ fontSize: 12.5, color: "#6B7280", marginTop: 2 }}>
-                Acesse o PDF do edital vinculado a este concurso.
-              </p>
-            </div>
-            <a
-              href={comp.editalUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-purple"
-              style={{ padding: "8px 12px", fontSize: 12.5 }}
-            >
-              <Download className="h-4 w-4" />
-              Abrir edital
-            </a>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-black/[0.06] bg-white px-4 py-3">
+          <div>
+            <p className="text-[13px] font-semibold text-[#111827]">Edital oficial</p>
+            <p className="text-[12px] text-[#6B7280]">Acesse o PDF do edital deste concurso</p>
           </div>
+          <a
+            href={comp.editalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-violet-700"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Abrir
+          </a>
         </div>
       )}
 
-      {/* Abas de navegação */}
-      <div
-        className="flex items-center gap-1 overflow-x-auto"
-        style={{
-          background: "#FFFFFF",
-          borderRadius: 14,
-          border: "1px solid #E5E7EB",
-          padding: 5,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-          marginBottom: 24,
-        }}
-      >
-        {tabs.map((tab) => {
-          const href = `/concursos/${id}${tab.href}`;
-
-          return (
-            <Link
-              key={tab.label}
-              href={href}
-              className="flex items-center gap-2 whitespace-nowrap"
-              style={{
-                padding: "8px 16px",
-                borderRadius: 10,
-                fontSize: 13,
-                fontWeight: 500,
-                color: "#6B7280",
-                textDecoration: "none",
-                transition: "all 0.15s",
-              }}
-            >
-              <tab.icon style={{ width: 14, height: 14 }} />
-              {tab.label}
-            </Link>
-          );
-        })}
+      {/* Abas */}
+      <div className="flex gap-1 overflow-x-auto rounded-xl border border-black/[0.06] bg-white p-1 shadow-sm">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.label}
+            href={`/concursos/${id}${tab.href}`}
+            className={cn(
+              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]",
+            )}
+          >
+            <tab.icon className="h-3.5 w-3.5" />
+            {tab.label}
+          </Link>
+        ))}
       </div>
 
-      {/* Conteúdo principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Grade: ações + matérias */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Ações */}
         <div className="lg:col-span-1">
-          <h2
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#111827",
-              letterSpacing: "-0.02em",
-              marginBottom: 12,
-            }}
-          >
-            Estudar agora
-          </h2>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.06em] text-[#9CA3AF]">Estudar agora</p>
+          <div className="flex flex-col gap-2">
             {[
-              {
-                icon: Play,
-                label: "Iniciar Treino",
-                desc: "Questões aleatórias por matéria",
-                href: `/concursos/${id}/treino`,
-                primary: true,
-              },
-              {
-                icon: Target,
-                label: "Novo Simulado",
-                desc: "Teste cronometrado completo",
-                href: `/concursos/${id}/simulado`,
-                primary: false,
-              },
-              {
-                icon: Download,
-                label: "Baixar Apostila",
-                desc: "PDF gerado automaticamente",
-                href: `/concursos/${id}/apostilas`,
-                primary: false,
-              },
-              {
-                icon: History,
-                label: "Revisar erros",
-                desc: "Explicação e resposta correta",
-                href: "/revisar-erros",
-                primary: false,
-              },
+              { icon: Play, label: "Iniciar Treino", desc: "Questões das suas matérias", href: `/concursos/${id}/treino`, primary: true },
+              { icon: Target, label: "Novo Simulado", desc: "Teste cronometrado", href: `/concursos/${id}/simulado`, primary: false },
+              { icon: Download, label: "Baixar Apostila", desc: "PDF para estudar offline", href: `/concursos/${id}/apostilas`, primary: false },
+              { icon: History, label: "Histórico", desc: "Simulados realizados", href: `/concursos/${id}/historico`, primary: false },
             ].map((action) => (
               <Link
                 key={action.label}
                 href={action.href}
-                className="hover-action flex items-center gap-3"
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  background: action.primary ? "#7C3AED" : "#FFFFFF",
-                  border: action.primary ? "none" : "1px solid #E5E7EB",
-                  textDecoration: "none",
-                  boxShadow: action.primary
-                    ? "0 4px 14px rgba(124,58,237,0.25)"
-                    : "0 1px 2px rgba(0,0,0,0.04)",
-                }}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3.5 py-3 text-[13px] font-medium transition-shadow",
+                  action.primary
+                    ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
+                    : "border border-black/[0.07] bg-white text-[#374151] hover:shadow-sm",
+                )}
               >
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 9,
-                    background: action.primary ? "rgba(255,255,255,0.15)" : "#F3F2FB",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <action.icon
-                    style={{
-                      width: 14,
-                      height: 14,
-                      color: action.primary ? "#fff" : "#7C3AED",
-                    }}
-                  />
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  action.primary ? "bg-white/15" : "bg-violet-50",
+                )}>
+                  <action.icon className={cn("h-3.5 w-3.5", action.primary ? "text-white" : "text-violet-600")} />
                 </div>
                 <div>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: action.primary ? "#fff" : "#111827",
-                      lineHeight: 1,
-                    }}
-                  >
-                    {action.label}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 11.5,
-                      color: action.primary ? "rgba(255,255,255,0.65)" : "#9CA3AF",
-                      marginTop: 2,
-                    }}
-                  >
+                  <p className="font-semibold leading-none">{action.label}</p>
+                  <p className={cn("mt-0.5 text-[11.5px]", action.primary ? "opacity-70" : "text-[#9CA3AF]")}>
                     {action.desc}
                   </p>
                 </div>
@@ -411,103 +266,59 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
 
         {/* Matérias */}
         <div className="lg:col-span-2">
-          <h2
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#111827",
-              letterSpacing: "-0.02em",
-              marginBottom: 12,
-            }}
-          >
-            Matérias — Desempenho
-          </h2>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {comp.subjects.length === 0 ? (
-              <div
-                style={{
-                  background: "#FFFFFF",
-                  border: "1px solid #E5E7EB",
-                  borderRadius: 16,
-                  padding: "32px 24px",
-                  textAlign: "center",
-                }}
-              >
-                <BookOpen style={{ width: 28, height: 28, color: "#D1D5DB", margin: "0 auto 8px" }} />
-                <p style={{ fontSize: 13.5, color: "#9CA3AF" }}>
-                  Nenhuma matéria cadastrada
-                </p>
-              </div>
-            ) : (
-              comp.subjects.map((cs, idx) => {
-                const stats = subjectStats[idx];
-                const accuracy = stats?.accuracy ?? 0;
-
-                return (
-                  <Link
-                    key={cs.subjectId}
-                    href={`/concursos/${id}/materias/${cs.subjectId}`}
-                    className="card card-interactive flex items-center gap-4"
-                    style={{ padding: "14px 18px", textDecoration: "none" }}
-                  >
-                    <div
-                      style={{
-                        width: 4,
-                        height: 40,
-                        borderRadius: 4,
-                        flexShrink: 0,
-                        background: cs.subject.color ?? "linear-gradient(180deg, #7C3AED, #A855F7)",
-                      }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p
-                        style={{
-                          fontSize: 13.5,
-                          fontWeight: 600,
-                          color: "#111827",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {cs.subject.name}
-                      </p>
-                      <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
-                        <Progress value={accuracy} className="flex-1 h-[5px]" />
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: "#374151",
-                            width: 32,
-                            textAlign: "right",
-                          }}
-                        >
-                          {accuracy}%
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 3 }}>
-                        {stats?.total ?? 0} respondidas
-                      </p>
-                    </div>
-                    <ArrowRight style={{ width: 14, height: 14, color: "#D1D5DB", flexShrink: 0 }} />
-                  </Link>
-                );
-              })
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#9CA3AF]">
+              Matérias {enrollment.jobRole ? `— ${enrollment.jobRole.name}` : ""}
+            </p>
+            {displaySubjects.length > 0 && (
+              <Link href={`/concursos/${id}/materias`} className="text-[12px] font-semibold text-violet-600 hover:text-violet-800">
+                Ver todas →
+              </Link>
             )}
           </div>
 
-          {comp.subjects.length > 6 && (
-            <div style={{ marginTop: 12, textAlign: "center" }}>
-              <Link
-                href={`/concursos/${id}/materias`}
-                className="flex items-center justify-center gap-1"
-                style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none" }}
-              >
-                Ver todas as {comp.subjects.length} matérias
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+          {displaySubjects.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-black/[0.08] bg-white px-6 py-10 text-center">
+              <BookOpen className="mx-auto mb-2 h-7 w-7 text-[#D1D5DB]" strokeWidth={1.5} />
+              <p className="text-[13.5px] font-semibold text-[#374151]">Nenhuma matéria disponível</p>
+              <p className="mt-1 text-[12px] text-[#9CA3AF]">
+                {enrollment.jobRole
+                  ? "O administrador ainda não vinculou matérias ao seu cargo."
+                  : "O administrador ainda não adicionou matérias a este concurso."}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {subjectStats.map(({ subject, total, accuracy }) => (
+                <Link
+                  key={subject.id}
+                  href={`/concursos/${id}/treino?subject=${subject.id}`}
+                  className="flex items-center gap-3.5 rounded-xl border border-black/[0.06] bg-white px-4 py-3.5 transition-shadow hover:shadow-sm"
+                >
+                  <div
+                    className="h-8 w-1 shrink-0 rounded-full"
+                    style={{ background: subject.color ?? "linear-gradient(180deg, #7C3AED, #A855F7)" }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13.5px] font-semibold text-[#111827]">{subject.name}</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <Progress value={accuracy} className="h-[4px] flex-1" />
+                      <span className="w-8 text-right text-[11.5px] font-bold text-[#374151]">{accuracy}%</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-[#9CA3AF]">{total} respondida{total !== 1 ? "s" : ""}</p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                </Link>
+              ))}
+
+              {displaySubjects.length > 6 && (
+                <Link
+                  href={`/concursos/${id}/materias`}
+                  className="rounded-xl border border-dashed border-violet-200 py-3 text-center text-[13px] font-semibold text-violet-600 hover:bg-violet-50"
+                >
+                  Ver todas as {displaySubjects.length} matérias →
+                </Link>
+              )}
             </div>
           )}
         </div>

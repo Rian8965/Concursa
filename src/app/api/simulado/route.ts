@@ -20,9 +20,7 @@ export async function POST(req: NextRequest) {
   let allowedSubjectIds: string[] | null = null;
   if (competitionId) {
     const enrollment = await prisma.studentCompetition.findUnique({
-      where: {
-        studentProfileId_competitionId: { studentProfileId: profile.id, competitionId },
-      },
+      where: { studentProfileId_competitionId: { studentProfileId: profile.id, competitionId } },
       select: { jobRoleId: true },
     });
     if (enrollment?.jobRoleId) {
@@ -31,25 +29,38 @@ export async function POST(req: NextRequest) {
         select: { subjectId: true },
       });
       allowedSubjectIds = links.map((l) => l.subjectId);
+    } else {
+      // Sem cargo específico: todas as matérias do concurso
+      const links = await prisma.competitionSubject.findMany({
+        where: { competitionId },
+        select: { subjectId: true },
+      });
+      if (links.length > 0) allowedSubjectIds = links.map((l) => l.subjectId);
     }
   }
 
-  const effectiveSubjectIds = subjectIds?.length
+  const effectiveSubjectIds: string[] | undefined = subjectIds?.length
     ? allowedSubjectIds
       ? subjectIds.filter((id) => allowedSubjectIds!.includes(id))
       : subjectIds
     : allowedSubjectIds ?? undefined;
 
+  // CORREÇÃO CRÍTICA: filtrar por matéria quando disponível, sem exigir competitionId nas questões
   const where: Record<string, unknown> = {
     status: "ACTIVE",
     alternatives: { some: {} },
-    ...(competitionId && { competitionId }),
-    ...(effectiveSubjectIds?.length && { subjectId: { in: effectiveSubjectIds } }),
+    ...(effectiveSubjectIds?.length
+      ? { subjectId: { in: effectiveSubjectIds } }
+      : competitionId
+      ? { competitionId }
+      : {}),
   };
 
   const total = await prisma.question.count({ where });
   if (total === 0) {
-    return NextResponse.json({ error: "Nenhuma questão disponível." }, { status: 400 });
+    return NextResponse.json({
+      error: "Nenhuma questão disponível para este concurso/cargo. Verifique se há questões cadastradas nas matérias.",
+    }, { status: 400 });
   }
 
   const skip = Math.max(0, Math.floor(Math.random() * Math.max(1, total - quantity)));
@@ -62,7 +73,6 @@ export async function POST(req: NextRequest) {
 
   const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, quantity);
 
-  // timeLimitMinutes === 0 significa modo livre (sem limite)
   const isFreeMode = !timeLimitMinutes || timeLimitMinutes <= 0;
   const timeAllowedSeconds = isFreeMode ? null : timeLimitMinutes * 60;
 

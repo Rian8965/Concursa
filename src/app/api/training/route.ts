@@ -20,9 +20,7 @@ export async function POST(req: NextRequest) {
   let allowedSubjectIds: string[] | null = null;
   if (competitionId) {
     const enrollment = await prisma.studentCompetition.findUnique({
-      where: {
-        studentProfileId_competitionId: { studentProfileId: profile.id, competitionId },
-      },
+      where: { studentProfileId_competitionId: { studentProfileId: profile.id, competitionId } },
       select: { jobRoleId: true },
     });
     if (enrollment?.jobRoleId) {
@@ -31,27 +29,42 @@ export async function POST(req: NextRequest) {
         select: { subjectId: true },
       });
       allowedSubjectIds = links.map((l) => l.subjectId);
+    } else if (competitionId) {
+      // Sem cargo específico: usa todas as matérias do concurso
+      const links = await prisma.competitionSubject.findMany({
+        where: { competitionId },
+        select: { subjectId: true },
+      });
+      if (links.length > 0) allowedSubjectIds = links.map((l) => l.subjectId);
     }
   }
 
-  // Se o aluno selecionou matérias, intersectar com as permitidas
-  const effectiveSubjectIds = subjectIds?.length
+  // Intersecta matérias solicitadas pelo aluno com as permitidas
+  const effectiveSubjectIds: string[] | undefined = subjectIds?.length
     ? allowedSubjectIds
       ? subjectIds.filter((id) => allowedSubjectIds!.includes(id))
       : subjectIds
     : allowedSubjectIds ?? undefined;
 
+  // CORREÇÃO CRÍTICA: quando temos matérias específicas (por cargo ou concurso),
+  // filtramos apenas por subjectId — NÃO exigimos competitionId nas questões.
+  // Isso evita questões invisíveis quando não têm competitionId preenchido.
   const where: Record<string, unknown> = {
     status: "ACTIVE",
     alternatives: { some: {} },
-    ...(competitionId && { competitionId }),
-    ...(effectiveSubjectIds?.length && { subjectId: { in: effectiveSubjectIds } }),
+    ...(effectiveSubjectIds?.length
+      ? { subjectId: { in: effectiveSubjectIds } }
+      : competitionId
+      ? { competitionId }
+      : {}),
     ...(difficulty && difficulty !== "ALL" && { difficulty }),
   };
 
   const total = await prisma.question.count({ where });
   if (total === 0) {
-    return NextResponse.json({ error: "Nenhuma questão disponível com os filtros selecionados." }, { status: 400 });
+    return NextResponse.json({
+      error: "Nenhuma questão disponível com os filtros selecionados. Verifique se há questões cadastradas para as matérias deste concurso/cargo.",
+    }, { status: 400 });
   }
 
   const skip = Math.max(0, Math.floor(Math.random() * Math.max(1, total - quantity)));

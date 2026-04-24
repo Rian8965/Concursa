@@ -13,25 +13,6 @@ export default function StudentError({
 }) {
   useEffect(() => {
     console.error("[student-area] page error:", error?.message, error?.digest);
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        location: "src/app/(student)/error.tsx",
-        message: "Student area error boundary caught error",
-        data: {
-          name: error?.name,
-          message: error?.message,
-          digest: (error as { digest?: string })?.digest,
-          stackTop: (error?.stack ?? "").split("\n").slice(0, 6).join("\n"),
-        },
-        hypothesisId: "H1",
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
   }, [error]);
 
   return (

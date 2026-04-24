@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Search, Users, UserPlus, ShieldCheck, ShieldX } from "lucide-react";
+import { Search, Users, UserPlus, ShieldCheck, ShieldX, Plus, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
 
@@ -20,13 +20,23 @@ interface Student {
   } | null;
 }
 
+interface Competition {
+  id: string;
+  name: string;
+}
+
+interface JobRole {
+  id: string;
+  name: string;
+}
+
 export default function AdminAlunosPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Student | null>(null);
-  const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(async (q = "") => {
@@ -40,12 +50,13 @@ export default function AdminAlunosPage() {
 
   useEffect(() => {
     load();
-    Promise.all([fetch("/api/admin/competitions?limit=100").then((r) => r.json()), fetch("/api/admin/plans").then((r) => r.json())]).then(
-      ([cd, pd]) => {
-        setCompetitions(cd.competitions ?? []);
-        setPlans(pd.plans ?? []);
-      },
-    );
+    Promise.all([
+      fetch("/api/admin/competitions?limit=100").then((r) => r.json()),
+      fetch("/api/admin/plans").then((r) => r.json()),
+    ]).then(([cd, pd]) => {
+      setCompetitions(cd.competitions ?? []);
+      setPlans(pd.plans ?? []);
+    });
   }, [load]);
 
   async function toggleActive(id: string, isActive: boolean) {
@@ -62,11 +73,15 @@ export default function AdminAlunosPage() {
 
   return (
     <div className="orbit-stack mx-auto w-full max-w-5xl animate-fade-up">
-      <PageHeader eyebrow="Alunos" title="Alunos" description={`${total} aluno${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}>
+      <PageHeader
+        eyebrow="Alunos"
+        title="Alunos"
+        description={`${total} aluno${total !== 1 ? "s" : ""} cadastrado${total !== 1 ? "s" : ""}`}
+      >
         <button
           type="button"
           onClick={() => setSelected({ id: "__new__", name: "", email: "", isActive: true, createdAt: "" })}
-          className="btn btn-primary inline-flex items-center gap-2 rounded-2xl"
+          className="btn btn-primary inline-flex items-center gap-2 rounded-xl"
         >
           <UserPlus className="h-3.5 w-3.5" strokeWidth={2} />
           Novo aluno
@@ -85,9 +100,7 @@ export default function AdminAlunosPage() {
       </div>
 
       {loading ? (
-        <div className="py-14 text-center">
-          <div className="orbit-spinner" />
-        </div>
+        <div className="py-14 text-center"><div className="orbit-spinner" /></div>
       ) : students.length === 0 ? (
         <div className="orbit-empty-state">
           <Users className="mx-auto mb-4 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.5} />
@@ -98,11 +111,11 @@ export default function AdminAlunosPage() {
           <div className="orbit-table-wrap">
             <table className="orbit-admin-table">
               <colgroup>
-                <col className="min-w-[200px] w-[28%]" />
+                <col className="min-w-[200px] w-[30%]" />
                 <col className="min-w-[140px] w-[22%]" />
                 <col className="min-w-[88px] w-[10%]" />
                 <col className="min-w-[120px] w-[14%]" />
-                <col className="min-w-[100px] w-[12%]" />
+                <col className="min-w-[100px] w-[10%]" />
                 <col className="min-w-[140px] w-[14%]" />
               </colgroup>
               <thead>
@@ -110,11 +123,7 @@ export default function AdminAlunosPage() {
                   {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
                     <th
                       key={h}
-                      className={
-                        h === "Questões" || h === "Cadastro" || h === "Ações"
-                          ? "text-right"
-                          : "text-left"
-                      }
+                      className={h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"}
                     >
                       {h}
                     </th>
@@ -140,11 +149,7 @@ export default function AdminAlunosPage() {
                       {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
                     </td>
                     <td>
-                      <span
-                        className={
-                          s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"
-                        }
-                      >
+                      <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
                         {s.isActive ? "Ativo" : "Inativo"}
                       </span>
                     </td>
@@ -153,7 +158,7 @@ export default function AdminAlunosPage() {
                         <button
                           type="button"
                           onClick={() => setSelected(s)}
-                          className="btn btn-ghost inline-flex min-h-[40px] min-w-[6.5rem] items-center justify-center rounded-xl px-4 text-xs font-semibold"
+                          className="btn btn-ghost inline-flex min-h-[38px] min-w-[6rem] items-center justify-center rounded-lg px-3 text-xs font-semibold"
                         >
                           Gerenciar
                         </button>
@@ -162,7 +167,9 @@ export default function AdminAlunosPage() {
                           onClick={() => toggleActive(s.id, s.isActive)}
                           className={cn(
                             "orbit-icon-btn",
-                            s.isActive ? "orbit-icon-btn--danger" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                            s.isActive
+                              ? "orbit-icon-btn--danger"
+                              : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
                           )}
                           title={s.isActive ? "Desativar" : "Ativar"}
                         >
@@ -184,19 +191,26 @@ export default function AdminAlunosPage() {
           competitions={competitions}
           plans={plans}
           onClose={() => setSelected(null)}
-          onSaved={() => {
-            setSelected(null);
-            load(search);
-          }}
+          onSaved={() => { setSelected(null); load(search); }}
         />
       )}
     </div>
   );
 }
 
+// ─── Modal ───────────────────────────────────────────────────────────────────
+
+interface CompetitionEntry {
+  competitionId: string;
+  jobRoleId: string;
+  /** job roles carregados para este concurso */
+  jobRoles: JobRole[];
+  loadingRoles: boolean;
+}
+
 interface ModalProps {
   student: Student;
-  competitions: { id: string; name: string }[];
+  competitions: Competition[];
   plans: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
@@ -213,41 +227,106 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
     accessExpiresAt: student.studentProfile?.accessExpiresAt
       ? new Date(student.studentProfile.accessExpiresAt).toISOString().slice(0, 10)
       : "",
-    competitionIds: [] as string[],
   });
+  const [entries, setEntries] = useState<CompetitionEntry[]>([]);
+
+  // Carrega dados existentes ao editar
   useEffect(() => {
     if (!isNew) {
       fetch(`/api/admin/students/${student.id}`)
         .then((r) => r.json())
-        .then(({ user }) => {
+        .then(async ({ user }) => {
           setForm((f) => ({
             ...f,
             planId: user.studentProfile?.planId ?? "",
-            competitionIds: user.studentProfile?.studentCompetitions?.map((sc: { competitionId: string }) => sc.competitionId) ?? [],
+            accessExpiresAt: user.studentProfile?.accessExpiresAt
+              ? new Date(user.studentProfile.accessExpiresAt).toISOString().slice(0, 10)
+              : "",
           }));
+          const scs: { competition: { id: string; name: string }; jobRole?: { id: string; name: string } | null }[] =
+            user.studentProfile?.studentCompetitions ?? [];
+          const loaded: CompetitionEntry[] = await Promise.all(
+            scs.map(async (sc) => {
+              const roles = await fetchJobRoles(sc.competition.id);
+              return {
+                competitionId: sc.competition.id,
+                jobRoleId: sc.jobRole?.id ?? "",
+                jobRoles: roles,
+                loadingRoles: false,
+              };
+            }),
+          );
+          setEntries(loaded);
         });
     }
   }, [student.id, isNew]);
 
+  async function fetchJobRoles(competitionId: string): Promise<JobRole[]> {
+    try {
+      const res = await fetch(`/api/admin/competitions/${competitionId}`);
+      const data = await res.json();
+      return (data.competition?.jobRolesWithSubjects ?? []).map((jr: { jobRoleId: string; name: string }) => ({
+        id: jr.jobRoleId,
+        name: jr.name,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async function addEntry() {
+    setEntries((prev) => [...prev, { competitionId: "", jobRoleId: "", jobRoles: [], loadingRoles: false }]);
+  }
+
+  function removeEntry(idx: number) {
+    setEntries((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function handleCompetitionChange(idx: number, competitionId: string) {
+    setEntries((prev) =>
+      prev.map((e, i) => (i === idx ? { ...e, competitionId, jobRoleId: "", jobRoles: [], loadingRoles: true } : e)),
+    );
+    if (!competitionId) {
+      setEntries((prev) =>
+        prev.map((e, i) => (i === idx ? { ...e, loadingRoles: false, jobRoles: [] } : e)),
+      );
+      return;
+    }
+    const roles = await fetchJobRoles(competitionId);
+    setEntries((prev) =>
+      prev.map((e, i) => (i === idx ? { ...e, jobRoles: roles, loadingRoles: false } : e)),
+    );
+  }
+
+  function handleJobRoleChange(idx: number, jobRoleId: string) {
+    setEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, jobRoleId } : e)));
+  }
+
   async function save() {
     setSaving(true);
+    const validEntries = entries.filter((e) => e.competitionId);
+    const competitionsPayload = validEntries.map((e) => ({
+      competitionId: e.competitionId,
+      jobRoleId: e.jobRoleId || null,
+    }));
+
     if (isNew) {
-      if (!form.name || !form.email || !form.password) {
-        toast.error("Preencha nome, email e senha");
+      if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
+        toast.error("Preencha nome, e-mail e senha");
         setSaving(false);
         return;
       }
       const res = await fetch("/api/admin/students", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, competitions: competitionsPayload }),
       });
       if (res.ok) {
-        toast.success("Aluno criado!");
+        toast.success("Aluno criado com sucesso!");
         onSaved();
       } else {
         const d = await res.json();
-        toast.error(d.error ?? "Erro");
+        toast.error(d.error ?? "Erro ao criar aluno");
       }
     } else {
       const res = await fetch(`/api/admin/students/${student.id}`, {
@@ -259,7 +338,7 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
           password: form.password || null,
           planId: form.planId,
           accessExpiresAt: form.accessExpiresAt || null,
-          competitionIds: form.competitionIds,
+          competitions: competitionsPayload,
         }),
       });
       if (res.ok) {
@@ -271,7 +350,10 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
   }
 
   return (
-    <div className="orbit-modal-backdrop z-[100]" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="orbit-modal-backdrop z-[100]"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -279,6 +361,7 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
         className="orbit-modal-panel orbit-modal-panel--sm orbit-modal-panel--flex"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Cabeçalho */}
         <div className="orbit-modal-panel__head">
           <div className="flex items-center justify-between gap-3">
             <h2 id="student-modal-title" className="min-w-0 text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
@@ -290,89 +373,154 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
           </div>
         </div>
 
+        {/* Corpo */}
         <div className="orbit-modal-panel__body">
           <div className="orbit-form-stack">
-          <div>
-            <label className="orbit-form-label">Nome *</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome completo" />
-          </div>
-          <div>
-            <label className="orbit-form-label">Email *</label>
-            <input
-              className="input"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="email@exemplo.com"
-            />
-          </div>
-          <div>
-            <label className="orbit-form-label">{isNew ? "Senha *" : "Nova senha (opcional)"}</label>
-            <input
-              className="input"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={isNew ? "Mínimo 8 caracteres" : "Deixe em branco para manter"}
-            />
-          </div>
+            {/* Dados pessoais */}
+            <fieldset className="space-y-3">
+              <legend className="text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--text-muted)]">
+                Dados pessoais
+              </legend>
+              <div>
+                <label className="orbit-form-label">Nome *</label>
+                <input
+                  className="input"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <label className="orbit-form-label">E-mail *</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div>
+                <label className="orbit-form-label">{isNew ? "Senha *" : "Nova senha (deixe em branco para manter)"}</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  placeholder={isNew ? "Mínimo 6 caracteres" : "Deixe em branco para manter"}
+                />
+              </div>
+            </fieldset>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="orbit-form-label">Plano</label>
-              <select className="input" value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value })}>
-                <option value="">Sem plano</option>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="orbit-form-label">Acesso até</label>
-              <input type="date" className="input" value={form.accessExpiresAt} onChange={(e) => setForm({ ...form, accessExpiresAt: e.target.value })} />
-            </div>
-          </div>
-
-          <div>
-            <label className="orbit-form-label">Concursos vinculados</label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {competitions.map((c) => {
-                const on = form.competitionIds.includes(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() =>
-                      setForm((f) => ({
-                        ...f,
-                        competitionIds: f.competitionIds.includes(c.id) ? f.competitionIds.filter((x) => x !== c.id) : [...f.competitionIds, c.id],
-                      }))
-                    }
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors",
-                      on
-                        ? "border-violet-500 bg-violet-50 text-violet-800 ring-2 ring-violet-200"
-                        : "border-black/[0.08] bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:border-violet-300",
-                    )}
+            {/* Plano e acesso */}
+            <fieldset className="space-y-3">
+              <legend className="text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--text-muted)]">
+                Plano e acesso
+              </legend>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="orbit-form-label">Plano</label>
+                  <select
+                    className="input"
+                    value={form.planId}
+                    onChange={(e) => setForm({ ...form, planId: e.target.value })}
                   >
-                    {c.name}
-                  </button>
-                );
-              })}
-              {competitions.length === 0 && <p className="text-xs text-[var(--text-muted)]">Nenhum concurso disponível</p>}
-            </div>
-          </div>
+                    <option value="">Sem plano</option>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="orbit-form-label">Acesso até</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={form.accessExpiresAt}
+                    onChange={(e) => setForm({ ...form, accessExpiresAt: e.target.value })}
+                  />
+                </div>
+              </div>
+            </fieldset>
+
+            {/* Concurso e cargo */}
+            <fieldset className="space-y-3">
+              <div className="flex items-center justify-between">
+                <legend className="text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--text-muted)]">
+                  Concurso e cargo
+                </legend>
+                <button
+                  type="button"
+                  onClick={addEntry}
+                  className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100"
+                >
+                  <Plus className="h-3 w-3" />
+                  Adicionar
+                </button>
+              </div>
+
+              {entries.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-black/[0.08] bg-[var(--bg-muted)] px-4 py-3 text-center text-[12px] text-[var(--text-muted)]">
+                  Nenhum concurso vinculado. Clique em &quot;Adicionar&quot; para vincular.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {entries.map((entry, idx) => (
+                    <div key={idx} className="rounded-lg border border-black/[0.08] bg-[var(--bg-muted)] p-3">
+                      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold text-[var(--text-secondary)]">Concurso</label>
+                          <select
+                            className="input text-sm"
+                            value={entry.competitionId}
+                            onChange={(e) => handleCompetitionChange(idx, e.target.value)}
+                          >
+                            <option value="">Selecione…</option>
+                            {competitions.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold text-[var(--text-secondary)]">Cargo</label>
+                          <select
+                            className="input text-sm"
+                            value={entry.jobRoleId}
+                            onChange={(e) => handleJobRoleChange(idx, e.target.value)}
+                            disabled={!entry.competitionId || entry.loadingRoles}
+                          >
+                            <option value="">
+                              {entry.loadingRoles ? "Carregando…" : entry.jobRoles.length === 0 && entry.competitionId ? "Sem cargos" : "Selecione…"}
+                            </option>
+                            {entry.jobRoles.map((jr) => (
+                              <option key={jr.id} value={jr.id}>{jr.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeEntry(idx)}
+                          className="mb-[1px] flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-500 hover:bg-red-100"
+                          title="Remover"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </fieldset>
           </div>
         </div>
 
+        {/* Rodapé */}
         <div className="orbit-modal-panel__foot">
-          <button type="button" onClick={onClose} className="btn btn-ghost rounded-2xl">
+          <button type="button" onClick={onClose} className="btn btn-ghost rounded-xl">
             Cancelar
           </button>
-          <button type="button" onClick={save} disabled={saving} className="btn btn-primary min-w-[110px] rounded-2xl">
-            {saving ? "Salvando..." : "Salvar"}
+          <button type="button" onClick={save} disabled={saving} className="btn btn-primary min-w-[110px] rounded-xl">
+            {saving ? "Salvando…" : "Salvar"}
           </button>
         </div>
       </div>

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 
-export default function Error({
+export default function DashboardError({
   error,
   reset,
 }: {
@@ -10,61 +12,35 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "pre-fix",
-        hypothesisId: "H2",
-        location: "src/app/(student)/dashboard/error.tsx:1",
-        message: "Student dashboard error boundary caught error",
-        data: {
-          name: error?.name,
-          message: error?.message,
-          digest: (error as any)?.digest,
-          stackTop: (error?.stack ?? "").split("\n").slice(0, 6).join("\n"),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    console.error("[dashboard] error:", error?.message, error?.digest);
   }, [error]);
 
   return (
-    <div className="mx-auto w-full max-w-[960px] px-6 py-16">
-      <div className="rounded-[20px] border border-black/[0.08] bg-white p-6 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_18px_50px_rgba(17,24,39,0.06)]">
-        <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#9CA3AF]">
-          Erro ao carregar
-        </p>
-        <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-[#111827]">
-          Seu dashboard não pôde ser carregado
+    <div className="mx-auto w-full max-w-[640px] px-6 py-16">
+      <div className="rounded-xl border border-black/[0.08] bg-white p-7 shadow-sm">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50">
+          <AlertTriangle className="h-5 w-5 text-red-500" />
+        </div>
+        <p className="text-[12px] font-extrabold uppercase tracking-[0.1em] text-[#9CA3AF]">Erro ao carregar</p>
+        <h1 className="mt-1 text-[19px] font-extrabold tracking-tight text-[#111827]">
+          Dashboard não pôde ser carregado
         </h1>
-        <p className="mt-2 text-[14px] text-[#6B7280]">
-          Tente recarregar. Se persistir, o erro já foi registrado para diagnóstico.
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B7280]">
+          Ocorreu um erro inesperado. Tente recarregar a página.
         </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button className="btn btn-primary" onClick={() => reset()}>
+        <div className="mt-5 flex gap-3">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700"
+            onClick={() => reset()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
             Recarregar
           </button>
-          <a className="btn btn-ghost" href="/concursos">
-            Ir para Concursos
-          </a>
-        </div>
-
-        <div className="mt-6 rounded-[14px] border border-black/[0.06] bg-[#FBFAFF] p-4">
-          <p className="text-[12px] font-semibold text-[#111827]">Detalhes (debug)</p>
-          <p className="mt-1 text-[12px] text-[#6B7280]">
-            {error?.message || "Sem mensagem"}{" "}
-            {(error as any)?.digest ? (
-              <span className="text-[#9CA3AF]">(digest: {(error as any).digest})</span>
-            ) : null}
-          </p>
+          <Link href="/concursos" className="inline-flex items-center rounded-lg border border-gray-200 px-4 py-2.5 text-[13px] font-semibold text-gray-600 hover:bg-gray-50">
+            Meus Concursos
+          </Link>
         </div>
       </div>
     </div>
   );
 }
-

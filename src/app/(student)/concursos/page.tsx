@@ -3,194 +3,170 @@ import { prisma } from "@/lib/db/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
-  Trophy,
-  MapPin,
-  Calendar,
-  Building2,
-  Briefcase,
-  ArrowRight,
-  Clock,
+  Trophy, MapPin, Calendar, Building2, Briefcase, ArrowRight, Clock, BookOpen,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 
 const statusLabels: Record<string, string> = {
-  UPCOMING: "Em breve",
-  ACTIVE: "Ativo",
-  PAST: "Encerrado",
-  CANCELLED: "Cancelado",
+  UPCOMING: "Em breve", ACTIVE: "Ativo", PAST: "Encerrado", CANCELLED: "Cancelado",
 };
-
 const statusVariants: Record<string, "upcoming" | "active" | "past" | "cancelled"> = {
-  UPCOMING: "upcoming",
-  ACTIVE: "active",
-  PAST: "past",
-  CANCELLED: "cancelled",
+  UPCOMING: "upcoming", ACTIVE: "active", PAST: "past", CANCELLED: "cancelled",
 };
 
 export default async function CompetitionsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const profile = await prisma.studentProfile.findUnique({
-    where: { userId: session.user.id },
-  });
-
+  const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) redirect("/dashboard");
 
-  // #region agent log - H1/H4
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let studentCompetitions: any[] = [];
-  try {
-    studentCompetitions = await prisma.studentCompetition.findMany({
-      where: { studentProfileId: profile.id, isActive: true },
-      include: {
-        competition: {
-          include: {
-            city: true,
-            examBoard: true,
-            subjects: { include: { subject: true } },
-          },
-        },
-        jobRole: true,
-      },
-      orderBy: { enrolledAt: "desc" },
-    });
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"concursos/page.tsx:query",message:"query ok",data:{count:studentCompetitions.length},hypothesisId:"H4",timestamp:Date.now()})}).catch(()=>{});
-  } catch (err) {
-    console.error("[concursos] studentCompetition query failed:", err);
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"concursos/page.tsx:query-error",message:"query FAILED",data:{error:String(err)},hypothesisId:"H4",timestamp:Date.now()})}).catch(()=>{});
-    throw err;
-  }
-  // #endregion
+  const studentCompetitions = await prisma.studentCompetition.findMany({
+    where: { studentProfileId: profile.id, isActive: true },
+    include: {
+      competition: { include: { city: true, examBoard: true } },
+      jobRole: { select: { id: true, name: true } },
+    },
+    orderBy: { enrolledAt: "desc" },
+  });
+
+  // Para cada matrícula, busca matérias do cargo (ou do concurso)
+  const enriched = await Promise.all(
+    studentCompetitions.map(async (sc) => {
+      let subjects: { id: string; name: string }[] = [];
+      if (sc.jobRoleId) {
+        const links = await prisma.competitionJobRoleSubject.findMany({
+          where: { competitionId: sc.competitionId, jobRoleId: sc.jobRoleId },
+          include: { subject: { select: { id: true, name: true } } },
+          orderBy: { subject: { name: "asc" } },
+          take: 6,
+        });
+        subjects = links.map((l) => l.subject);
+      } else {
+        const links = await prisma.competitionSubject.findMany({
+          where: { competitionId: sc.competitionId },
+          include: { subject: { select: { id: true, name: true } } },
+          orderBy: { subject: { name: "asc" } },
+          take: 6,
+        });
+        subjects = links.map((l) => l.subject);
+      }
+      return { ...sc, displaySubjects: subjects };
+    }),
+  );
 
   return (
-    <div className="orbit-stack animate-fade-in">
+    <div className="orbit-stack animate-fade-in max-w-4xl">
       <PageHeader
         title="Meus Concursos"
-        description="Todos os concursos vinculados ao seu plano de estudos"
+        description="Concursos e cargos vinculados ao seu perfil"
       />
 
-      {studentCompetitions.length === 0 ? (
-        <div className="orbit-empty-state">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 ring-1 ring-violet-200/60">
-            <Trophy className="h-8 w-8 text-violet-600" strokeWidth={1.75} />
-          </div>
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">Nenhum concurso disponível</h3>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--text-muted)]">
-            Seu plano não possui concursos vinculados ainda. Entre em contato com o administrador.
+      {enriched.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-black/[0.10] bg-white px-8 py-14 text-center">
+          <Trophy className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.25} />
+          <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhum concurso vinculado</p>
+          <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-[var(--text-muted)]">
+            O administrador precisa vincular você a um concurso e cargo para liberar o acesso ao conteúdo.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
-          {studentCompetitions.map((sc) => {
+        <div className="flex flex-col gap-4">
+          {enriched.map((sc) => {
             const comp = sc.competition;
-            const examDateMs = comp.examDate ? new Date(comp.examDate).getTime() : NaN;
-            const daysLeft = !isNaN(examDateMs)
-              ? Math.floor((examDateMs - Date.now()) / (1000 * 60 * 60 * 24))
-              : null;
+            let daysLeft: number | null = null;
+            if (comp.examDate) {
+              try {
+                const d = new Date(comp.examDate);
+                if (!isNaN(d.getTime())) {
+                  const diff = Math.floor((d.getTime() - Date.now()) / 86400000);
+                  if (diff >= 0) daysLeft = diff;
+                }
+              } catch { /* ignorado */ }
+            }
 
             return (
-              <div
-                key={sc.id}
-                className="card card-interactive overflow-hidden"
-              >
-                {/* Linha de cor no topo */}
-                <div
-                  className="h-1"
-                  style={{
-                    background: "linear-gradient(90deg, #EA580C 0%, #FB923C 22%, #7C3AED 72%, #A855F7 100%)",
-                  }}
-                />
+              <div key={sc.id} className="overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-sm">
+                <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
+                <div className="p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      {/* Badges */}
+                      <div className="mb-2.5 flex flex-wrap gap-1.5">
+                        <Badge variant={statusVariants[comp.status] ?? "secondary"}>
+                          {statusLabels[comp.status] ?? comp.status}
+                        </Badge>
+                        {comp.examBoard && <Badge variant="secondary">{comp.examBoard.acronym}</Badge>}
+                        {!comp.examBoardDefined && <Badge variant="warning">Banca não definida</Badge>}
+                      </div>
 
-                <div className="p-7 sm:p-8">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant={statusVariants[comp.status] ?? "secondary"}>
-                        {statusLabels[comp.status]}
-                      </Badge>
-                      {comp.examBoard && (
-                        <Badge variant="secondary">{comp.examBoard.acronym}</Badge>
+                      <h3 className="text-[15px] font-bold leading-snug text-[var(--text-primary)]">{comp.name}</h3>
+                      {comp.organization && (
+                        <p className="mt-0.5 text-[12.5px] text-[var(--text-secondary)]">{comp.organization}</p>
                       )}
-                      {!comp.examBoardDefined && (
-                        <Badge variant="warning">Banca não definida</Badge>
-                      )}
-                    </div>
-                  </div>
 
-                  <h3 className="text-lg font-bold text-gray-900 leading-tight mb-1">
-                    {comp.name}
-                  </h3>
-
-                  {comp.organization && (
-                    <p className="text-sm text-gray-500 mb-3">{comp.organization}</p>
-                  )}
-
-                  <div className="space-y-1.5 mb-5">
-                    {comp.city && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                        {comp.city.name}, {comp.city.state}
-                      </div>
-                    )}
-                    {sc.jobRole && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Briefcase className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                        {sc.jobRole.name}
-                      </div>
-                    )}
-                    {comp.examBoard && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Building2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                        {comp.examBoard.name}
-                      </div>
-                    )}
-                    {comp.examDate && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                        {formatDate(comp.examDate)} —{" "}
-                        {daysLeft !== null && daysLeft > 0 ? (
-                          <span className="font-semibold text-violet-700">
-                            <Clock className="w-3 h-3 inline mr-0.5" />
-                            {formatCountdown(comp.examDate)}
-                          </span>
-                        ) : daysLeft === 0 ? (
-                          <span className="font-semibold text-orange-600">Hoje!</span>
-                        ) : (
-                          <span className="text-gray-400">Prova realizada</span>
+                      {/* Detalhes */}
+                      <div className="mt-2.5 flex flex-col gap-1.5">
+                        {comp.city && (
+                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                            {comp.city.name}{comp.city.state ? `, ${comp.city.state}` : ""}
+                          </div>
+                        )}
+                        {sc.jobRole && (
+                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
+                            <Briefcase className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                            <span className="font-semibold text-[var(--text-primary)]">{sc.jobRole.name}</span>
+                          </div>
+                        )}
+                        {comp.examBoard && (
+                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
+                            <Building2 className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                            {comp.examBoard.name}
+                          </div>
+                        )}
+                        {comp.examDate && (
+                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
+                            <Calendar className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                            <span>{formatDate(comp.examDate)}</span>
+                            {daysLeft !== null && daysLeft > 0 && (
+                              <span className="inline-flex items-center gap-1 font-semibold text-violet-700">
+                                <Clock className="h-3 w-3" />
+                                {formatCountdown(comp.examDate)}
+                              </span>
+                            )}
+                            {daysLeft === 0 && (
+                              <span className="font-semibold text-orange-600">Hoje!</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Matérias preview */}
-                  {comp.subjects.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-5">
-                      {comp.subjects.slice(0, 4).map((cs: { subjectId: string; subject: { name: string } }) => (
-                        <span
-                          key={cs.subjectId}
-                          className="rounded-lg border border-gray-200/80 bg-gray-50/90 px-2.5 py-1 text-xs font-medium text-gray-600"
-                        >
-                          {cs.subject.name}
-                        </span>
-                      ))}
-                      {comp.subjects.length > 4 && (
-                        <span className="rounded-lg border border-dashed border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500">
-                          +{comp.subjects.length - 4}
-                        </span>
+                      {/* Matérias */}
+                      {sc.displaySubjects.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <BookOpen className="h-3.5 w-3.5 self-center text-[#D1D5DB]" />
+                          {sc.displaySubjects.map((s) => (
+                            <span
+                              key={s.id}
+                              className="rounded-md border border-black/[0.07] bg-[var(--bg-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
+                            >
+                              {s.name}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  )}
 
-                  <Link
-                    href={`/concursos/${comp.id}`}
-                    className="btn btn-primary mt-1 flex h-11 w-full items-center justify-center rounded-2xl text-[13px]"
-                  >
-                    Entrar no concurso
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
+                    <Link
+                      href={`/concursos/${comp.id}`}
+                      className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700 sm:w-auto"
+                    >
+                      Estudar <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
                 </div>
               </div>
             );

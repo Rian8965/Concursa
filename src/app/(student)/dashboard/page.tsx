@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, Target, Trophy, Zap,
   ArrowRight, Clock, Calendar,
-  Play, BarChart3, CheckCircle2, TrendingUp,
+  Play, TrendingUp, CheckCircle2,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 
@@ -16,54 +16,29 @@ export default async function StudentDashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  // #region agent log - H1/H3
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let profile: any = null;
-  try {
-    profile = await prisma.studentProfile.findUnique({
-      where: { userId: session.user.id },
-      include: {
-        plan: true,
-        studentCompetitions: {
-          where: { isActive: true },
-          include: {
-            competition: { include: { city: true, examBoard: true } },
-            jobRole: true,
-          },
-          take: 4,
+  const profile = await prisma.studentProfile.findUnique({
+    where: { userId: session.user.id },
+    include: {
+      plan: true,
+      studentCompetitions: {
+        where: { isActive: true },
+        include: {
+          competition: { include: { city: true, examBoard: true } },
+          jobRole: { select: { id: true, name: true } },
         },
+        take: 4,
       },
-    });
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:profile-query",message:"profile query ok",data:{hasProfile:!!profile,competitions:profile?.studentCompetitions?.length??0},hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
-  } catch (err) {
-    console.error("[dashboard] profile query failed:", err);
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:profile-query-error",message:"profile query FAILED",data:{error:String(err)},hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
-    throw err;
-  }
-  // #endregion
+    },
+  });
 
   const profileId = profile?.id ?? "";
 
-  // #region agent log - H3
-  let totalAnswered = 0;
-  let correctAnswers = 0;
-  let trainingSessions = 0;
-  let simulatedExams = 0;
-  try {
-    [totalAnswered, correctAnswers, trainingSessions, simulatedExams] =
-      await Promise.all([
-        prisma.studentAnswer.count({ where: { studentProfileId: profileId } }),
-        prisma.studentAnswer.count({ where: { studentProfileId: profileId, isCorrect: true } }),
-        prisma.trainingSession.count({ where: { studentProfileId: profileId } }),
-        prisma.simulatedExam.count({ where: { studentProfileId: profileId, status: "COMPLETED" } }),
-      ]);
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:counts",message:"counts ok",data:{totalAnswered,correctAnswers,trainingSessions,simulatedExams},hypothesisId:"H3",timestamp:Date.now()})}).catch(()=>{});
-  } catch (err) {
-    console.error("[dashboard] counts query failed:", err);
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"03dbee"},body:JSON.stringify({sessionId:"03dbee",location:"dashboard/page.tsx:counts-error",message:"counts FAILED",data:{error:String(err)},hypothesisId:"H3",timestamp:Date.now()})}).catch(()=>{});
-    throw err;
-  }
-  // #endregion
+  const [totalAnswered, correctAnswers, trainingSessions, simulatedExams] = await Promise.all([
+    prisma.studentAnswer.count({ where: { studentProfileId: profileId } }),
+    prisma.studentAnswer.count({ where: { studentProfileId: profileId, isCorrect: true } }),
+    prisma.trainingSession.count({ where: { studentProfileId: profileId } }),
+    prisma.simulatedExam.count({ where: { studentProfileId: profileId, status: "COMPLETED" } }),
+  ]);
 
   const accuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
   const firstName = session.user.name?.split(" ")[0] ?? "Aluno";
@@ -72,49 +47,46 @@ export default async function StudentDashboardPage() {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
-  const mainCompetition = profile?.studentCompetitions?.[0];
+  const mainCompetition = profile?.studentCompetitions?.[0] ?? null;
   const mainExamDateMs = mainCompetition?.competition?.examDate
-    ? new Date(mainCompetition.competition.examDate).getTime()
+    ? (() => { try { const d = new Date(mainCompetition.competition.examDate!); return isNaN(d.getTime()) ? NaN : d.getTime(); } catch { return NaN; } })()
     : NaN;
-  const daysLeft = !isNaN(mainExamDateMs)
-    ? Math.max(0, Math.floor((mainExamDateMs - Date.now()) / 86400000))
+  const daysLeft = !isNaN(mainExamDateMs) && mainExamDateMs > Date.now()
+    ? Math.floor((mainExamDateMs - Date.now()) / 86400000)
     : null;
 
+  const competitions = profile?.studentCompetitions ?? [];
+
   return (
-    <div className="orbit-stack w-full max-w-[1120px] animate-fade-up">
-      <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+    <div className="orbit-stack w-full max-w-[1100px] animate-fade-up">
+      {/* Cabeçalho */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="orbit-kicker">{greeting}</p>
-          <h1 className="text-[clamp(1.8rem,3.1vw,2.35rem)] font-extrabold tracking-tight text-[var(--text-primary)]">
+          <h1 className="text-[clamp(1.7rem,3vw,2.2rem)] font-extrabold tracking-tight text-[var(--text-primary)]">
             {firstName}
           </h1>
-          <p className="mt-2 text-[13.5px] font-medium text-[var(--text-muted)]">
+          <p className="mt-1.5 text-[13px] font-medium text-[var(--text-muted)]">
             {formatDate(now, "EEEE, dd 'de' MMMM")}
           </p>
         </div>
 
-        {daysLeft !== null && mainCompetition?.competition?.examDate && (
-          <div
-            className="relative overflow-hidden rounded-[18px] border border-[rgba(217,119,6,0.22)] bg-amber-50/70 px-5 py-3.5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset,0_10px_30px_rgba(217,119,6,0.10)]"
-          >
-            <div className="absolute inset-0 opacity-[0.22]" style={{ background: "radial-gradient(600px 150px at 30% 10%, rgba(217,119,6,0.25), transparent 60%)" }} />
-            <div className="relative text-center">
-              <p className="text-[34px] font-extrabold leading-none tracking-tight text-amber-950">
-                {daysLeft}
-              </p>
-              <p className="mt-1 text-[11.5px] font-semibold text-amber-900/70">
-                {daysLeft === 1 ? "dia para a prova" : "dias para a prova"}
-              </p>
-            </div>
+        {daysLeft !== null && (
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-5 py-3 text-center">
+            <p className="text-[32px] font-extrabold leading-none tracking-tight text-amber-950">{daysLeft}</p>
+            <p className="mt-1 text-[11px] font-semibold text-amber-800/70">
+              {daysLeft === 1 ? "dia para a prova" : "dias para a prova"}
+            </p>
           </div>
         )}
       </header>
 
-      <div className="mb-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatsCard
           title="Respondidas"
           value={totalAnswered}
-          description="questões no total"
+          description="total de questões"
           icon={<BookOpen className="h-4 w-4" />}
           accent="#7C3AED"
           highlight
@@ -142,68 +114,59 @@ export default async function StudentDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] lg:gap-10">
-
-        {/* ── Coluna esquerda: Concursos ── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        {/* Concursos */}
         <section className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-bold tracking-tight text-[var(--text-primary)] sm:text-[17px]">Meus concursos</h2>
-            <Link href="/concursos" className="orbit-link inline-flex shrink-0 items-center gap-1.5 text-sm">
-              Ver todos <ArrowRight className="h-4 w-4" />
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[15px] font-bold tracking-tight text-[var(--text-primary)]">Meus concursos</h2>
+            <Link href="/concursos" className="orbit-link inline-flex items-center gap-1 text-[13px]">
+              Ver todos <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          <div className="flex flex-col gap-4">
-            {profile?.studentCompetitions.length === 0 ? (
-              <div className="rounded-[var(--r-3xl)] border border-dashed border-black/[0.12] bg-gradient-to-b from-white to-slate-50/80 px-6 py-10 text-center shadow-[var(--shadow-card)] sm:px-8 sm:py-12">
-                <Trophy className="mx-auto mb-4 h-10 w-10 text-[var(--text-muted)]" strokeWidth={1.25} />
-                <p className="text-[15px] font-semibold leading-snug text-[var(--text-primary)]">Nenhum concurso vinculado ainda</p>
-                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--text-muted)]">
-                  Aguarde o administrador configurar seu acesso
+          <div className="flex flex-col gap-3">
+            {competitions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-black/[0.10] bg-white px-6 py-10 text-center">
+                <Trophy className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.25} />
+                <p className="text-[14px] font-semibold text-[var(--text-primary)]">Nenhum concurso vinculado</p>
+                <p className="mt-1.5 text-[13px] text-[var(--text-muted)]">
+                  O administrador precisa vincular você a um concurso e cargo.
                 </p>
               </div>
             ) : (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              profile?.studentCompetitions.map((sc: any, i: number) => {
+              competitions.map((sc, i) => {
                 const comp = sc.competition;
-                const examMs = comp.examDate ? new Date(comp.examDate).getTime() : NaN;
-                const days = !isNaN(examMs)
-                  ? Math.max(0, Math.floor((examMs - Date.now()) / 86400000))
-                  : null;
-                const pct = days !== null ? Math.min(100, ((365 - days) / 365) * 100) : 0;
+                let days: number | null = null;
+                let pct = 0;
+                if (comp.examDate) {
+                  try {
+                    const d = new Date(comp.examDate);
+                    if (!isNaN(d.getTime()) && d.getTime() > Date.now()) {
+                      days = Math.floor((d.getTime() - Date.now()) / 86400000);
+                      pct = Math.min(100, ((365 - days) / 365) * 100);
+                    }
+                  } catch { /* ignorado */ }
+                }
 
                 return (
                   <div key={sc.id} className="animate-fade-up" style={{ animationDelay: `${i * 40}ms` }}>
-                    <div className="rounded-2xl border border-black/[0.07] bg-white px-5 py-5 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-float)] sm:px-6 sm:py-6">
+                    <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
-                          <div className="mb-2.5 flex flex-wrap gap-1.5">
+                          <div className="mb-2 flex flex-wrap gap-1.5">
                             <Badge variant={comp.status === "ACTIVE" ? "active" : "upcoming"}>
                               {comp.status === "ACTIVE" ? "Ativo" : "Em breve"}
                             </Badge>
-                            {comp.examBoard && (
-                              <Badge variant="secondary">{comp.examBoard.acronym}</Badge>
-                            )}
-                            {!comp.examBoardDefined && (
-                              <Badge variant="warning">Banca indefinida</Badge>
-                            )}
+                            {comp.examBoard && <Badge variant="secondary">{comp.examBoard.acronym}</Badge>}
                           </div>
 
-                          <p className="break-words text-[15px] font-bold leading-snug tracking-tight text-[var(--text-primary)] sm:text-base">
-                            {comp.name}
-                          </p>
+                          <p className="text-[14px] font-bold leading-snug text-[var(--text-primary)]">{comp.name}</p>
 
-                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[#6B7280]">
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6B7280]">
                             {comp.city && (
-                              <span className="inline-flex items-center gap-1">
-                                <span aria-hidden>📍</span> {comp.city.name}, {comp.city.state}
-                              </span>
+                              <span>📍 {comp.city.name}{comp.city.state ? `, ${comp.city.state}` : ""}</span>
                             )}
-                            {sc.jobRole && (
-                              <span className="inline-flex items-center gap-1">
-                                <span aria-hidden>💼</span> {sc.jobRole.name}
-                              </span>
-                            )}
+                            {sc.jobRole && <span>💼 {sc.jobRole.name}</span>}
                             {comp.examDate && (
                               <span className="inline-flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
@@ -213,8 +176,8 @@ export default async function StudentDashboardPage() {
                           </div>
 
                           {days !== null && days > 0 && (
-                            <div className="mt-3">
-                              <span className="mb-1.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#7C3AED]">
+                            <div className="mt-2.5">
+                              <span className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700">
                                 <Clock className="h-3 w-3" />
                                 {formatCountdown(comp.examDate!)}
                               </span>
@@ -225,10 +188,9 @@ export default async function StudentDashboardPage() {
 
                         <Link
                           href={`/concursos/${comp.id}`}
-                          className="btn btn-purple w-full shrink-0 justify-center sm:w-auto sm:justify-center !px-5 !py-2.5 text-[13px] font-bold"
+                          className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700 sm:w-auto"
                         >
-                          Estudar
-                          <ArrowRight className="h-3.5 w-3.5" />
+                          Estudar <ArrowRight className="h-3.5 w-3.5" />
                         </Link>
                       </div>
                     </div>
@@ -239,92 +201,45 @@ export default async function StudentDashboardPage() {
           </div>
         </section>
 
-        {/* ── Coluna direita: Ações + plano ── */}
-        <aside className="flex w-full min-w-0 flex-col gap-8 lg:max-w-none">
+        {/* Ações + plano */}
+        <aside className="flex flex-col gap-6">
           <div>
-            <h3 className="mb-4 text-base font-bold tracking-tight text-[var(--text-primary)] sm:text-[17px]">Estudar agora</h3>
-            <div className="flex flex-col gap-3">
+            <h3 className="mb-3 text-[14px] font-bold tracking-tight text-[var(--text-primary)]">Ações rápidas</h3>
+            <div className="flex flex-col gap-2">
               {[
-                {
-                  icon: Play,
-                  label: "Iniciar Treino",
-                  desc: "Questões aleatórias",
-                  href: mainCompetition
-                    ? `/concursos/${mainCompetition.competitionId}/treino`
-                    : "/concursos",
-                  accent: "#7C3AED",
-                },
-                {
-                  icon: Target,
-                  label: "Novo Simulado",
-                  desc: "Teste cronometrado",
-                  href: mainCompetition
-                    ? `/concursos/${mainCompetition.competitionId}/simulado`
-                    : "/concursos",
-                  accent: "#059669",
-                },
-                {
-                  icon: TrendingUp,
-                  label: "Ver Desempenho",
-                  desc: "Análise de evolução",
-                  href: mainCompetition
-                    ? `/concursos/${mainCompetition.competitionId}/desempenho`
-                    : "/concursos",
-                  accent: "#2563EB",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "Revisar erros",
-                  desc: "Questões erradas com explicação",
-                  href: "/revisar-erros",
-                  accent: "#D97706",
-                },
+                { icon: Play, label: "Iniciar Treino", desc: "Questões aleatórias", href: mainCompetition ? `/concursos/${mainCompetition.competitionId}/treino` : "/concursos", accent: "#7C3AED" },
+                { icon: Target, label: "Novo Simulado", desc: "Teste cronometrado", href: mainCompetition ? `/concursos/${mainCompetition.competitionId}/simulado` : "/concursos", accent: "#059669" },
+                { icon: TrendingUp, label: "Ver Desempenho", desc: "Análise de evolução", href: mainCompetition ? `/concursos/${mainCompetition.competitionId}/desempenho` : "/concursos", accent: "#2563EB" },
+                { icon: CheckCircle2, label: "Revisar Erros", desc: "Com explicação da IA", href: "/revisar-erros", accent: "#D97706" },
               ].map((action) => (
-                <div key={action.label}>
-                  <Link
-                    href={action.href}
-                    className="group flex min-h-[4.5rem] items-center gap-4 rounded-2xl border border-black/[0.07] bg-white px-4 py-3.5 no-underline shadow-[var(--shadow-sm)] transition-all hover:border-violet-200 hover:bg-violet-50/40 hover:shadow-md active:scale-[0.99] sm:px-5 sm:py-4"
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  className="group flex items-center gap-3 rounded-xl border border-black/[0.07] bg-white px-3.5 py-3 transition-all hover:border-violet-200 hover:bg-violet-50/40 hover:shadow-sm"
+                >
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                    style={{ background: `${action.accent}18`, border: `1px solid ${action.accent}28` }}
                   >
-                    <div
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
-                      style={{
-                        background: `${action.accent}14`,
-                        border: `1px solid ${action.accent}28`,
-                      }}
-                    >
-                      <action.icon className="h-[18px] w-[18px]" style={{ color: action.accent }} aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <p className="text-[14px] font-semibold leading-snug text-[var(--text-primary)]">{action.label}</p>
-                      <p className="mt-1 text-[13px] leading-snug text-[var(--text-muted)]">{action.desc}</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" aria-hidden />
-                  </Link>
-                </div>
+                    <action.icon className="h-4 w-4" style={{ color: action.accent }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-[var(--text-primary)]">{action.label}</p>
+                    <p className="text-[11.5px] text-[var(--text-muted)]">{action.desc}</p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB] transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" />
+                </Link>
               ))}
             </div>
           </div>
 
           {profile?.plan && (
-            <div className="relative isolate rounded-2xl border border-white/25 bg-gradient-to-br from-violet-600 via-violet-600 to-fuchsia-500 px-5 py-5 shadow-[0_16px_40px_rgba(124,58,237,0.28)] sm:px-6 sm:py-6">
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
-                <div
-                  className="absolute inset-0 opacity-[0.28]"
-                  style={{ background: "radial-gradient(720px 280px at 20% 0%, rgba(255,255,255,0.45), transparent 55%)" }}
-                />
-              </div>
-              <div className="relative z-[1] space-y-2">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 shrink-0 text-white/85" aria-hidden />
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/80">Seu plano</p>
-                </div>
-                <p className="break-words text-lg font-extrabold leading-snug tracking-tight text-white sm:text-xl">{profile.plan.name}</p>
-                {profile.accessExpiresAt && (
-                  <p className="pt-0.5 text-[13px] font-medium leading-snug text-white/75">
-                    Válido até {formatDate(profile.accessExpiresAt)}
-                  </p>
-                )}
-              </div>
+            <div className="rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 p-4 text-white shadow-md">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] opacity-75">Seu plano</p>
+              <p className="mt-1.5 text-[17px] font-extrabold tracking-tight">{profile.plan.name}</p>
+              {profile.accessExpiresAt && (
+                <p className="mt-1 text-[12px] opacity-70">Válido até {formatDate(profile.accessExpiresAt)}</p>
+              )}
             </div>
           )}
         </aside>
