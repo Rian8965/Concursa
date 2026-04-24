@@ -30,21 +30,31 @@ async function main() {
 
   // ============================================================
   // Super Admin
+  // Credenciais definidas via variáveis de ambiente.
+  // Para criar/redefinir admin, use: npx tsx scripts/create-admin.ts
   // ============================================================
-  const hashedPassword = await bcrypt.hash("Admin@123", 10);
+  const adminEmail    = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
 
-  const superAdmin = await prisma.user.upsert({
-    where: { email: "admin@concursapro.com" },
-    update: {},
-    create: {
-      name: "Administrador",
-      email: "admin@concursapro.com",
-      password: hashedPassword,
-      role: "SUPER_ADMIN",
-      isActive: true,
-    },
-  });
-  console.log("✅ Super admin criado:", superAdmin.email);
+  let superAdmin = null;
+  if (adminEmail && adminPassword) {
+    const hashedPassword = await bcrypt.hash(adminPassword, 12);
+    superAdmin = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: { password: hashedPassword, isActive: true },
+      create: {
+        name: process.env.SEED_ADMIN_NAME ?? "Administrador",
+        email: adminEmail,
+        password: hashedPassword,
+        role: "SUPER_ADMIN",
+        isActive: true,
+      },
+    });
+    console.log("✅ Admin criado/atualizado:", superAdmin.email);
+  } else {
+    console.log("ℹ️  SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não definidos — admin ignorado no seed.");
+    console.log("   Use: npx tsx scripts/create-admin.ts");
+  }
 
   // ============================================================
   // Planos de Acesso
@@ -355,15 +365,23 @@ async function main() {
 
   // ============================================================
   // Aluno demo
+  // Credenciais definidas via variáveis de ambiente.
   // ============================================================
-  const hashedStudentPassword = await bcrypt.hash("Aluno@123", 10);
+  const studentEmail    = process.env.SEED_STUDENT_EMAIL;
+  const studentPassword = process.env.SEED_STUDENT_PASSWORD;
 
-  const alunoDemo = await prisma.user.upsert({
-    where: { email: "aluno@concursapro.com" },
-    update: {},
+  let alunoDemo = null;
+  if (!studentEmail || !studentPassword) {
+    console.log("ℹ️  SEED_STUDENT_EMAIL/SEED_STUDENT_PASSWORD não definidos — aluno demo ignorado.");
+  } else {
+
+  const hashedStudentPassword = await bcrypt.hash(studentPassword, 12);
+  alunoDemo = await prisma.user.upsert({
+    where: { email: studentEmail },
+    update: { password: hashedStudentPassword },
     create: {
-      name: "Maria Silva",
-      email: "aluno@concursapro.com",
+      name: process.env.SEED_STUDENT_NAME ?? "Aluno Demo",
+      email: studentEmail,
       password: hashedStudentPassword,
       role: "STUDENT",
       isActive: true,
@@ -398,6 +416,7 @@ async function main() {
   });
 
   console.log("✅ Aluno demo criado:", alunoDemo.email);
+  } // end if studentEmail && studentPassword
 
   // ============================================================
   // Assuntos básicos de Português
@@ -485,9 +504,7 @@ async function main() {
   }
 
   console.log("\n🎉 Seed concluído com sucesso!");
-  console.log("\n📋 Credenciais de acesso:");
-  console.log("   Admin:  admin@concursapro.com  /  Admin@123");
-  console.log("   Aluno:  aluno@concursapro.com  /  Aluno@123");
+  console.log("\n📋 Para criar/redefinir usuários, use: npx tsx scripts/create-admin.ts");
 }
 
 main()

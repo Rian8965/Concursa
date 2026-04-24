@@ -13,6 +13,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "create-admin": "tsx scripts/create-admin.ts",
+    "check-users": "tsx scripts/check-users.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "pdf-service": "cd pdf-service && uvicorn main:app --reload --port 8000"
