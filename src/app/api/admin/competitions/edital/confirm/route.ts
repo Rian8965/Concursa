@@ -49,16 +49,6 @@ function slugifyBase(name: string) {
     .replace(/^-|-$/g, "");
 }
 
-function safeDate(s: string | null | undefined): Date | null {
-  if (!s) return null;
-  try {
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
-}
-
 async function upsertExamBoard(examBoard: Draft["examBoard"]) {
   if (!examBoard?.acronym) return null;
   const acronym = norm(examBoard.acronym).toUpperCase();
@@ -98,51 +88,6 @@ async function ensureCities(cities: Array<{ name: string; state: string }> | nul
   return out;
 }
 
-/** Constrói um texto resumido do edital para usar como contexto no Quiz da IA */
-function buildEditalText(draft: Draft): string {
-  const lines: string[] = [];
-  lines.push(`CONCURSO: ${draft.name}`);
-  if (draft.organization) lines.push(`ÓRGÃO: ${draft.organization}`);
-  if (draft.examBoard?.acronym) lines.push(`BANCA: ${draft.examBoard.acronym}${draft.examBoard.name ? ` — ${draft.examBoard.name}` : ""}`);
-
-  const cityLine = (draft.cities ?? [])
-    .map((c) => `${norm(c.name)}/${norm(c.state).toUpperCase()}`)
-    .filter(Boolean)
-    .join(", ");
-  if (cityLine) lines.push(`CIDADE: ${cityLine}`);
-  if (draft.examDate) lines.push(`DATA DA PROVA: ${draft.examDate}`);
-  if (draft.description) lines.push(`\nDESCRIÇÃO:\n${draft.description}`);
-  if (draft.notes) lines.push(`\nOBSERVAÇÕES:\n${draft.notes}`);
-
-  if ((draft.stages ?? []).length > 0) {
-    lines.push("\nCRONOGRAMA / ETAPAS:");
-    for (const s of draft.stages ?? []) {
-      const n = norm(s.name);
-      if (!n) continue;
-      const dateStr = s.dateStart
-        ? s.dateEnd
-          ? `${s.dateStart} a ${s.dateEnd}`
-          : s.dateStart
-        : "";
-      lines.push(`  • ${n}${dateStr ? ` — ${dateStr}` : ""}`);
-    }
-  }
-
-  if ((draft.jobRoles ?? []).length > 0) {
-    lines.push("\nCARGOS E MATÉRIAS:");
-    for (const jr of draft.jobRoles ?? []) {
-      const jn = norm(jr.name);
-      if (!jn) continue;
-      lines.push(`  Cargo: ${jn}`);
-      const subjects = (jr.subjects ?? []).map((s) => norm(s.name)).filter(Boolean);
-      if (subjects.length > 0) {
-        lines.push(`    Matérias: ${subjects.join(", ")}`);
-      }
-    }
-  }
-
-  return lines.join("\n");
-}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -196,7 +141,6 @@ export async function POST(req: Request) {
 
     const base = slugifyBase(draft.name);
     const slug = `${base || "concurso"}-${Date.now()}`;
-    const editalText = buildEditalText(draft);
 
     const created = await prisma.$transaction(async (tx) => {
       const competition = await tx.competition.create({
@@ -211,7 +155,6 @@ export async function POST(req: Request) {
           status: "UPCOMING",
           description: [norm(draft.description), norm(draft.notes)].filter(Boolean).join("\n\n") || null,
           editalUrl: null,
-          editalText,
         },
         select: { id: true },
       });
@@ -239,18 +182,24 @@ export async function POST(req: Request) {
         });
       }
 
-      // CompetitionStage (com datas)
+      // CompetitionStage
       let stageOrder = 0;
       for (const stage of draft.stages ?? []) {
         const stageName = norm(stage.name);
         if (!stageName) continue;
+        // Inclui datas no campo description enquanto as colunas date_start/date_end
+        // ainda não existem no banco (migração pendente).
+        const dateNote = stage.dateStart
+          ? stage.dateEnd
+            ? `${stage.dateStart} a ${stage.dateEnd}`
+            : stage.dateStart
+          : null;
         await tx.competitionStage.create({
           data: {
             competitionId: competition.id,
             name: stageName,
             order: stageOrder++,
-            dateStart: safeDate(stage.dateStart),
-            dateEnd: safeDate(stage.dateEnd),
+            description: dateNote,
           },
         });
       }

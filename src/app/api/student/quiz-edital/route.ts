@@ -74,24 +74,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Se tiver editalText salvo (resumo estruturado gerado na criação)
-  if (competition.editalText) {
-    contextLines.push(`\nINFORMAÇÕES COMPLETAS DO EDITAL:\n${competition.editalText}`);
-  }
-
   // Cronograma
   if (competition.stages.length > 0) {
     contextLines.push(`\nCRONOGRAMA / ETAPAS:`);
     for (const stage of competition.stages) {
-      let dateStr = "";
-      if (stage.dateStart) {
-        try {
-          const ds = new Date(stage.dateStart).toLocaleDateString("pt-BR");
-          const de = stage.dateEnd ? ` a ${new Date(stage.dateEnd).toLocaleDateString("pt-BR")}` : "";
-          dateStr = ` — ${ds}${de}`;
-        } catch { /* ignorado */ }
-      }
-      contextLines.push(`  • ${stage.name}${dateStr}${stage.description ? `: ${stage.description}` : ""}`);
+      // stage.description guarda as datas enquanto as colunas dateStart/dateEnd não existem no banco
+      const datePart = stage.description ? ` — ${stage.description}` : "";
+      contextLines.push(`  • ${stage.name}${datePart}`);
     }
   }
 
