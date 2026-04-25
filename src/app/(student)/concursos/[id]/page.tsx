@@ -211,13 +211,13 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
       )}
 
       {/* Abas */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-black/[0.06] bg-white p-1 shadow-sm">
+      <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-black/[0.06] bg-[#F9FAFB] p-1">
         {tabs.map((tab) => (
           <Link
             key={tab.label}
             href={`/concursos/${id}${tab.href}`}
             className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]",
+              "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[12.5px] font-medium text-[#6B7280] transition-all hover:bg-white hover:text-[#111827] hover:shadow-sm",
             )}
           >
             <tab.icon className="h-3.5 w-3.5" />

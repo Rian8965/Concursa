@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { Progress } from "@/components/ui/progress";
 import { BookOpen, Play } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -118,56 +117,60 @@ export default async function MateriasPage({ params }: Props) {
           {subjectStats.map((subject) => (
             <div
               key={subject.id}
-              className="rounded-xl border border-black/[0.06] bg-[var(--bg-card)] p-4 transition-shadow hover:shadow-sm"
+              className="rounded-lg border border-black/[0.06] bg-white p-4 transition-shadow hover:shadow-sm"
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 {/* Info da matéria */}
-                <div className="min-w-0 flex-1 space-y-2.5">
+                <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2.5">
                     <div
-                      className="h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-500 to-fuchsia-500"
-                      style={subject.color ? { background: subject.color } : undefined}
+                      className="h-8 w-1 shrink-0 rounded-full"
+                      style={{ background: subject.color ?? "linear-gradient(180deg, #7C3AED, #A855F7)" }}
                     />
                     <div>
-                      <p className="text-[15px] font-bold text-[var(--text-primary)]">{subject.name}</p>
+                      <p className="text-[14px] font-bold text-[#111827]">{subject.name}</p>
                       {subject.topics.length > 0 && (
-                        <p className="text-[11px] text-[var(--text-muted)]">{subject.topics.length} assunto{subject.topics.length !== 1 ? "s" : ""}</p>
+                        <p className="text-[11px] text-gray-400">{subject.topics.length} assunto{subject.topics.length !== 1 ? "s" : ""}</p>
                       )}
                     </div>
                   </div>
 
                   {/* Progresso */}
                   <div className="pl-3.5">
-                    <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
-                      <span>{subject.total > 0 ? `${subject.total} questão${subject.total !== 1 ? "ões" : ""} respondida${subject.total !== 1 ? "s" : ""}` : "Não iniciado"}</span>
-                      <span
-                        className={cn(
-                          "font-bold",
-                          subject.total === 0 && "text-[var(--text-muted)]",
-                          subject.total > 0 && subject.accuracy >= 70 && "text-emerald-600",
-                          subject.total > 0 && subject.accuracy >= 50 && subject.accuracy < 70 && "text-amber-600",
-                          subject.total > 0 && subject.accuracy < 50 && "text-red-500",
-                        )}
-                      >
-                        {subject.total > 0 ? `${subject.accuracy}% acerto` : "—"}
+                    <div className="mb-1.5 flex items-center justify-between text-[11.5px]">
+                      <span className="text-gray-500">
+                        {subject.total > 0
+                          ? `${subject.total} questão${subject.total !== 1 ? "ões" : ""} respondida${subject.total !== 1 ? "s" : ""}`
+                          : "Não iniciado"}
+                      </span>
+                      <span className={cn(
+                        "font-bold",
+                        subject.total === 0 && "text-gray-400",
+                        subject.total > 0 && subject.accuracy >= 70 && "text-emerald-600",
+                        subject.total > 0 && subject.accuracy >= 50 && subject.accuracy < 70 && "text-amber-600",
+                        subject.total > 0 && subject.accuracy < 50 && "text-red-500",
+                      )}>
+                        {subject.total > 0 ? `${subject.accuracy}%` : "—"}
                       </span>
                     </div>
-                    <Progress value={subject.accuracy} className="h-1" />
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-violet-500 transition-all"
+                        style={{ width: `${subject.accuracy}%` }}
+                      />
+                    </div>
                   </div>
 
                   {/* Assuntos */}
                   {subject.topics.length > 0 && (
                     <div className="flex flex-wrap gap-1 pl-3.5">
                       {subject.topics.slice(0, 6).map((t) => (
-                        <span
-                          key={t.id}
-                          className="rounded-md bg-[var(--bg-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
-                        >
+                        <span key={t.id} className="rounded-md bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-500 border border-gray-100">
                           {t.name}
                         </span>
                       ))}
                       {subject.topics.length > 6 && (
-                        <span className="self-center text-[11px] text-[var(--text-muted)]">+{subject.topics.length - 6}</span>
+                        <span className="self-center text-[11px] text-gray-400">+{subject.topics.length - 6}</span>
                       )}
                     </div>
                   )}
