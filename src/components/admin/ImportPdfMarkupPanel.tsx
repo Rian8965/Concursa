@@ -107,6 +107,78 @@ export function ImportPdfMarkupPanel({
   } | null>(null);
 
   const pdfUrl = `/api/admin/imports/${importId}/pdf`;
+  const pdfDocRef = useRef<any>(null);
+
+  function getCurrentPageCanvas(): HTMLCanvasElement | null {
+    // A <Page> do react-pdf renderiza um <canvas> dentro do mesmo "strip" onde fica o overlay.
+    const container = overlayRef.current?.parentElement;
+    const canvas = container?.querySelector("canvas");
+    return canvas instanceof HTMLCanvasElement ? canvas : null;
+  }
+
+  function cropCanvasRegion(canvas: HTMLCanvasElement, bbox: { x: number; y: number; w: number; h: number }) {
+    const sx = Math.max(0, Math.floor(bbox.x * canvas.width));
+    const sy = Math.max(0, Math.floor(bbox.y * canvas.height));
+    const sw = Math.max(1, Math.floor(bbox.w * canvas.width));
+    const sh = Math.max(1, Math.floor(bbox.h * canvas.height));
+    const out = document.createElement("canvas");
+    out.width = Math.min(canvas.width - sx, sw);
+    out.height = Math.min(canvas.height - sy, sh);
+    const ctx = out.getContext("2d");
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(canvas, sx, sy, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+  }
+
+  function rectsIntersect(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  const extractPdfTextFromRegion = useCallback(async (input: { page: number; bbox: { x: number; y: number; w: number; h: number }; canvas: HTMLCanvasElement }) => {
+    // Extrai texto aproximado usando pdfjs (sem OCR). Se a área for mista/figura, o chamador salva como imagem.
+    const selPx = {
+      x: input.bbox.x * input.canvas.width,
+      y: input.bbox.y * input.canvas.height,
+      w: input.bbox.w * input.canvas.width,
+      h: input.bbox.h * input.canvas.height,
+    };
+
+    if (!pdfDocRef.current) {
+      pdfDocRef.current = await (pdfjs as any).getDocument(pdfUrl).promise;
+    }
+    const doc = pdfDocRef.current;
+    const pg = await doc.getPage(input.page);
+    const viewport1 = pg.getViewport({ scale: 1 });
+    const scale = input.canvas.width / viewport1.width;
+    const viewport = pg.getViewport({ scale });
+
+    const textContent = await pg.getTextContent();
+    const items: any[] = Array.isArray(textContent.items) ? textContent.items : [];
+    const parts: string[] = [];
+
+    for (const it of items) {
+      const str = String(it?.str ?? "");
+      if (!str.trim()) continue;
+      const t = it.transform as number[] | undefined;
+      if (!t || t.length < 6) continue;
+      // Mapeia o transform do item para o viewport (coordenadas do canvas).
+      const m = (pdfjs as any).Util.transform(viewport.transform, t) as number[];
+      const x = m[4];
+      const y = m[5];
+      const fontH = Math.max(1, Math.hypot(m[2], m[3]));
+      const w = Math.max(1, (Number(it.width) || 0) * scale);
+      const itemRect = { x, y: y - fontH, w, h: fontH };
+      if (rectsIntersect(itemRect, selPx)) parts.push(str);
+    }
+
+    const joined = parts
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return joined || null;
+  }, [pdfUrl]);
 
   const [wrapWidth, setWrapWidth] = useState(720);
   const [zoom, setZoom] = useState(1);
@@ -252,13 +324,29 @@ export function ImportPdfMarkupPanel({
       if (resizingAsset && preview) {
         setBusy(true);
         try {
+          const existing = assets.find((a) => a.id === resizingAsset.id) ?? null;
+          const canvas = getCurrentPageCanvas();
+          const derived: { imageDataUrl?: string | null; extractedText?: string | null } =
+            existing && canvas
+              ? existing.kind === "IMAGE"
+                ? { imageDataUrl: cropCanvasRegion(canvas, preview) ?? null }
+                : { extractedText: await extractPdfTextFromRegion({ page, bbox: preview, canvas }) }
+              : {};
           // #region agent log
           fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-canvas-resize',location:'ImportPdfMarkupPanel.tsx:resizeEnd',message:'updating bbox after resize',data:{importId,assetId:resizingAsset.id,page,bbox:preview,handle:resizingAsset.handle},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
           const res = await fetch(`/api/admin/imports/${importId}/assets/${resizingAsset.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ page, bboxX: preview.x, bboxY: preview.y, bboxW: preview.w, bboxH: preview.h }),
+            body: JSON.stringify({
+              page,
+              bboxX: preview.x,
+              bboxY: preview.y,
+              bboxW: preview.w,
+              bboxH: preview.h,
+              ...(derived.imageDataUrl !== undefined ? { imageDataUrl: derived.imageDataUrl } : {}),
+              ...(derived.extractedText !== undefined ? { extractedText: derived.extractedText } : {}),
+            }),
           });
           if (!res.ok) throw new Error("Erro ao atualizar região");
           await onChanged();
@@ -275,13 +363,29 @@ export function ImportPdfMarkupPanel({
       if (draggingAsset && preview && overlayRef.current) {
         setBusy(true);
         try {
+          const existing = assets.find((a) => a.id === draggingAsset.id) ?? null;
+          const canvas = getCurrentPageCanvas();
+          const derived: { imageDataUrl?: string | null; extractedText?: string | null } =
+            existing && canvas
+              ? existing.kind === "IMAGE"
+                ? { imageDataUrl: cropCanvasRegion(canvas, preview) ?? null }
+                : { extractedText: await extractPdfTextFromRegion({ page, bbox: preview, canvas }) }
+              : {};
           // #region agent log
           fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-canvas-move',location:'ImportPdfMarkupPanel.tsx:dragEnd',message:'updating bbox after drag',data:{importId,assetId:draggingAsset.id,page,bbox:preview},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
           const res = await fetch(`/api/admin/imports/${importId}/assets/${draggingAsset.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ page, bboxX: preview.x, bboxY: preview.y, bboxW: preview.w, bboxH: preview.h }),
+            body: JSON.stringify({
+              page,
+              bboxX: preview.x,
+              bboxY: preview.y,
+              bboxW: preview.w,
+              bboxH: preview.h,
+              ...(derived.imageDataUrl !== undefined ? { imageDataUrl: derived.imageDataUrl } : {}),
+              ...(derived.extractedText !== undefined ? { extractedText: derived.extractedText } : {}),
+            }),
           });
           if (!res.ok) throw new Error("Erro ao atualizar região");
           await onChanged();
@@ -317,6 +421,17 @@ export function ImportPdfMarkupPanel({
           await onBoxSelected({ page, bbox: box });
           return;
         }
+
+        const canvas = getCurrentPageCanvas();
+        const derived: { imageDataUrl: string | null; extractedText: string | null } = { imageDataUrl: null, extractedText: null };
+        if (canvas) {
+          if (effectiveMode === "IMAGE") {
+            derived.imageDataUrl = cropCanvasRegion(canvas, box) ?? null;
+          } else if (effectiveMode === "TEXT_BLOCK") {
+            derived.extractedText = await extractPdfTextFromRegion({ page, bbox: box, canvas });
+          }
+        }
+
         // #region agent log
         fetch('http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03dbee'},body:JSON.stringify({sessionId:'03dbee',runId:'pre-fix',hypothesisId:'H-link-flow',location:'ImportPdfMarkupPanel.tsx:endDraw',message:'creating asset+link from selection',data:{importId,page,mode,targetQuestionId:effectiveTargetQ,bbox:{x:box.x,y:box.y,w:box.w,h:box.h}},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
@@ -331,8 +446,8 @@ export function ImportPdfMarkupPanel({
             bboxW: box.w,
             bboxH: box.h,
             scope: "EXCLUSIVE",
-            extractedText: null,
-            imageDataUrl: null,
+            extractedText: derived.extractedText,
+            imageDataUrl: derived.imageDataUrl,
             label: uiMode === "linker" ? computedLabel : null,
           }),
         });
@@ -365,6 +480,7 @@ export function ImportPdfMarkupPanel({
       }
     },
     [
+      assets,
       resizingAsset,
       draggingAsset,
       preview,
@@ -381,6 +497,7 @@ export function ImportPdfMarkupPanel({
       onBoxSelected,
       onLinkCreated,
       targetAlternativeLetter,
+      extractPdfTextFromRegion,
     ],
   );
 
