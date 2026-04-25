@@ -4,6 +4,57 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type GeminiOk = { ok: true; answer: string; model: string };
+type GeminiErr = { ok: false; retryable: boolean; status?: number; message: string; raw?: string };
+
+async function callGemini(args: {
+  apiKey: string;
+  systemPrompt: string;
+  userPrompt: string;
+  model: string;
+}): Promise<GeminiOk | GeminiErr> {
+  const { apiKey, systemPrompt, userPrompt, model } = args;
+
+  const urls = [
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+        }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        const retryable = res.status === 429 || res.status >= 500;
+        // 404/NOT_FOUND: tenta próximo endpoint/modelo
+        if (res.status === 404 || t.includes("NOT_FOUND")) continue;
+        return { ok: false, retryable, status: res.status, message: `Gemini ${model} (${res.status})`, raw: t.slice(0, 1200) };
+      }
+
+      const data = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+      const answer = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      if (!answer.trim()) return { ok: false, retryable: false, message: `Resposta vazia do modelo ${model}` };
+      return { ok: true, answer, model };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, retryable: true, message: msg };
+    }
+  }
+
+  return { ok: false, retryable: false, message: `Modelo/endpoint não encontrado para ${model}` };
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -38,12 +89,20 @@ export async function POST(req: NextRequest) {
   });
   if (!competition) return NextResponse.json({ error: "Concurso não encontrado" }, { status: 404 });
 
-  // Busca matérias do cargo do aluno
+  // Busca matérias do cargo (se houver) ou do concurso (fallback)
   let subjects: { name: string }[] = [];
   if (enrollment.jobRoleId) {
     const links = await prisma.competitionJobRoleSubject.findMany({
       where: { competitionId, jobRoleId: enrollment.jobRoleId },
       include: { subject: { select: { name: true } } },
+      orderBy: { subject: { name: "asc" } },
+    });
+    subjects = links.map((l) => l.subject);
+  } else {
+    const links = await prisma.competitionSubject.findMany({
+      where: { competitionId },
+      include: { subject: { select: { name: true } } },
+      orderBy: { subject: { name: "asc" } },
     });
     subjects = links.map((l) => l.subject);
   }
@@ -71,6 +130,13 @@ export async function POST(req: NextRequest) {
     if (subjects.length > 0) {
       contextLines.push(`MATÉRIAS DO CARGO:`);
       subjects.forEach((s) => contextLines.push(`  • ${s.name}`));
+    } else {
+      contextLines.push(`MATÉRIAS DO CARGO: (não configuradas)`);
+    }
+  } else {
+    if (subjects.length > 0) {
+      contextLines.push(`\nMATÉRIAS DO CONCURSO:`);
+      subjects.forEach((s) => contextLines.push(`  • ${s.name}`));
     }
   }
 
@@ -88,7 +154,34 @@ export async function POST(req: NextRequest) {
 
   // Chama Gemini com o contexto
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) return NextResponse.json({ error: "GEMINI_API_KEY não configurada" }, { status: 500 });
+  if (!geminiKey) {
+    return NextResponse.json(
+      {
+        code: "GEMINI_NOT_CONFIGURED",
+        error: "A IA do Quiz não está configurada (GEMINI_API_KEY ausente).",
+      },
+      { status: 424 },
+    );
+  }
+
+  const hasAnyContext =
+    Boolean(competition.organization) ||
+    Boolean(competition.examBoard) ||
+    Boolean(competition.city) ||
+    Boolean(competition.examDate) ||
+    Boolean(competition.description?.trim()) ||
+    subjects.length > 0 ||
+    competition.stages.length > 0;
+  if (!hasAnyContext) {
+    return NextResponse.json(
+      {
+        code: "NO_EDITAL_CONTEXT",
+        error:
+          "Este concurso ainda não tem informações de edital cadastradas (descrição, etapas e matérias). Assim, o Quiz não consegue responder com base no edital.",
+      },
+      { status: 404 },
+    );
+  }
 
   const systemPrompt = [
     "Você é um assistente especializado em concursos públicos brasileiros.",
@@ -110,39 +203,28 @@ export async function POST(req: NextRequest) {
     `PERGUNTA DO ALUNO: ${question.trim()}`,
   ].join("\n");
 
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest"];
+  const models = [
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro-latest",
+  ];
 
+  let lastErr: GeminiErr | null = null;
   for (const model of models) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        if (res.status === 404 || t.includes("NOT_FOUND")) continue;
-        throw new Error(`Gemini ${model} (${res.status}): ${t.slice(0, 300)}`);
-      }
-      const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      const answer = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      if (!answer.trim()) continue;
-      return NextResponse.json({ answer, model });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("NOT_FOUND") || msg.includes("404")) continue;
-      throw e;
-    }
+    const r = await callGemini({ apiKey: geminiKey, systemPrompt, userPrompt, model });
+    if (r.ok) return NextResponse.json({ answer: r.answer, model: r.model });
+    lastErr = r;
+    // se não for retryable (ex: modelo inexistente), tenta próximo modelo
+    // se for retryable (429/5xx), ainda tenta modelos menores
   }
 
-  return NextResponse.json({ error: "Não foi possível obter resposta da IA" }, { status: 502 });
+  return NextResponse.json(
+    {
+      code: "GEMINI_FAILED",
+      error: "Não foi possível obter resposta da IA no momento. Tente novamente em instantes.",
+      details: lastErr ? { status: lastErr.status, message: lastErr.message } : undefined,
+    },
+    { status: lastErr?.status === 429 ? 429 : 502 },
+  );
 }
