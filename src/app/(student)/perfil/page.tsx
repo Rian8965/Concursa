@@ -98,7 +98,7 @@ export default function PerfilPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-4">
           {[
             { label: "Respondidas", value: stats.studentAnswers, icon: BookOpen, color: "#7C3AED", bg: "#F5F3FF" },
             { label: "Treinos", value: stats.trainingSessions, icon: Target, color: "#059669", bg: "#F0FDF4" },

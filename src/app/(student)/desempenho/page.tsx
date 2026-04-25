@@ -96,9 +96,9 @@ export default async function DesempenhoPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+          <div key={s.label} className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[11.5px] font-semibold text-gray-500">{s.label}</p>
               <div
@@ -162,7 +162,7 @@ export default async function DesempenhoPage() {
         {/* Coluna direita */}
         <div className="space-y-4">
           {/* Atividade recente */}
-          <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
             <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-gray-400">
               Últimos 7 dias
             </p>
@@ -180,7 +180,7 @@ export default async function DesempenhoPage() {
           </div>
 
           {/* Meus concursos */}
-          <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-gray-400">Meus concursos</p>
               <Link href="/concursos" className="text-[12px] font-semibold text-violet-600 hover:text-violet-800">

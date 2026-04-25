@@ -43,7 +43,7 @@ export default async function AdminConfiguracoesPage() {
                 { label: "Secundária", v: theme.secondaryColor },
                 { label: "Acento", v: theme.accentColor },
               ].map((c) => (
-                <div key={c.label} className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-[var(--bg-elevated)] px-4 py-3">
+                <div key={c.label} className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-[var(--bg-elevated)] px-5 py-4">
                   <span
                     className="h-9 w-9 shrink-0 rounded-xl border border-black/[0.08] shadow-sm"
                     style={{ background: c.v }}

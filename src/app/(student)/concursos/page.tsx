@@ -74,7 +74,7 @@ export default async function CompetitionsPage() {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           {enriched.map((sc) => {
             const comp = sc.competition;
             let daysLeft: number | null = null;

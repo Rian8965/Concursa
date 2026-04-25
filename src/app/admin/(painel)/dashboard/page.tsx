@@ -87,7 +87,7 @@ export default async function AdminDashboardPage() {
           </div>
         )}
 
-        <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-7 2xl:grid-cols-4">
+        <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-6 2xl:grid-cols-4">
           <StatsCard
             title="Alunos"
             value={totalStudents}
@@ -119,7 +119,7 @@ export default async function AdminDashboardPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:gap-10">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:gap-8">
         <section className="orbit-panel orbit-panel--dashboard-lists flex flex-col">
           <div className="orbit-panel-header items-center">
             <h2 className="text-lg font-bold tracking-tight text-[#111827]">Concursos recentes</h2>

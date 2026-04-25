@@ -511,7 +511,7 @@ function EditalReviewScreen({
                     <h2 className="text-[13px] font-extrabold uppercase tracking-[0.08em] text-gray-500">Dados Gerais</h2>
                   </div>
                 </div>
-                <div className="space-y-5 px-6 py-5">
+                <div className="space-y-5 px-6 py-6">
                   <Field label="Nome do concurso *">
                     <input
                       className="field-input"
@@ -743,7 +743,7 @@ function EditalReviewScreen({
           </div>
 
           {/* Rodapé de ações */}
-          <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-black/[0.06] bg-white px-6 py-4 shadow-sm">
+          <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-black/[0.06] bg-white px-6 py-5 shadow-sm">
             <div>
               <p className="text-[13px] font-semibold text-gray-700">
                 {draftJobRoles.length} cargo{draftJobRoles.length !== 1 ? "s" : ""} · {draftJobRoles.reduce((a, jr) => a + jr.subjects.length, 0)} matérias · {draftStages.length} etapa{draftStages.length !== 1 ? "s" : ""}

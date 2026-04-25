@@ -315,9 +315,9 @@ function AdminQuestoesContent() {
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {questions.map((q) => (
-            <div key={q.id} className="orbit-card-premium py-4">
+            <div key={q.id} className="orbit-card-premium p-5">
               <div className="flex gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap gap-2">

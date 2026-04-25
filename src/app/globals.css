@@ -302,6 +302,7 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(17,24,39,0.06);
   border-radius: var(--r-panel);
   box-shadow: var(--shadow-card);
+  padding: clamp(18px, 2.2vw, 24px);
   transition: box-shadow var(--t-base), border-color var(--t-base), transform var(--t-base);
 }
 .card:hover {
@@ -557,6 +558,8 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: box-shadow var(--t-base), border-color var(--t-base);
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 .orbit-panel:hover {
   border-color: rgba(124,58,237,0.1);
@@ -802,6 +805,7 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 22px;
   margin-top: 10px;
   margin-bottom: 10px;
+  padding: clamp(20px, 2.5vw, 32px);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.7) inset,
     0 12px 28px rgba(17, 24, 39, 0.04),
@@ -1061,6 +1065,8 @@ h1, h2, h3, h4, h5, h6 {
     0 14px 36px rgba(124, 58, 237, 0.30);
   position: relative;
   overflow: hidden;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 .dash-plan-card::before {
   content: "";
@@ -1484,4 +1490,54 @@ h1, h2, h3, h4, h5, h6 {
 .orbit-modal-close:hover {
   background: var(--bg-muted);
   color: var(--text-primary);
+}
+
+/* ============================================================
+   CLASSES PADRONIZADAS DE CARD (audit visual)
+   Mínimo: padding >= 10px, separação >= 10px via gap/margin
+   ============================================================ */
+
+/* Card padrão do aluno — para blocos de conteúdo genérico */
+.student-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  border-radius: var(--r-3xl);
+  padding: clamp(18px, 2.2vw, 24px);
+  margin-top: 10px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--t-base), border-color var(--t-base);
+}
+
+/* Card de conteúdo admin */
+.admin-card {
+  background: linear-gradient(165deg, #FFFFFF 0%, #FAFAFD 100%);
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  border-radius: var(--r-panel);
+  padding: clamp(18px, 2.2vw, 28px);
+  margin-top: 10px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--t-base), border-color var(--t-base);
+}
+
+/* Grid utilitário: garante gap mínimo de 10px entre cards */
+.card-grid {
+  display: grid;
+  gap: clamp(10px, 1.5vw, 24px);
+}
+
+/* Stat card compacto — para métricas em grid */
+.stat-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 24, 39, 0.07);
+  border-radius: var(--r-xl);
+  padding: clamp(14px, 1.8vw, 20px);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--t-base), border-color var(--t-base), transform var(--t-base);
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124, 58, 237, 0.12);
+  box-shadow: var(--shadow-md);
 }
