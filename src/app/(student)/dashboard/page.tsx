@@ -253,7 +253,7 @@ export default async function StudentDashboardPage() {
                 <Building2 className="h-44 w-44" strokeWidth={1.1} />
               </div>
 
-              <div className="relative m-[15px]">
+              <div className="relative m-[10px] p-[10px]">
                 {/* ─── BADGES com pill-style premium e ponto pulsante ─── */}
                 <div className="mb-7 flex flex-wrap items-center gap-3">
                   {mainComp.competition.status === "ACTIVE" ? (
@@ -350,7 +350,7 @@ export default async function StudentDashboardPage() {
                 )}
 
                 {/* ─── Botões maiores com mais respiro ─── */}
-                <div className="mt-9 flex flex-wrap items-center gap-4">
+                <div className="mt-9 flex flex-wrap items-center gap-4 p-[10px]">
                   <Link
                     href={`/concursos/${mainComp.competitionId}/treino`}
                     className="dash-btn-primary"
