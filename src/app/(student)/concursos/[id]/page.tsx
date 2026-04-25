@@ -221,7 +221,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
         {/* Ações */}
         <div className="lg:col-span-1">
           <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.06em] text-[#9CA3AF]">Estudar agora</p>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {[
               { icon: Play, label: "Iniciar Treino", desc: "Questões das suas matérias", href: `/concursos/${id}/treino`, primary: true },
               { icon: Target, label: "Novo Simulado", desc: "Teste cronometrado", href: `/concursos/${id}/simulado`, primary: false },
@@ -232,7 +232,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                 key={action.label}
                 href={action.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-3.5 py-3 text-[13px] font-medium transition-shadow",
+                  "flex items-center gap-3 rounded-xl px-4 py-3.5 text-[13px] font-medium transition-shadow",
                   action.primary
                     ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
                     : "border border-black/[0.07] bg-white text-[#374151] hover:shadow-sm",
@@ -279,12 +279,12 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {subjectStats.map(({ subject, total, accuracy }) => (
                 <Link
                   key={subject.id}
                   href={`/concursos/${id}/treino?subject=${subject.id}`}
-                  className="flex items-center gap-3.5 rounded-xl border border-black/[0.06] bg-white px-4 py-3.5 transition-shadow hover:shadow-sm"
+                  className="flex items-center gap-3.5 rounded-xl border border-black/[0.06] bg-white px-5 py-4 transition-shadow hover:shadow-sm"
                 >
                   <div
                     className="h-8 w-1 shrink-0 rounded-full"

@@ -63,7 +63,7 @@ export default async function HistoricoConcursoPage({ params }: Props) {
               <p className="text-[13px] text-gray-400">Nenhum treino registrado ainda.</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {trainingSessions.map((t) => {
                 const acc =
                   typeof t.correctAnswers === "number" && t.totalQuestions > 0
@@ -72,7 +72,7 @@ export default async function HistoricoConcursoPage({ params }: Props) {
                 return (
                   <div
                     key={t.id}
-                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-3 shadow-sm"
+                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-4 shadow-sm"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50">
                       <BookOpen className="h-3.5 w-3.5 text-violet-500" />
@@ -121,7 +121,7 @@ export default async function HistoricoConcursoPage({ params }: Props) {
               <p className="text-[13px] text-gray-400">Nenhum simulado registrado ainda.</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {simulatedExams.map((e) => {
                 const isCompleted = e.status === "COMPLETED";
                 const isAbandoned = e.status === "ABANDONED";
@@ -132,7 +132,7 @@ export default async function HistoricoConcursoPage({ params }: Props) {
                 return (
                   <div
                     key={e.id}
-                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-3 shadow-sm"
+                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-4 shadow-sm"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
                       <Target className="h-3.5 w-3.5 text-emerald-500" />

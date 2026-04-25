@@ -151,7 +151,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         <div className="mx-4 mb-4 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-4 backdrop-blur-sm">
           <Link
             href="/perfil"
-            className="mb-3 flex items-center gap-3 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-white/8"
+            className="mb-3 flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/8"
             onClick={() => setMobileOpen(false)}
           >
             <div

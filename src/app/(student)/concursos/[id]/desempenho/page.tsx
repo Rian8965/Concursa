@@ -109,7 +109,7 @@ export default async function DesempenhoConcursoPage({ params }: Props) {
       {/* Card geral */}
       <div className="overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-sm">
         <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
-        <div className="p-5">
+        <div className="p-6">
           <p className="mb-2 text-[11.5px] font-bold uppercase tracking-[0.08em] text-gray-400">Desempenho geral</p>
           <div className="flex items-baseline gap-3">
             <span
@@ -138,11 +138,11 @@ export default async function DesempenhoConcursoPage({ params }: Props) {
       {sorted.length > 0 ? (
         <div>
           <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.06em] text-gray-400">Por matéria</p>
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-3">
             {sorted.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center gap-3.5 rounded-xl border border-black/[0.06] bg-white px-4 py-3.5 shadow-sm"
+                className="flex items-center gap-3.5 rounded-xl border border-black/[0.06] bg-white px-5 py-4 shadow-sm"
               >
                 <div
                   className="h-8 w-1 shrink-0 rounded-full"

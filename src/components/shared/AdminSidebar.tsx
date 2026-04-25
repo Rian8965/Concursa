@@ -125,7 +125,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
           <div className="flex items-center gap-2">
             <Link
               href="/admin/dashboard"
-              className="group flex min-w-0 flex-1 items-center gap-3.5"
+              className="group m-2.5 flex min-w-0 flex-1 items-center gap-3.5 px-2"
               onClick={() => setMobileOpen(false)}
             >
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
@@ -160,7 +160,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
           {navGroups.map((group) => (
             <div key={group.label} className="mb-5">
               <p className="section-label">{group.label}</p>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 {group.items.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   return (
@@ -187,7 +187,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
         </nav>
 
         <div className="border-t border-white/10 bg-black/15 px-3 py-4 backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-3 rounded-2xl px-2 py-2">
+          <div className="mb-2 flex items-center gap-3 rounded-2xl px-3 py-3">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold text-white"
               style={{
