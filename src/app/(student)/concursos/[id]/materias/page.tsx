@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { BookOpen, Play } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { CompetitionTabs } from "@/components/student/CompetitionTabs";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -83,22 +84,13 @@ export default async function MateriasPage({ params }: Props) {
   const cargoLabel = enrollment.jobRole?.name;
 
   return (
-    <div className="orbit-stack max-w-4xl animate-fade-up">
-      <div className="space-y-1">
-        <Link
-          href={`/concursos/${id}`}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 hover:text-violet-900"
-        >
-          ← {enrollment.competition.name}
-        </Link>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">Matérias</h1>
-        {cargoLabel && (
-          <p className="text-[13px] text-[var(--text-secondary)]">
-            Cargo: <span className="font-semibold">{cargoLabel}</span>
-          </p>
-        )}
-        <p className="text-[13px] text-[var(--text-muted)]">
-          {subjectStats.length} matéria{subjectStats.length !== 1 ? "s" : ""} para este{cargoLabel ? " cargo" : " concurso"}
+    <div className="animate-fade-in space-y-5 pb-8">
+      <CompetitionTabs competitionId={id} />
+
+      <div>
+        <h1 className="text-[20px] font-extrabold tracking-tight text-[#111827]">Matérias</h1>
+        <p className="mt-0.5 text-[13px] text-gray-500">
+          {cargoLabel ? `Cargo: ${cargoLabel} · ` : ""}{subjectStats.length} matéria{subjectStats.length !== 1 ? "s" : ""} disponível{subjectStats.length !== 1 ? "is" : ""}
         </p>
       </div>
 

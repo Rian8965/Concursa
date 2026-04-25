@@ -1,9 +1,10 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, BookOpen, Target } from "lucide-react";
+import { BookOpen, Target, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
+import { CompetitionTabs } from "@/components/student/CompetitionTabs";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -14,15 +15,11 @@ export default async function HistoricoConcursoPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const profile = await prisma.studentProfile.findUnique({
-    where: { userId: session.user.id },
-  });
+  const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) redirect("/dashboard");
 
   const enrollment = await prisma.studentCompetition.findUnique({
-    where: {
-      studentProfileId_competitionId: { studentProfileId: profile.id, competitionId: id },
-    },
+    where: { studentProfileId_competitionId: { studentProfileId: profile.id, competitionId: id } },
     include: { competition: { select: { name: true } } },
   });
   if (!enrollment) notFound();
@@ -41,65 +38,133 @@ export default async function HistoricoConcursoPage({ params }: Props) {
   ]);
 
   return (
-    <div style={{ maxWidth: 900 }}>
-      <Link
-        href={`/concursos/${id}`}
-        style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 16 }}
-      >
-        <ArrowLeft style={{ width: 14, height: 14 }} /> Voltar ao concurso
-      </Link>
+    <div className="animate-fade-in space-y-5 pb-8">
+      <CompetitionTabs competitionId={id} />
 
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em", marginBottom: 4 }}>
-        Histórico
-      </h1>
-      <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 24 }}>{enrollment.competition.name}</p>
+      <div>
+        <h1 className="text-[20px] font-extrabold tracking-tight text-[#111827]">Histórico</h1>
+        <p className="mt-0.5 text-[13px] text-gray-500">{enrollment.competition.name}</p>
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Treinos */}
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <BookOpen style={{ width: 16, height: 16, color: "#7C3AED" }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>Treinos</span>
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50">
+              <BookOpen className="h-3.5 w-3.5 text-violet-600" />
+            </div>
+            <p className="text-[13px] font-bold text-[#111827]">
+              Treinos <span className="ml-1 text-[12px] font-medium text-gray-400">({trainingSessions.length})</span>
+            </p>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {trainingSessions.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum treino registrado ainda.</p>
-            ) : (
-              trainingSessions.map((t) => (
-                <div key={t.id} className="card" style={{ padding: 12, fontSize: 13 }}>
-                  <span style={{ color: "#6B7280" }}>{formatDate(t.createdAt)}</span>
-                  <span style={{ marginLeft: 8, color: "#111827", fontWeight: 600 }}>
-                    {t.totalQuestions} questões
-                    {t.completedAt && typeof t.correctAnswers === "number" ? (
-                      <span style={{ color: "#7C3AED", marginLeft: 6 }}>
-                        · {t.correctAnswers} acertos
+
+          {trainingSessions.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-black/[0.08] bg-white px-5 py-8 text-center">
+              <p className="text-[13px] text-gray-400">Nenhum treino registrado ainda.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {trainingSessions.map((t) => {
+                const acc =
+                  typeof t.correctAnswers === "number" && t.totalQuestions > 0
+                    ? Math.round((t.correctAnswers / t.totalQuestions) * 100)
+                    : null;
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50">
+                      <BookOpen className="h-3.5 w-3.5 text-violet-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-[#111827]">
+                        {t.totalQuestions} questões
+                      </p>
+                      <p className="text-[11.5px] text-gray-400">{formatDate(t.createdAt)}</p>
+                    </div>
+                    {acc !== null && (
+                      <span
+                        className={cn(
+                          "text-[12.5px] font-extrabold",
+                          acc >= 70 ? "text-emerald-600" : acc >= 50 ? "text-amber-600" : "text-red-500",
+                        )}
+                      >
+                        {acc}%
                       </span>
-                    ) : null}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+                    )}
+                    {t.completedAt ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                    ) : (
+                      <Clock className="h-4 w-4 shrink-0 text-gray-300" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
+        {/* Simulados */}
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <Target style={{ width: 16, height: 16, color: "#7C3AED" }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>Simulados</span>
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+              <Target className="h-3.5 w-3.5 text-emerald-600" />
+            </div>
+            <p className="text-[13px] font-bold text-[#111827]">
+              Simulados <span className="ml-1 text-[12px] font-medium text-gray-400">({simulatedExams.length})</span>
+            </p>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {simulatedExams.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum simulado registrado ainda.</p>
-            ) : (
-              simulatedExams.map((e) => (
-                <div key={e.id} className="card" style={{ padding: 12, fontSize: 13 }}>
-                  <span style={{ color: "#6B7280" }}>{formatDate(e.createdAt)}</span>
-                  <span style={{ marginLeft: 8, color: "#111827", fontWeight: 600 }}>
-                    {e.totalQuestions} questões · {e.status === "COMPLETED" ? "Concluído" : "Em andamento"}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+
+          {simulatedExams.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-black/[0.08] bg-white px-5 py-8 text-center">
+              <p className="text-[13px] text-gray-400">Nenhum simulado registrado ainda.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {simulatedExams.map((e) => {
+                const isCompleted = e.status === "COMPLETED";
+                const isAbandoned = e.status === "ABANDONED";
+                const acc =
+                  typeof e.correctAnswers === "number" && e.totalQuestions > 0
+                    ? Math.round((e.correctAnswers / e.totalQuestions) * 100)
+                    : null;
+                return (
+                  <div
+                    key={e.id}
+                    className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+                      <Target className="h-3.5 w-3.5 text-emerald-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-[#111827]">
+                        {e.totalQuestions} questões
+                      </p>
+                      <p className="text-[11.5px] text-gray-400">{formatDate(e.createdAt)}</p>
+                    </div>
+                    {isCompleted && acc !== null && (
+                      <span
+                        className={cn(
+                          "text-[12.5px] font-extrabold",
+                          acc >= 70 ? "text-emerald-600" : acc >= 50 ? "text-amber-600" : "text-red-500",
+                        )}
+                      >
+                        {acc}%
+                      </span>
+                    )}
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                    ) : isAbandoned ? (
+                      <XCircle className="h-4 w-4 shrink-0 text-red-400" />
+                    ) : (
+                      <Clock className="h-4 w-4 shrink-0 text-amber-400" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

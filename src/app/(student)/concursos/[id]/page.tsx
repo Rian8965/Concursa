@@ -7,25 +7,15 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, Target, BarChart3, History, Download,
   Clock, MapPin, Building2, Calendar, Briefcase,
-  ArrowRight, Play, Trophy, FileText, Sparkles,
+  ArrowRight, Play, Trophy, FileText, Database,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
+import { CompetitionTabs } from "@/components/student/CompetitionTabs";
 
 interface CompetitionPageProps {
   params: Promise<{ id: string }>;
 }
-
-const tabs = [
-  { label: "Visão Geral", href: "", icon: Trophy },
-  { label: "Matérias", href: "/materias", icon: BookOpen },
-  { label: "Treino", href: "/treino", icon: Play },
-  { label: "Simulado", href: "/simulado", icon: Target },
-  { label: "Apostilas", href: "/apostilas", icon: FileText },
-  { label: "Quiz do Edital", href: "/quiz", icon: Sparkles },
-  { label: "Desempenho", href: "/desempenho", icon: BarChart3 },
-  { label: "Histórico", href: "/historico", icon: History },
-];
 
 export default async function CompetitionPage({ params }: CompetitionPageProps) {
   const { id } = await params;
@@ -84,11 +74,17 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
   const totalCorrect = subjectStats.reduce((acc, s) => acc + s.correct, 0);
   const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
-  // Conta questões disponíveis para o aluno
+  // Conta questões disponíveis para o aluno (com filtro de banca se definida)
   const subjectIds = displaySubjects.map((s) => s.id);
+  const hasBanca = comp.examBoardDefined && comp.examBoardId;
   const questionsAvailable = subjectIds.length > 0
     ? await prisma.question.count({
-        where: { status: "ACTIVE", alternatives: { some: {} }, subjectId: { in: subjectIds } },
+        where: {
+          status: "ACTIVE",
+          alternatives: { some: {} },
+          subjectId: { in: subjectIds },
+          ...(hasBanca && { examBoardId: comp.examBoardId! }),
+        },
       })
     : 0;
 
@@ -160,7 +156,10 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                   {displaySubjects.length} matéria{displaySubjects.length !== 1 ? "s" : ""}
                 </span>
                 <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700">
-                  {questionsAvailable} questão{questionsAvailable !== 1 ? "ões" : ""} disponível{questionsAvailable !== 1 ? "is" : ""}
+                  {questionsAvailable.toLocaleString("pt-BR")} questão{questionsAvailable !== 1 ? "ões" : ""} disponível{questionsAvailable !== 1 ? "is" : ""}
+                  {hasBanca && comp.examBoard && (
+                    <span className="ml-1 opacity-70">· {comp.examBoard.acronym}</span>
+                  )}
                 </span>
               </div>
             </div>
@@ -211,20 +210,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
       )}
 
       {/* Abas */}
-      <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-black/[0.06] bg-[#F9FAFB] p-1">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.label}
-            href={`/concursos/${id}${tab.href}`}
-            className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[12.5px] font-medium text-[#6B7280] transition-all hover:bg-white hover:text-[#111827] hover:shadow-sm",
-            )}
-          >
-            <tab.icon className="h-3.5 w-3.5" />
-            {tab.label}
-          </Link>
-        ))}
-      </div>
+      <CompetitionTabs competitionId={id} />
 
       {/* Grade: ações + matérias */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">

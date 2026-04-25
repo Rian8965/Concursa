@@ -9,7 +9,7 @@ import {
   Play, TrendingUp, CheckCircle2, Database,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
-import { WeeklyPerformanceChart } from "@/components/student/PerformanceCharts";
+import { WeeklyPerformanceChart, AccuracyTrendChart } from "@/components/student/PerformanceCharts";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -292,33 +292,53 @@ export default async function StudentDashboardPage() {
             </div>
           )}
 
-          {/* Gráfico semanal */}
-          <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[14px] font-bold text-[#111827]">Evolução semanal</h3>
-                <p className="text-[12px] text-gray-400">Questões respondidas e acertos nos últimos 7 dias</p>
+          {/* Gráficos lado a lado (weekly + accuracy trend) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Evolução semanal */}
+            <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-[13px] font-bold text-[#111827]">Evolução semanal</h3>
+                  <p className="text-[11.5px] text-gray-400">Questões e acertos · 7 dias</p>
+                </div>
+                {weekTotal > 0 && (
+                  <div className="text-right">
+                    <p className="text-[13px] font-bold text-violet-700">{weekTotal}</p>
+                    <p className="text-[10.5px] text-gray-400">respondidas</p>
+                  </div>
+                )}
               </div>
+              <WeeklyPerformanceChart data={weekData} />
               {weekTotal > 0 && (
-                <div className="text-right">
-                  <p className="text-[13px] font-bold text-violet-700">{weekTotal} questões</p>
-                  <p className="text-[11px] text-gray-400">{weekCorrect} acertos</p>
+                <div className="mt-2 flex items-center gap-3 text-[10.5px]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-sm bg-violet-500" />
+                    Acertos
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-sm bg-gray-200" />
+                    Total
+                  </span>
                 </div>
               )}
             </div>
-            <WeeklyPerformanceChart data={weekData} />
-            {weekTotal > 0 && (
-              <div className="mt-3 flex items-center gap-4 text-[11px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-violet-500 inline-block" />
-                  Acertos
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-gray-200 inline-block" />
-                  Total
-                </span>
+
+            {/* Taxa de acerto */}
+            <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
+              <div className="mb-3">
+                <h3 className="text-[13px] font-bold text-[#111827]">Taxa de acerto</h3>
+                <p className="text-[11.5px] text-gray-400">Evolução diária · 7 dias</p>
               </div>
-            )}
+              <AccuracyTrendChart data={weekData} />
+              {weekTotal > 0 && (
+                <div className="mt-2 flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-violet-700">
+                    Semana: {weekTotal > 0 ? Math.round((weekCorrect / weekTotal) * 100) : 0}%
+                  </span>
+                  <span className="text-gray-400">{weekCorrect} de {weekTotal} acertos</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
