@@ -90,7 +90,7 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
         <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#D1D5DB" }} axisLine={false} tickLine={false} unit="%" />
         <Tooltip
-          formatter={(value: number) => [`${value}%`, "Acerto"]}
+          formatter={(value: number | string | null | undefined) => [`${value ?? 0}%`, "Acerto"]}
           contentStyle={{ borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 12 }}
         />
         <Area
