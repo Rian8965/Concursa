@@ -11,7 +11,7 @@ import {
 
 type Phase = "config" | "loading" | "exam" | "results";
 
-interface Alternative { id: string; letter: string; content: string }
+interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
   id: string; order: number; content: string; subject?: string;
   difficulty: string; alternatives: Alternative[];
@@ -773,7 +773,20 @@ export default function SimuladoPage() {
                   }}>
                     {alt.letter}
                   </span>
-                  <span style={{ fontSize: 14, lineHeight: 1.55, paddingTop: 3 }}>{alt.content}</span>
+                  <span style={{ fontSize: 14, lineHeight: 1.55, paddingTop: 3, flex: 1 }}>
+                    {(alt.imageUrl && String(alt.imageUrl).trim().length > 0) ? (
+                      <span style={{ display: "block" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={alt.imageUrl}
+                          alt=""
+                          style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }}
+                        />
+                      </span>
+                    ) : (
+                      alt.content
+                    )}
+                  </span>
                 </button>
               );
             })}

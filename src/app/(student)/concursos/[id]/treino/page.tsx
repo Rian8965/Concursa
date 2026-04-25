@@ -172,7 +172,7 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
 
 type Phase = "config" | "loading" | "training" | "summary";
 
-interface Alternative { id: string; letter: string; content: string }
+interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
   id: string; content: string; correctAnswer: string;
   supportText?: string | null;
@@ -625,7 +625,20 @@ export default function TreinoPage() {
               }}>
                 {alt.letter}
               </span>
-              <span style={{ fontSize: 14, lineHeight: 1.55, paddingTop: 3 }}>{alt.content}</span>
+              <span style={{ fontSize: 14, lineHeight: 1.55, paddingTop: 3, flex: 1 }}>
+                {(alt.imageUrl && String(alt.imageUrl).trim().length > 0) ? (
+                  <span style={{ display: "block" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={alt.imageUrl}
+                      alt=""
+                      style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }}
+                    />
+                  </span>
+                ) : (
+                  alt.content
+                )}
+              </span>
               {revealed && isCorrect && <CheckCircle2 style={{ width: 18, height: 18, color: "#059669", flexShrink: 0, marginLeft: "auto", marginTop: 3 }} />}
               {revealed && isSelected && !isCorrect && <XCircle style={{ width: 18, height: 18, color: "#DC2626", flexShrink: 0, marginLeft: "auto", marginTop: 3 }} />}
             </button>

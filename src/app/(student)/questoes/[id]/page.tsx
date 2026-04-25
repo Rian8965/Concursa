@@ -169,7 +169,20 @@ export default function StudentQuestionDetailPage() {
                 )}
               >
                 <span className="mt-0.5 font-bold text-slate-500">{a.letter})</span>
-                <span className="text-slate-800 whitespace-pre-wrap">{a.content}</span>
+                <span className="text-slate-800 whitespace-pre-wrap">
+                  {a.imageUrl && String(a.imageUrl).trim().length > 0 ? (
+                    <span className="block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={a.imageUrl}
+                        alt=""
+                        className="mt-1 max-h-[min(420px,55vh)] w-full rounded-xl border border-slate-200 object-contain"
+                      />
+                    </span>
+                  ) : (
+                    a.content
+                  )}
+                </span>
               </div>
             );
           })}
