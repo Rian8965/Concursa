@@ -12,22 +12,6 @@ import {
 import { formatDate } from "@/lib/utils/date";
 
 export default async function AdminDashboardPage() {
-  // #region agent log
-  fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-    body: JSON.stringify({
-      sessionId: "03dbee",
-      runId: "pre-fix",
-      hypothesisId: "H-admin-dashboard-srv",
-      location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:entry",
-      message: "admin dashboard render start",
-      data: { at: Date.now() },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role === "STUDENT") redirect("/dashboard");
@@ -53,33 +37,6 @@ export default async function AdminDashboardPage() {
       prisma.studentAnswer.count(),
       prisma.studentAnswer.count({ where: { isCorrect: true } }),
     ]);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "pre-fix",
-        hypothesisId: "H-admin-dashboard-srv",
-        location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:afterQueries",
-        message: "admin dashboard queries ok",
-        data: {
-          totalStudents,
-          activeStudents,
-          totalCompetitions,
-          activeCompetitions,
-          activeQuestions,
-          pendingImports,
-          recentCompetitions: recentCompetitions.length,
-          recentImports: recentImports.length,
-          totalAnswered,
-          correctAnswers,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     const avgAccuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
 
@@ -280,21 +237,6 @@ export default async function AdminDashboardPage() {
       </div>
     );
   } catch (e) {
-    // #region agent log
-    fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "03dbee" },
-      body: JSON.stringify({
-        sessionId: "03dbee",
-        runId: "pre-fix",
-        hypothesisId: "H-admin-dashboard-srv",
-        location: "src/app/admin/(painel)/dashboard/page.tsx:AdminDashboardPage:catch",
-        message: "admin dashboard render failed",
-        data: { message: e instanceof Error ? e.message : String(e), stackTop: e instanceof Error ? (e.stack ?? "").split("\n").slice(0, 8).join("\n") : null },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     throw e;
   }
 }

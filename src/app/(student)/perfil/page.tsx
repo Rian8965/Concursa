@@ -3,11 +3,15 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { User, Mail, Lock, Save, Trophy, Target, BookOpen } from "lucide-react";
+import { User, Mail, Lock, Save, Trophy, Target, BookOpen, Shield } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { formatDate } from "@/lib/utils/date";
 
 interface ProfileData {
-  name: string; email: string; role: string; createdAt: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
   studentProfile?: {
     plan?: { name: string } | null;
     accessExpiresAt?: string | null;
@@ -24,18 +28,13 @@ export default function PerfilPage() {
 
   useEffect(() => {
     if (!session?.user?.id) return;
-
     fetch("/api/student/me")
       .then(async (r) => {
         const data = await r.json();
-        if (!r.ok) throw new Error((data as { error?: string }).error ?? "Erro ao carregar perfil");
+        if (!r.ok) throw new Error((data as { error?: string }).error ?? "Erro");
         return data as { user: ProfileData };
       })
       .then(({ user }) => {
-        if (!user?.name) {
-          setForm((f) => ({ ...f, name: session.user?.name ?? "" }));
-          return;
-        }
         setProfile(user);
         setForm((f) => ({ ...f, name: user.name }));
       })
@@ -61,26 +60,60 @@ export default function PerfilPage() {
   }
 
   const stats = profile?.studentProfile?._count;
+  const initials = session?.user?.name?.charAt(0)?.toUpperCase() ?? "A";
 
   return (
-    <div style={{ maxWidth: 680 }}>
-      <PageHeader title="Meu Perfil" description="Gerencie suas informações e preferências" />
+    <div className="animate-fade-in space-y-6 pb-8" style={{ maxWidth: 680 }}>
+      {/* Header */}
+      <div>
+        <h1 className="text-[22px] font-extrabold tracking-tight text-[#111827]">Meu Perfil</h1>
+        <p className="mt-0.5 text-[13px] text-gray-500">Gerencie suas informações e preferências</p>
+      </div>
+
+      {/* Avatar + info */}
+      <div className="flex items-center gap-4 rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
+        <div
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-[22px] font-bold text-white"
+          style={{ background: "linear-gradient(135deg, #7C3AED, #A855F7)", boxShadow: "0 4px 14px rgba(124,58,237,0.30)" }}
+        >
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-bold text-[#111827]">{session?.user?.name}</p>
+          <p className="text-[13px] text-gray-400">{session?.user?.email}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            {profile?.studentProfile?.plan && (
+              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-bold text-violet-700">
+                {profile.studentProfile.plan.name}
+              </span>
+            )}
+            {profile?.studentProfile?.accessExpiresAt && (
+              <span className="text-[11.5px] text-gray-400">
+                Acesso até {formatDate(profile.studentProfile.accessExpiresAt)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Stats */}
       {stats && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
+        <div className="grid grid-cols-3 gap-3">
           {[
-            { label: "Respondidas", value: stats.studentAnswers, icon: <BookOpen style={{ width: 16, height: 16 }} />, color: "#7C3AED" },
-            { label: "Treinos", value: stats.trainingSessions, icon: <Target style={{ width: 16, height: 16 }} />, color: "#059669" },
-            { label: "Simulados", value: stats.simulatedExams, icon: <Trophy style={{ width: 16, height: 16 }} />, color: "#D97706" },
+            { label: "Respondidas", value: stats.studentAnswers, icon: BookOpen, color: "#7C3AED", bg: "#F5F3FF" },
+            { label: "Treinos", value: stats.trainingSessions, icon: Target, color: "#059669", bg: "#F0FDF4" },
+            { label: "Simulados", value: stats.simulatedExams, icon: Trophy, color: "#D97706", bg: "#FFFBEB" },
           ].map((s) => (
-            <div key={s.label} className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>
-                {s.icon}
+            <div key={s.label} className="flex items-center gap-3 rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: s.bg }}
+              >
+                <s.icon className="h-4 w-4" style={{ color: s.color }} />
               </div>
               <div>
-                <p style={{ fontSize: 20, fontWeight: 800, color: "#111827", lineHeight: 1 }}>{s.value}</p>
-                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{s.label}</p>
+                <p className="text-[20px] font-extrabold leading-none tracking-tight" style={{ color: s.color }}>{s.value}</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">{s.label}</p>
               </div>
             </div>
           ))}
@@ -88,90 +121,99 @@ export default function PerfilPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, background: "#F3F4F6", padding: 4, borderRadius: 12, marginBottom: 20 }}>
+      <div className="flex gap-1 rounded-xl border border-black/[0.07] bg-[#F9FAFB] p-1">
         {(["info", "security"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{
-              flex: 1, height: 36, borderRadius: 8, fontSize: 13, fontWeight: 600,
-              background: tab === t ? "#FFFFFF" : "transparent",
-              border: tab === t ? "1px solid #E5E7EB" : "none",
-              color: tab === t ? "#111827" : "#6B7280",
-              cursor: "pointer", boxShadow: tab === t ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
-              fontFamily: "var(--font-sans)", transition: "all 0.15s",
-            }}>
-            {t === "info" ? "Dados Pessoais" : "Segurança"}
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all",
+              tab === t
+                ? "bg-white text-[#111827] shadow-sm"
+                : "text-gray-500 hover:text-[#111827]",
+            )}
+          >
+            {t === "info" ? <><User className="h-3.5 w-3.5" /> Dados Pessoais</> : <><Shield className="h-3.5 w-3.5" /> Segurança</>}
           </button>
         ))}
       </div>
 
+      {/* Dados pessoais */}
       {tab === "info" && (
-        <div className="card" style={{ padding: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #7C3AED, #A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, color: "#fff" }}>
-              {session?.user?.name?.charAt(0)?.toUpperCase() ?? "A"}
+        <div className="rounded-xl border border-black/[0.07] bg-white p-6 shadow-sm">
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
+                <User className="h-3.5 w-3.5" /> Nome
+              </label>
+              <input
+                className="input"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Seu nome"
+              />
             </div>
             <div>
-              <p style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{session?.user?.name}</p>
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>{session?.user?.email}</p>
-              {profile?.studentProfile?.plan && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 10, display: "inline-block", marginTop: 4 }}>
-                  {profile.studentProfile.plan.name}
-                </span>
-              )}
+              <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
+                <Mail className="h-3.5 w-3.5" /> E-mail
+              </label>
+              <input
+                className="input"
+                value={session?.user?.email ?? ""}
+                disabled
+                style={{ opacity: 0.6, cursor: "not-allowed" }}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">O e-mail não pode ser alterado</p>
             </div>
           </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                <User style={{ width: 13, height: 13, display: "inline", marginRight: 5 }} />Nome
-              </label>
-              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                <Mail style={{ width: 13, height: 13, display: "inline", marginRight: 5 }} />E-mail
-              </label>
-              <input className="input" value={session?.user?.email ?? ""} disabled style={{ opacity: 0.6 }} />
-              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>O e-mail não pode ser alterado</p>
-            </div>
-            {profile?.studentProfile?.accessExpiresAt && (
-              <div style={{ background: "#F8F7FF", border: "1px solid #EDE9FE", borderRadius: 10, padding: "12px 14px" }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#7C3AED" }}>
-                  Acesso válido até: {new Date(profile.studentProfile.accessExpiresAt).toLocaleDateString("pt-BR")}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
-            <button onClick={saveInfo} disabled={saving} className="btn btn-primary">
-              <Save style={{ width: 14, height: 14 }} /> {saving ? "Salvando..." : "Salvar"}
+          <div className="mt-5 flex justify-end border-t border-black/[0.05] pt-5">
+            <button
+              type="button"
+              onClick={() => void saveInfo()}
+              disabled={saving}
+              className="btn btn-primary px-6"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? "Salvando…" : "Salvar alterações"}
             </button>
           </div>
         </div>
       )}
 
+      {/* Segurança */}
       {tab === "security" && (
-        <div className="card" style={{ padding: 28 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 18 }}>Alterar Senha</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Senha atual</label>
-              <input type="password" className="input" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} placeholder="••••••••" />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nova senha</label>
-              <input type="password" className="input" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} placeholder="Mínimo 6 caracteres" />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Confirmar nova senha</label>
-              <input type="password" className="input" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} placeholder="Repita a nova senha" />
-            </div>
+        <div className="rounded-xl border border-black/[0.07] bg-white p-6 shadow-sm">
+          <p className="mb-4 text-[14px] font-bold text-[#111827]">Alterar Senha</p>
+          <div className="space-y-4">
+            {[
+              { key: "currentPassword" as const, label: "Senha atual", placeholder: "••••••••" },
+              { key: "newPassword" as const, label: "Nova senha", placeholder: "Mínimo 6 caracteres" },
+              { key: "confirmPassword" as const, label: "Confirmar nova senha", placeholder: "Repita a nova senha" },
+            ].map((f) => (
+              <div key={f.key}>
+                <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
+                  <Lock className="h-3.5 w-3.5" /> {f.label}
+                </label>
+                <input
+                  type="password"
+                  className="input"
+                  value={form[f.key]}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                />
+              </div>
+            ))}
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
-            <button onClick={savePassword} disabled={saving} className="btn btn-primary">
-              <Lock style={{ width: 14, height: 14 }} /> {saving ? "Salvando..." : "Alterar Senha"}
+          <div className="mt-5 flex justify-end border-t border-black/[0.05] pt-5">
+            <button
+              type="button"
+              onClick={() => void savePassword()}
+              disabled={saving}
+              className="btn btn-primary px-6"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              {saving ? "Salvando…" : "Alterar Senha"}
             </button>
           </div>
         </div>

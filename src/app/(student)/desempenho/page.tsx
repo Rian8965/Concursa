@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
-import { StatsCard } from "@/components/shared/StatsCard";
-import { BookOpen, Target, Trophy, TrendingUp } from "lucide-react";
+import { BookOpen, Target, Trophy, TrendingUp, ArrowRight } from "lucide-react";
 
 export default async function DesempenhoPage() {
   const session = await auth();
@@ -11,7 +11,13 @@ export default async function DesempenhoPage() {
 
   const profile = await prisma.studentProfile.findUnique({
     where: { userId: session.user.id },
-    include: { studentCompetitions: { where: { isActive: true }, include: { competition: { select: { id: true, name: true } } }, take: 5 } },
+    include: {
+      studentCompetitions: {
+        where: { isActive: true },
+        include: { competition: { select: { id: true, name: true } } },
+        take: 5,
+      },
+    },
   });
   if (!profile) redirect("/dashboard");
 
@@ -24,11 +30,10 @@ export default async function DesempenhoPage() {
 
   const accuracy = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
 
-  // Performance by subject
   const subjects = await prisma.subject.findMany({
     where: { questions: { some: { studentAnswers: { some: { studentProfileId: profile.id } } } } },
     select: { id: true, name: true, color: true },
-    take: 10,
+    take: 12,
   });
 
   const subjectPerf = await Promise.all(
@@ -40,52 +45,109 @@ export default async function DesempenhoPage() {
       return { ...s, total, correct, accuracy: total > 0 ? Math.round((correct / total) * 100) : 0 };
     })
   );
-
   subjectPerf.sort((a, b) => b.total - a.total);
 
-  // Last 7 days activity
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const recentAnswers = await prisma.studentAnswer.count({
     where: { studentProfileId: profile.id, answeredAt: { gte: sevenDaysAgo } },
   });
 
+  const stats = [
+    {
+      label: "Questões respondidas",
+      value: totalAnswered.toLocaleString("pt-BR"),
+      sub: `${recentAnswers} nos últimos 7 dias`,
+      icon: BookOpen,
+      color: "#7C3AED",
+      bg: "#F5F3FF",
+    },
+    {
+      label: "Taxa de acerto",
+      value: `${accuracy}%`,
+      sub: `${correctAnswers} acertos no total`,
+      icon: Target,
+      color: accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626",
+      bg: accuracy >= 70 ? "#F0FDF4" : accuracy >= 50 ? "#FFFBEB" : "#FEF2F2",
+    },
+    {
+      label: "Treinos realizados",
+      value: trainingSessions,
+      sub: "sessões de treino",
+      icon: TrendingUp,
+      color: "#7C3AED",
+      bg: "#F5F3FF",
+    },
+    {
+      label: "Simulados completos",
+      value: simulatedExams,
+      sub: "simulados concluídos",
+      icon: Trophy,
+      color: "#059669",
+      bg: "#F0FDF4",
+    },
+  ];
+
   return (
-    <div style={{ maxWidth: 900 }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Desempenho</h1>
-        <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>Análise completa da sua evolução nos estudos</p>
+    <div className="animate-fade-in space-y-6 pb-8">
+      {/* Cabeçalho */}
+      <div>
+        <h1 className="text-[22px] font-extrabold tracking-tight text-[#111827]">Desempenho</h1>
+        <p className="mt-0.5 text-[13px] text-gray-500">Análise completa da sua evolução nos estudos</p>
       </div>
 
-      {/* Stats grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
-        <StatsCard title="Respondidas" value={totalAnswered.toLocaleString("pt-BR")} description="no total" icon={<BookOpen style={{ width: 16, height: 16 }} />} accent="#7C3AED" />
-        <StatsCard title="Taxa de Acerto" value={`${accuracy}%`} description={`${correctAnswers} acertos`} icon={<Target style={{ width: 16, height: 16 }} />} accent={accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626"} />
-        <StatsCard title="Treinos" value={trainingSessions} description="sessões" icon={<TrendingUp style={{ width: 16, height: 16 }} />} accent="#7C3AED" />
-        <StatsCard title="Simulados" value={simulatedExams} description="concluídos" icon={<Trophy style={{ width: 16, height: 16 }} />} accent="#059669" />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Desempenho por matéria */}
-        <div className="card" style={{ padding: 22 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 16, letterSpacing: "-0.02em" }}>
-            Desempenho por Matéria
-          </h3>
-          {subjectPerf.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "24px 0" }}>
-              Responda questões para ver seu desempenho por matéria
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11.5px] font-semibold text-gray-500">{s.label}</p>
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ background: s.bg }}
+              >
+                <s.icon className="h-4 w-4" style={{ color: s.color }} />
+              </div>
+            </div>
+            <p className="text-[24px] font-extrabold leading-none tracking-tight" style={{ color: s.color }}>
+              {s.value}
             </p>
+            <p className="mt-1.5 text-[11px] text-gray-400">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Desempenho por matéria + Concursos */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
+        {/* Por matéria */}
+        <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
+          <h3 className="mb-4 text-[14px] font-bold text-[#111827]">Desempenho por matéria</h3>
+          {subjectPerf.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10">
+              <BookOpen className="mb-3 h-8 w-8 text-gray-300" strokeWidth={1.5} />
+              <p className="text-[13px] text-gray-400">
+                Responda questões para ver seu desempenho por matéria
+              </p>
+            </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="flex flex-col gap-4">
               {subjectPerf.map((s) => (
                 <div key={s.id}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 4, height: 16, borderRadius: 2, background: s.color ?? "#7C3AED", flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{s.name}</span>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{ background: s.color ?? "#7C3AED" }}
+                      />
+                      <span className="text-[13px] font-semibold text-[#374151]">{s.name}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#9CA3AF" }}>
-                      <span>{s.total} questões</span>
-                      <span style={{ fontWeight: 700, color: s.accuracy >= 70 ? "#059669" : s.accuracy >= 50 ? "#D97706" : "#DC2626" }}>
+                    <div className="flex items-center gap-3 text-[12px]">
+                      <span className="text-gray-400">{s.total} questões</span>
+                      <span
+                        className="font-bold"
+                        style={{
+                          color: s.accuracy >= 70 ? "#059669" : s.accuracy >= 50 ? "#D97706" : "#DC2626",
+                        }}
+                      >
                         {s.accuracy}%
                       </span>
                     </div>
@@ -97,38 +159,50 @@ export default async function DesempenhoPage() {
           )}
         </div>
 
-        {/* Resumo */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Coluna direita */}
+        <div className="space-y-4">
           {/* Atividade recente */}
-          <div className="card" style={{ padding: 22 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 12, letterSpacing: "-0.02em" }}>
+          <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+            <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-gray-400">
               Últimos 7 dias
-            </h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "#EDE9FE", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <TrendingUp style={{ width: 22, height: 22, color: "#7C3AED" }} />
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-50">
+                <TrendingUp className="h-5 w-5 text-violet-600" />
               </div>
               <div>
-                <p style={{ fontSize: 28, fontWeight: 800, color: "#111827", letterSpacing: "-0.04em", lineHeight: 1 }}>{recentAnswers}</p>
-                <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>questões respondidas</p>
+                <p className="text-[28px] font-extrabold leading-none tracking-tight text-[#111827]">
+                  {recentAnswers}
+                </p>
+                <p className="mt-1 text-[12px] text-gray-400">questões respondidas</p>
               </div>
             </div>
           </div>
 
-          {/* Concursos */}
-          <div className="card" style={{ padding: 22 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 12, letterSpacing: "-0.02em" }}>
-              Meus Concursos
-            </h3>
+          {/* Meus concursos */}
+          <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-gray-400">Meus concursos</p>
+              <Link href="/concursos" className="text-[12px] font-semibold text-violet-600 hover:text-violet-800">
+                Ver todos <ArrowRight className="inline h-3 w-3" />
+              </Link>
+            </div>
             {profile.studentCompetitions.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum concurso vinculado</p>
+              <p className="text-[13px] text-gray-400">Nenhum concurso vinculado</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="flex flex-col gap-2">
                 {profile.studentCompetitions.map((sc) => (
-                  <div key={sc.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#7C3AED" }} />
-                    <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{sc.competition.name}</span>
-                  </div>
+                  <Link
+                    key={sc.id}
+                    href={`/concursos/${sc.competitionId}/desempenho`}
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-gray-50"
+                  >
+                    <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                    <span className="flex-1 truncate text-[13px] font-medium text-[#374151]">
+                      {sc.competition.name}
+                    </span>
+                    <ArrowRight className="h-3 w-3 shrink-0 text-gray-300" />
+                  </Link>
                 ))}
               </div>
             )}
