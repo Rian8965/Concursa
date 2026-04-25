@@ -17,6 +17,7 @@ const statusVariants: Record<string, "upcoming" | "active" | "past" | "cancelled
 };
 
 export default async function CompetitionsPage() {
+  const nowMs = new Date().getTime();
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -82,7 +83,7 @@ export default async function CompetitionsPage() {
               try {
                 const d = new Date(comp.examDate);
                 if (!isNaN(d.getTime())) {
-                  const diff = Math.floor((d.getTime() - Date.now()) / 86400000);
+                  const diff = Math.floor((d.getTime() - nowMs) / 86400000);
                   if (diff >= 0) daysLeft = diff;
                 }
               } catch { /* ignorado */ }

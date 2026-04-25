@@ -7,10 +7,12 @@ import {
   ApostilaPdfDocument,
   type ApostilaQuestionRow,
 } from "@/components/pdf/apostila-document";
+import { getEligibleSubjectsForStudentCompetition } from "@/lib/questions/eligible-subjects";
+import { selectQuestionsForStudent } from "@/lib/questions/select-questions";
 
 const MIN_Q = 5;
 const MAX_Q = 60;
-const DEFAULT_Q = 28;
+const DEFAULT_Q = 40;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -20,6 +22,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const competitionId = body.competitionId as string | undefined;
+  const requestedSubjectIds = Array.isArray(body.subjectIds) ? body.subjectIds.filter(Boolean) as string[] : [];
+  const difficulty = typeof body.difficulty === "string" && body.difficulty !== "ALL" ? body.difficulty : null;
+  const includeAnswerKey = body.includeAnswerKey !== false;
+
   let count = typeof body.questionCount === "number" ? body.questionCount : DEFAULT_Q;
   count = Math.min(MAX_Q, Math.max(MIN_Q, Math.floor(count)));
 
@@ -47,59 +53,71 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Concurso não disponível no seu plano" }, { status: 403 });
   }
 
-  const usedRows = await prisma.usedQuestion.findMany({
-    where: { studentProfileId: profile.id, usedInType: "APOSTILA" },
-    select: { questionId: true },
+  const comp = await prisma.competition.findUnique({
+    where: { id: competitionId },
+    select: { examBoardDefined: true, examBoardId: true, name: true },
   });
-  const usedIds = usedRows.map((r) => r.questionId);
 
-  const baseWhere = {
-    status: "ACTIVE" as const,
+  const examBoardId = (comp?.examBoardDefined && comp.examBoardId) ? comp.examBoardId : null;
+
+  const { subjectIds: allowedSubjectIds, jobRoleId } = await getEligibleSubjectsForStudentCompetition({
+    studentProfileId: profile.id,
     competitionId,
-    alternatives: { some: {} },
-  };
-
-  const unusedWhere =
-    usedIds.length > 0 ? { ...baseWhere, id: { notIn: usedIds } } : baseWhere;
-
-  let questions = await prisma.question.findMany({
-    where: unusedWhere,
-    include: {
-      alternatives: { orderBy: { order: "asc" } },
-      subject: { select: { name: true } },
-    },
-    take: Math.min(count * 4, 200),
   });
 
-  if (questions.length < count) {
-    questions = await prisma.question.findMany({
-      where: baseWhere,
-      include: {
-        alternatives: { orderBy: { order: "asc" } },
-        subject: { select: { name: true } },
-      },
-      take: Math.min(count * 4, 200),
-    });
-  }
+  const eligibleSubjectIds = requestedSubjectIds.length
+    ? requestedSubjectIds.filter((s) => allowedSubjectIds.includes(s))
+    : allowedSubjectIds;
 
-  if (questions.length === 0) {
+  if (eligibleSubjectIds.length === 0) {
     return NextResponse.json(
-      { error: "Não há questões publicadas para este concurso ainda." },
+      { error: "Não há matérias disponíveis para o seu cargo neste concurso." },
       { status: 400 }
     );
   }
 
-  const shuffled = [...questions].sort(() => Math.random() - 0.5).slice(0, count);
+  // Distribuição equilibrada por matéria
+  const per = Math.floor(count / eligibleSubjectIds.length);
+  let remainder = count - (per * eligibleSubjectIds.length);
+
+  const picked: { id: string; order: number }[] = [];
+  const pickedQuestions: Awaited<ReturnType<typeof selectQuestionsForStudent>>["questions"] = [];
+
+  for (const subjectId of eligibleSubjectIds) {
+    const take = per + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    if (take <= 0) continue;
+
+    const { questions } = await selectQuestionsForStudent({
+      studentProfileId: profile.id,
+      competitionId,
+      jobRoleId,
+      subjectIds: [subjectId],
+      examBoardId,
+      difficulty,
+      quantity: take,
+      deliveryType: "APOSTILA",
+    });
+    pickedQuestions.push(...questions);
+  }
+
+  // Ordenação final embaralhada (mantém balanceamento, mas ainda aleatório)
+  const shuffled = [...pickedQuestions]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count)
+    .map((x) => x.question);
 
   const rows: ApostilaQuestionRow[] = shuffled.map((q, i) => ({
     order: i + 1,
     content: q.content,
     supportText: q.supportText ?? null,
     subjectName: q.subject?.name ?? null,
+    questionImageUrl: q.imageUrl ?? null,
     alternatives: q.alternatives.map((a) => ({
       letter: a.letter,
       content: a.content,
     })),
+    correctAnswer: q.correctAnswer,
   }));
 
   const title = `Apostila — ${enrollment.competition.name}`;
@@ -112,7 +130,7 @@ export async function POST(req: NextRequest) {
     <ApostilaPdfDocument
       title={title}
       generatedAt={generatedAt}
-      questions={rows}
+      questions={includeAnswerKey ? rows : rows.map((r) => ({ ...r, correctAnswer: "-" }))}
     />
   );
 
@@ -132,13 +150,6 @@ export async function POST(req: NextRequest) {
           })),
         },
       },
-    });
-    await tx.usedQuestion.createMany({
-      data: shuffled.map((q) => ({
-        studentProfileId: profile.id,
-        questionId: q.id,
-        usedInType: "APOSTILA" as const,
-      })),
     });
   });
 

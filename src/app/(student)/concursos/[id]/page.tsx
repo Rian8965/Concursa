@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, Target, BarChart3, History, Download,
   Clock, MapPin, Building2, Calendar, Briefcase,
-  ArrowRight, Play, Trophy, FileText, Database,
+  ArrowRight, Play, Trophy, FileText, Database, ClipboardCheck,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
@@ -226,6 +226,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
               { icon: Play, label: "Iniciar Treino", desc: "Questões das suas matérias", href: `/concursos/${id}/treino`, primary: true },
               { icon: Target, label: "Novo Simulado", desc: "Teste cronometrado", href: `/concursos/${id}/simulado`, primary: false },
               { icon: Download, label: "Baixar Apostila", desc: "PDF para estudar offline", href: `/concursos/${id}/apostilas`, primary: false },
+              { icon: ClipboardCheck, label: "Preencher gabarito", desc: "Corrigir apostila baixada", href: `/concursos/${id}/gabarito`, primary: false },
               { icon: History, label: "Histórico", desc: "Simulados realizados", href: `/concursos/${id}/historico`, primary: false },
             ].map((action) => (
               <Link

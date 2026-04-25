@@ -7,7 +7,7 @@ import {
   BookOpen, Target, Trophy, Zap,
   ArrowRight, Calendar, MapPin, Briefcase,
   Play, TrendingUp, CheckCircle2, Database,
-  Building2, Sparkles, ChevronRight,
+  Building2, Sparkles, ChevronRight, ClipboardCheck,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 import { WeeklyPerformanceChart, AccuracyTrendChart } from "@/components/student/PerformanceCharts";
@@ -120,9 +120,10 @@ export default async function StudentDashboardPage() {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
+  const nowMs = now.getTime();
   const mainExamMs = safeMs(mainComp?.competition?.examDate);
-  const daysLeft = !isNaN(mainExamMs) && mainExamMs > Date.now()
-    ? Math.floor((mainExamMs - Date.now()) / 86400000)
+  const daysLeft = !isNaN(mainExamMs) && mainExamMs > nowMs
+    ? Math.floor((mainExamMs - nowMs) / 86400000)
     : null;
 
   const jobRoleArea =
@@ -480,6 +481,14 @@ export default async function StudentDashboardPage() {
                   href: mainComp ? `/concursos/${mainComp.competitionId}/desempenho` : "/concursos",
                   color: "#2563EB",
                   bg: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
+                },
+                {
+                  icon: ClipboardCheck,
+                  label: "Preencher Gabarito",
+                  sub: "Corrigir apostila baixada",
+                  href: mainComp ? `/concursos/${mainComp.competitionId}/gabarito` : "/concursos",
+                  color: "#7C3AED",
+                  bg: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)",
                 },
                 {
                   icon: CheckCircle2,

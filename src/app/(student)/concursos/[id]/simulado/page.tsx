@@ -265,7 +265,7 @@ export default function SimuladoPage() {
   const [phase, setPhase] = useState<Phase>("config");
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [quantity, setQuantity] = useState(20);
+  const [quantity, setQuantity] = useState(30);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(60);
   const [isFreeMode, setIsFreeMode] = useState(false);
 
@@ -283,6 +283,7 @@ export default function SimuladoPage() {
   const [correctCount, setCorrectCount] = useState(0);
 
   const [reportModal, setReportModal] = useState<ReportModalState | null>(null);
+  const [nowMs, setNowMs] = useState(() => new Date().getTime());
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const examIdRef = useRef<string>("");
@@ -347,6 +348,12 @@ export default function SimuladoPage() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [phase, isFreeModeActive, startTime, submitExam, timeLeft]);
+
+  useEffect(() => {
+    if (phase !== "results") return;
+    const t = setInterval(() => setNowMs(new Date().getTime()), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
 
   // Anti-exit: block browser navigation during exam
   useEffect(() => {
@@ -573,7 +580,7 @@ export default function SimuladoPage() {
   // ── RESULTS ───────────────────────────────────────────────────────────────
   if (phase === "results") {
     const color = score >= 70 ? "#059669" : score >= 50 ? "#D97706" : "#DC2626";
-    const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
+    const elapsedSeconds = Math.round((nowMs - startTime) / 1000);
     const mins = Math.floor(elapsedSeconds / 60);
     const secs = elapsedSeconds % 60;
 

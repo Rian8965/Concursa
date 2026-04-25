@@ -213,6 +213,7 @@ export default function TreinoPage() {
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [startTime, setStartTime] = useState(0);
   const [reportModal, setReportModal] = useState<{ questionId: string } | null>(null);
+  const [nowMs, setNowMs] = useState(() => new Date().getTime());
 
   useEffect(() => {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
@@ -277,7 +278,7 @@ export default function TreinoPage() {
 
   const finishSession = useCallback(async () => {
     const correct = Object.values(answers).filter((a) => a.isCorrect).length;
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    const elapsed = Math.round((new Date().getTime() - startTime) / 1000);
     await fetch(`/api/training/${sessionId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -287,15 +288,15 @@ export default function TreinoPage() {
   }, [answers, sessionId, startTime]);
 
   useEffect(() => {
-    if (phase === "training" && questions.length > 0 && currentIdx >= questions.length) {
-      finishSession();
-    }
-  }, [currentIdx, phase, questions.length, finishSession]);
+    if (phase !== "training") return;
+    const t = setInterval(() => setNowMs(new Date().getTime()), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
 
   const correctCount = Object.values(answers).filter((a) => a.isCorrect).length;
   const totalAnswered = Object.keys(answers).length;
   const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
-  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const elapsed = Math.round((nowMs - startTime) / 1000);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
 

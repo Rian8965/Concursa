@@ -45,10 +45,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { correctAnswers: correctCount, timeSpentSeconds: timeSpentSeconds || 0, status: "COMPLETED", completedAt: new Date() },
   });
 
-  const withSelection = answers.filter((a) => a.selectedAnswer);
+  // Registra no histórico do aluno:
+  // - respostas marcadas normalmente
+  // - questões não respondidas contam como erradas (selectedAnswer = "-")
   const wrongIds = [
     ...new Set(
-      withSelection
+      answers
         .filter((a) => {
           const r = results.find((x) => x.questionId === a.questionId);
           return r && !r.isCorrect;
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : [];
   const qMap = new Map(questionsById.map((q) => [q.id, q]));
 
-  for (const a of withSelection) {
+  for (const a of answers) {
     const r = results.find((x) => x.questionId === a.questionId);
     if (!r) continue;
 
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             content: q.content,
             supportText: q.supportText,
             alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
-            selectedAnswer: a.selectedAnswer!,
+            selectedAnswer: a.selectedAnswer ?? "-",
             correctAnswer: q.correctAnswer,
           });
         } catch (e) {
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         studentProfileId: profile.id,
         questionId: a.questionId,
-        selectedAnswer: a.selectedAnswer!,
+        selectedAnswer: a.selectedAnswer ?? "-",
         isCorrect: r.isCorrect,
         sessionType: "EXAM",
         sessionId: id,

@@ -4,6 +4,7 @@ import {
   Text,
   View,
   StyleSheet,
+  Image,
 } from "@react-pdf/renderer";
 
 export type ApostilaQuestionRow = {
@@ -11,7 +12,9 @@ export type ApostilaQuestionRow = {
   content: string;
   supportText: string | null;
   subjectName: string | null;
+  questionImageUrl?: string | null;
   alternatives: { letter: string; content: string }[];
+  correctAnswer: string;
 };
 
 const styles = StyleSheet.create({
@@ -40,20 +43,67 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     textTransform: "uppercase",
   },
+  supportBox: {
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    backgroundColor: "#F8F7FF",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+  },
   supportBody: {
     fontSize: 9,
     lineHeight: 1.4,
     color: "#4B5563",
+  },
+  figureLabel: {
+    fontSize: 8,
+    fontWeight: "bold",
+    color: "#6B7280",
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  figureBox: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 10,
     marginBottom: 6,
-    padding: 8,
-    backgroundColor: "#F5F3FF",
-    borderLeftWidth: 3,
-    borderLeftColor: "#C4B5FD",
+  },
+  figureImage: {
+    width: "100%",
+    objectFit: "contain",
   },
   stem: { fontSize: 10, lineHeight: 1.45, color: "#1F2937", marginBottom: 6 },
   altRow: { flexDirection: "row", marginBottom: 3, paddingLeft: 4 },
   altLetter: { width: 18, fontWeight: "bold", color: "#4B5563" },
   altText: { flex: 1, fontSize: 9, lineHeight: 1.35, color: "#374151" },
+  answerKeyTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  answerKeyGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  answerKeyItem: {
+    width: "23%",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "#F9FAFB",
+  },
+  answerKeyItemText: {
+    fontSize: 10,
+    color: "#111827",
+    fontWeight: "bold",
+  },
   footer: {
     position: "absolute",
     bottom: 24,
@@ -85,6 +135,10 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export function ApostilaPdfDocument({ title, generatedAt, questions }: Props) {
   const pages = chunk(questions, 5);
 
+  const answerKey = questions
+    .filter((q) => q.correctAnswer && q.correctAnswer !== "-")
+    .map((q) => ({ order: q.order, correctAnswer: q.correctAnswer }));
+
   return (
     <Document>
       {pages.map((block, pi) => (
@@ -110,11 +164,15 @@ export function ApostilaPdfDocument({ title, generatedAt, questions }: Props) {
                 <Text style={styles.subject}>{q.subjectName}</Text>
               ) : null}
               {q.supportText ? (
-                <View style={{ marginBottom: 4 }}>
+                <View style={styles.supportBox}>
                   <Text style={styles.supportLabel}>Texto de apoio</Text>
-                  <Text style={styles.supportBody}>
-                    {truncate(q.supportText, 4000)}
-                  </Text>
+                  <Text style={styles.supportBody}>{truncate(q.supportText, 4000)}</Text>
+                </View>
+              ) : null}
+              {q.questionImageUrl ? (
+                <View style={styles.figureBox}>
+                  <Text style={styles.figureLabel}>Figura da questão</Text>
+                  <Image style={styles.figureImage} src={q.questionImageUrl} />
                 </View>
               ) : null}
               <Text style={styles.stem}>{truncate(q.content, 3500)}</Text>
@@ -131,6 +189,29 @@ export function ApostilaPdfDocument({ title, generatedAt, questions }: Props) {
           </Text>
         </Page>
       ))}
+
+      {/* Gabarito (opcional) */}
+      {answerKey.length > 0 ? (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Gabarito</Text>
+            <Text style={styles.subtitle}>{truncate(title, 120)} · gerado em {generatedAt}</Text>
+          </View>
+          <Text style={styles.answerKeyTitle}>Respostas corretas</Text>
+          <View style={styles.answerKeyGrid}>
+            {answerKey.map((k) => (
+              <View key={k.order} style={styles.answerKeyItem}>
+                <Text style={styles.answerKeyItemText}>
+                  {k.order}. {k.correctAnswer}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.footer} fixed>
+            Documento para estudo · não reproduzir comercialmente
+          </Text>
+        </Page>
+      ) : null}
     </Document>
   );
 }
