@@ -381,9 +381,9 @@ export default async function StudentDashboardPage() {
           )}
 
           {/* GRÁFICOS — lado a lado, cards generosos */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid m-2.5 grid-cols-1 gap-6 p-2.5 lg:grid-cols-2">
             {/* Evolução semanal */}
-            <div className="dash-card m-[15px] p-[10px]">
+            <div className="dash-card m-2.5 p-2.5">
               <div className="mb-7 flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
@@ -420,7 +420,7 @@ export default async function StudentDashboardPage() {
             </div>
 
             {/* Taxa de acerto */}
-            <div className="dash-card m-[15px] p-[10px]">
+            <div className="dash-card m-2.5 p-2.5">
               <div className="mb-7 flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
@@ -451,7 +451,7 @@ export default async function StudentDashboardPage() {
 
           {/* AÇÕES RÁPIDAS */}
           <div className="dash-card p-6 sm:p-7">
-            <h3 className="mb-6 p-[10px] text-[12px] font-bold uppercase tracking-[0.14em] text-[#64748B]">
+            <h3 className="m-2.5 p-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-[#64748B]">
               Ações rápidas
             </h3>
             <div>
