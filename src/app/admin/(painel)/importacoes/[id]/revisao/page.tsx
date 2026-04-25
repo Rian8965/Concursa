@@ -925,7 +925,9 @@ export default function RevisaoImportacaoPage() {
     const all = imp?.importedQuestions ?? [];
     const base = onlyNeedsReview
       ? all.filter((q) => {
-          if (computeReviewWarnings(drafts[q.id] ?? q).length > 0) return true;
+          const d = drafts[q.id] ?? q;
+          const { review } = parseImportRawText(d.rawText);
+          if (!review.revisaoDispensada && computeReviewWarnings(d).length > 0) return true;
           if (!imp) return false;
           return !canApproveImportQuestion(imp, drafts, llmById, q.id).ok;
         })
@@ -1082,13 +1084,14 @@ export default function RevisaoImportacaoPage() {
           const isExpanded = expanded[q.id] ?? false;
           const draft = drafts[q.id] ?? q;
           const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
-          const warnings = computeReviewWarnings(draft);
+          const warningsRaw = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
           const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
           const dep = mergedDepByQuestion[q.id];
           const { review: reviewFromDraft } = parseImportRawText(draft.rawText);
+          const warnings = reviewFromDraft.revisaoDispensada ? [] : warningsRaw;
           const ext = getExtendedLinkFlags(imp.importAssets, q.id);
           const vg = isVinculoSatisfiedForReview(
             dep?.needsTextSupport ?? false,
@@ -1324,6 +1327,21 @@ export default function RevisaoImportacaoPage() {
 
                   <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-slate-600">
                     <span className="w-full text-[9px] font-extrabold uppercase tracking-wider text-slate-400 sm:w-auto sm:pe-1">Revisão</span>
+                    <button
+                      type="button"
+                      className="rounded-md px-1 py-0.5 text-[10px] font-semibold text-slate-500 underline decoration-slate-300/90 underline-offset-[3px] transition hover:text-violet-800"
+                      title="Dispensa manualmente o alerta “Revisão recomendada” desta questão (fica registrado e não desliga outras validações)."
+                      onClick={() =>
+                        void patchImportedReview(
+                          q.id,
+                          (reviewFromDraft.revisaoDispensada
+                            ? { revisaoDispensada: null }
+                            : { revisaoDispensada: { at: new Date().toISOString() } }) as Parameters<typeof mergeReviewIntoRawText>[1],
+                        )
+                      }
+                    >
+                      {reviewFromDraft.revisaoDispensada ? "Reativar revisão recomendada" : "Não há o que revisar"}
+                    </button>
                     <button
                       type="button"
                       className="rounded-md px-1 py-0.5 text-[10px] font-semibold text-slate-500 underline decoration-slate-300/90 underline-offset-[3px] transition hover:text-violet-800"

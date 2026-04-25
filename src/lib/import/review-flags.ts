@@ -21,6 +21,11 @@ export type AlternativasVisuaisFlags = {
 export type ImportReviewMeta = {
   vinculoExcecao?: VinculoExcecaoManual;
   alternativasVisuais?: AlternativasVisuaisFlags;
+  /**
+   * Override manual: revisor confirmou que o alerta "Revisão recomendada" não é problema.
+   * Mantém registro e permite liberar a questão sem remover validações estruturais.
+   */
+  revisaoDispensada?: { at: string; note?: string };
 };
 
 export function parseImportRawText(raw: string | null | undefined): {
@@ -53,11 +58,17 @@ export function mergeReviewIntoRawText(
       ...cur.alternativasVisuais,
       ...patch.alternativasVisuais,
     },
+    revisaoDispensada:
+      (patch as Partial<ImportReviewMeta> & { revisaoDispensada?: ImportReviewMeta["revisaoDispensada"] | null })
+        .revisaoDispensada === null
+        ? undefined
+        : (patch.revisaoDispensada !== undefined ? patch.revisaoDispensada : cur.revisaoDispensada),
   };
   if (next.vinculoExcecao == null) delete next.vinculoExcecao;
   if (next.alternativasVisuais && Object.keys(next.alternativasVisuais).length === 0) {
     delete next.alternativasVisuais;
   }
+  if (next.revisaoDispensada == null) delete next.revisaoDispensada;
   return JSON.stringify({ ...rest, review: next });
 }
 
