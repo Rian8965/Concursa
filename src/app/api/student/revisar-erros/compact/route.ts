@@ -114,7 +114,10 @@ SELECT COUNT(*)::bigint AS total FROM wrong;
   return NextResponse.json({
     page,
     limit,
-    total: Number(totalRow?.[0]?.total ?? 0n),
+    total: (() => {
+      const raw = totalRow?.[0]?.total;
+      return typeof raw === "bigint" ? Number(raw) : Number(raw ?? 0);
+    })(),
     items: rows.map((r) => ({
       questionId: r.questionId,
       snippet: r.content.length > 180 ? `${r.content.slice(0, 180)}…` : r.content,

@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
-import { Prisma } from "@prisma/client";
+import { Prisma, QuestionStatus } from "@prisma/client";
 import type { Difficulty } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -41,6 +41,13 @@ function parseDifficulty(d: unknown): Difficulty {
   return "MEDIUM";
 }
 
+function parseQuestionStatus(s: unknown): QuestionStatus | null {
+  if (typeof s !== "string") return null;
+  const t = s.trim().toUpperCase();
+  if (t === "PENDING_REVIEW" || t === "ACTIVE" || t === "INACTIVE" || t === "REJECTED") return t as QuestionStatus;
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -58,7 +65,7 @@ export async function GET(req: NextRequest) {
   const topicId = searchParams.get("topicId") ?? undefined;
   const difficulty = searchParams.get("difficulty") ?? undefined;
   const tag = searchParams.get("tag")?.trim() ?? undefined;
-  const status = searchParams.get("status") ?? undefined;
+  const status = parseQuestionStatus(searchParams.get("status"));
 
   const searchWhere: Prisma.QuestionWhereInput | undefined = search
     ? {

@@ -213,7 +213,8 @@ SELECT COUNT(*)::bigint AS total FROM (
 ) x;
 `;
 
-  const total = Number(totalRow?.[0]?.total ?? 0n);
+  const totalRaw = totalRow?.[0]?.total;
+  const total = typeof totalRaw === "bigint" ? Number(totalRaw) : Number(totalRaw ?? 0);
 
   return NextResponse.json({
     page,
