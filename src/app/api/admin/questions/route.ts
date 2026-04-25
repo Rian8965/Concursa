@@ -60,18 +60,48 @@ export async function GET(req: NextRequest) {
   const tag = searchParams.get("tag")?.trim() ?? undefined;
   const status = searchParams.get("status") ?? undefined;
 
-  const where: Record<string, unknown> = {
-    ...(search && { content: { contains: search, mode: "insensitive" } }),
-    ...(competitionId && { competitionId }),
-    ...(subjectId && { subjectId }),
-    ...(topicId && { topicId }),
-    ...(examBoardId && { examBoardId }),
-    ...(cityId && { cityId }),
-    ...(jobRoleId && { jobRoleId }),
-    ...(difficulty && (difficulty === "EASY" || difficulty === "MEDIUM" || difficulty === "HARD") && { difficulty }),
-    ...(tag && { tags: { has: tag } }),
-    ...(year && { year: parseYear(year) ?? undefined }),
-    ...(status && { status }),
+  const searchWhere: Prisma.QuestionWhereInput | undefined = search
+    ? {
+        OR: [
+          { content: { contains: search, mode: "insensitive" } },
+          { supportText: { contains: search, mode: "insensitive" } },
+          { alternatives: { some: { content: { contains: search, mode: "insensitive" } } } },
+        ],
+      }
+    : undefined;
+
+  // Filtros "de localização" e vínculos: quando a questão ainda não tem metadados oficiais,
+  // permitir filtrar pelo que a IA sugeriu.
+  const cityWhere: Prisma.QuestionWhereInput | undefined = cityId
+    ? { OR: [{ cityId }, { aiMeta: { suggestedCityId: cityId } }] }
+    : undefined;
+  const examBoardWhere: Prisma.QuestionWhereInput | undefined = examBoardId
+    ? { OR: [{ examBoardId }, { aiMeta: { suggestedExamBoardId: examBoardId } }] }
+    : undefined;
+  const jobRoleWhere: Prisma.QuestionWhereInput | undefined = jobRoleId
+    ? { OR: [{ jobRoleId }, { aiMeta: { suggestedJobRoleId: jobRoleId } }] }
+    : undefined;
+  const subjectWhere: Prisma.QuestionWhereInput | undefined = subjectId
+    ? { OR: [{ subjectId }, { aiMeta: { suggestedSubjectId: subjectId } }] }
+    : undefined;
+  const topicWhere: Prisma.QuestionWhereInput | undefined = topicId
+    ? { OR: [{ topicId }, { aiMeta: { suggestedTopicId: topicId } }] }
+    : undefined;
+
+  const where: Prisma.QuestionWhereInput = {
+    ...(searchWhere ? searchWhere : {}),
+    ...(competitionId ? { competitionId } : {}),
+    ...(difficulty && (difficulty === "EASY" || difficulty === "MEDIUM" || difficulty === "HARD") ? { difficulty } : {}),
+    ...(tag ? { tags: { has: tag } } : {}),
+    ...(year ? { year: parseYear(year) ?? undefined } : {}),
+    ...(status ? { status } : {}),
+    AND: [
+      ...(subjectWhere ? [subjectWhere] : []),
+      ...(topicWhere ? [topicWhere] : []),
+      ...(examBoardWhere ? [examBoardWhere] : []),
+      ...(cityWhere ? [cityWhere] : []),
+      ...(jobRoleWhere ? [jobRoleWhere] : []),
+    ],
   };
 
   const [questions, total] = await Promise.all([

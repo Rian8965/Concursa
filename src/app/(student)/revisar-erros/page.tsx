@@ -1,27 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Lightbulb, Loader2, CheckCircle2 } from "lucide-react";
+import { Lightbulb, Loader2, CheckCircle2, Filter, Search, XCircle } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
-import { cn } from "@/lib/utils/cn";
+import { toast } from "sonner";
 
 type Item = {
-  id: string;
-  selectedAnswer: string;
-  aiExplanation: string | null;
-  answeredAt: string;
-  question: {
-    id: string;
-    content: string;
-    correctAnswer: string;
-    supportText: string | null;
-    hasImage: boolean;
-    imageUrl: string | null;
-    subject: { name: string; color: string } | null;
-    alternatives: { letter: string; content: string }[];
-  };
+  questionId: string;
+  snippet: string;
+  subjectName: string | null;
+  topicName: string | null;
+  examBoardAcronym: string | null;
+  year: number | null;
+  wrongCount: number;
+  lastAttemptAt: string;
+  origin: string | null;
 };
 
 export default function RevisarErrosPage() {
@@ -29,10 +24,40 @@ export default function RevisarErrosPage() {
   const [loading, setLoading] = useState(true);
   const [ensuring, setEnsuring] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const autoEnsureOnce = useRef(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/student/revisar-erros");
+  const [filters, setFilters] = useState({
+    subjectId: "",
+    topicId: "",
+    examBoardId: "",
+    year: "",
+    origin: "ALL",
+    start: "",
+    end: "",
+  });
+
+  const [meta, setMeta] = useState({
+    subjects: [] as { id: string; name: string }[],
+    topics: [] as { id: string; name: string }[],
+    examBoards: [] as { id: string; acronym: string; name: string }[],
+  });
+
+  const load = useCallback(async (p = page) => {
+    const sp = new URLSearchParams();
+    sp.set("page", String(p));
+    sp.set("limit", "25");
+    if (search.trim()) sp.set("search", search.trim());
+    if (filters.subjectId) sp.set("subjectId", filters.subjectId);
+    if (filters.topicId) sp.set("topicId", filters.topicId);
+    if (filters.examBoardId) sp.set("examBoardId", filters.examBoardId);
+    if (filters.year) sp.set("year", filters.year);
+    if (filters.origin) sp.set("origin", filters.origin);
+    if (filters.start) sp.set("start", filters.start);
+    if (filters.end) sp.set("end", filters.end);
+
+    const res = await fetch(`/api/student/revisar-erros/compact?${sp.toString()}`);
     const data = await res.json();
     if (!res.ok) {
       setError(data.error ?? "Falha ao carregar");
@@ -40,39 +65,43 @@ export default function RevisarErrosPage() {
       return;
     }
     setItems(data.items ?? []);
+    setPage(data.page ?? p);
     setError(null);
-  }, []);
+  }, [filters, page, search]);
+
+  useEffect(() => {
+    fetch("/api/student/question-filters")
+      .then((r) => r.json())
+      .then((d: { subjects?: { id: string; name: string }[]; examBoards?: { id: string; acronym: string; name: string }[] }) => {
+        setMeta((prev) => ({ ...prev, subjects: d.subjects ?? [], examBoards: d.examBoards ?? [] }));
+      })
+      .catch(() => {});
+  }, [load]);
+
+  useEffect(() => {
+    if (!filters.subjectId) { setMeta((p) => ({ ...p, topics: [] })); return; }
+    fetch(`/api/student/topics?subjectId=${filters.subjectId}`)
+      .then((r) => r.json())
+      .then((d: { topics?: { id: string; name: string }[] }) => setMeta((p) => ({ ...p, topics: d.topics ?? [] })))
+      .catch(() => {});
+  }, [filters.subjectId]);
 
   useEffect(() => {
     setLoading(true);
-    void load().finally(() => setLoading(false));
+    void load(1).finally(() => setLoading(false));
   }, [load]);
 
   const runEnsure = useCallback(async () => {
     setEnsuring(true);
     try {
-      let remaining = 1;
-      let guard = 0;
-      while (remaining > 0 && guard < 8) {
-        const res = await fetch("/api/student/revisar-erros/ensure", { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) break;
-        remaining = data.remaining ?? 0;
-        guard += 1;
-        await load();
-        if (data.filled === 0) break;
-      }
+      const res = await fetch("/api/student/revisar-erros/ensure", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Falha ao gerar explicações");
+      toast.success(`Explicações geradas: ${data.filled ?? 0}`);
     } finally {
       setEnsuring(false);
     }
-  }, [load]);
-
-  useEffect(() => {
-    if (!items || items.length === 0 || autoEnsureOnce.current) return;
-    if (!items.some((i) => !i.aiExplanation)) return;
-    autoEnsureOnce.current = true;
-    void runEnsure();
-  }, [items, runEnsure]);
+  }, []);
 
   if (loading) {
     return (
@@ -81,6 +110,8 @@ export default function RevisarErrosPage() {
       </div>
     );
   }
+
+  const empty = { subjectId: "", topicId: "", examBoardId: "", year: "", origin: "ALL", start: "", end: "" };
 
   if (error) {
     return (
@@ -91,30 +122,100 @@ export default function RevisarErrosPage() {
   }
 
   const list = items ?? [];
-  const missingAI = list.filter((i) => !i.aiExplanation).length;
 
   return (
     <div className="orbit-stack max-w-3xl animate-fade-in">
       <PageHeader
         title="Revisar erros"
-        description="Questões que você errou, com a resposta correta e uma explicação objetiva. Texto e imagens vinculados à questão aparecem como no treino."
+        description="Filtre erros por matéria, banca, período e origem. Clique para ver o detalhe completo."
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        {missingAI > 0 && (
-          <button
-            type="button"
-            disabled={ensuring}
-            onClick={() => void runEnsure()}
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
-          >
-            {ensuring ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-            {ensuring ? "Gerando explicações…" : "Gerar explicações pendentes"}
-          </button>
-        )}
+        <button type="button" onClick={() => setFilterOpen((v) => !v)} className="btn btn-ghost inline-flex items-center gap-2 rounded-2xl">
+          <Filter className="h-3.5 w-3.5" />
+          Filtros
+        </button>
+        <button
+          type="button"
+          disabled={ensuring}
+          onClick={() => void runEnsure()}
+          className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+        >
+          {ensuring ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
+          {ensuring ? "Gerando explicações…" : "Gerar explicações pendentes"}
+        </button>
         <Link href="/concursos" className="text-sm font-semibold text-violet-700 hover:underline">
           Ir para treino
         </Link>
+      </div>
+
+      {filterOpen && (
+        <div className="orbit-card-premium">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Matéria</label>
+              <select className="input" value={filters.subjectId} onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value, topicId: "" }))}>
+                <option value="">Todas</option>
+                {meta.subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Conteúdo</label>
+              <select className="input" value={filters.topicId} disabled={!filters.subjectId} onChange={(e) => setFilters((p) => ({ ...p, topicId: e.target.value }))}>
+                <option value="">{filters.subjectId ? "Todos" : "— escolha matéria —"}</option>
+                {meta.topics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Banca</label>
+              <select className="input" value={filters.examBoardId} onChange={(e) => setFilters((p) => ({ ...p, examBoardId: e.target.value }))}>
+                <option value="">Todas</option>
+                {meta.examBoards.map((b) => <option key={b.id} value={b.id}>{b.acronym}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Ano</label>
+              <input className="input" value={filters.year} onChange={(e) => setFilters((p) => ({ ...p, year: e.target.value }))} placeholder="Ex: 2024" />
+            </div>
+            <div>
+              <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Origem</label>
+              <select className="input" value={filters.origin} onChange={(e) => setFilters((p) => ({ ...p, origin: e.target.value }))}>
+                {["ALL","TRAINING","EXAM","MANUAL"].map((v) => (
+                  <option key={v} value={v}>{v === "ALL" ? "Todas" : v === "TRAINING" ? "Treino" : v === "EXAM" ? "Simulado" : "Apostila/Manual"}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Início</label>
+                <input type="date" className="input" value={filters.start} onChange={(e) => setFilters((p) => ({ ...p, start: e.target.value }))} />
+              </div>
+              <div>
+                <label className="orbit-form-label text-xs uppercase tracking-wide text-[var(--text-muted)]">Fim</label>
+                <input type="date" className="input" value={filters.end} onChange={(e) => setFilters((p) => ({ ...p, end: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" className="btn btn-ghost rounded-2xl" onClick={() => { setFilters(empty); void load(1); }}>
+              Limpar
+            </button>
+            <button type="button" className="btn btn-primary rounded-2xl" onClick={() => void load(1)}>
+              Aplicar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="orbit-search-wrap">
+        <Search className="orbit-search-icon" aria-hidden />
+        <input
+          className="input"
+          placeholder="Buscar por palavra-chave..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && load(1)}
+        />
       </div>
 
       {list.length === 0 ? (
@@ -124,87 +225,43 @@ export default function RevisarErrosPage() {
           <p className="mt-1 text-sm text-[var(--text-muted)]">Quando errar no treino ou no simulado, as questões aparecem aqui.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {list.map((ans) => {
-            const q = ans.question;
-            const showImage = Boolean((q.imageUrl ?? "").trim());
-            return (
-              <article key={ans.id} className="orbit-card-premium overflow-hidden py-0">
-                <div className="border-b border-black/[0.06] bg-slate-50/80 px-4 py-3 sm:px-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {q.subject && (
+        <div className="flex flex-col gap-3">
+          {list.map((r) => (
+            <Link key={r.questionId} href={`/questoes/${r.questionId}`} className="orbit-card-premium hover:shadow-sm">
+              <div className="flex items-start gap-3">
+                <XCircle className="mt-0.5 h-5 w-5 text-red-500" />
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {r.subjectName && (
                       <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-800">
-                        {q.subject.name}
+                        {r.subjectName}
                       </span>
                     )}
-                    <span className="text-[11px] font-medium text-[var(--text-muted)]">{formatDate(ans.answeredAt)}</span>
+                    {r.examBoardAcronym && (
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
+                        {r.examBoardAcronym}
+                      </span>
+                    )}
+                    {r.year && (
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
+                        {r.year}
+                      </span>
+                    )}
+                    {r.origin && (
+                      <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                        {r.origin === "TRAINING" ? "Treino" : r.origin === "EXAM" ? "Simulado" : r.origin === "MANUAL" ? "Manual" : r.origin}
+                      </span>
+                    )}
+                    <span className="ml-auto text-[11px] text-[var(--text-muted)]">{formatDate(r.lastAttemptAt)}</span>
                   </div>
+                  <p className="text-[13.5px] leading-relaxed text-[var(--text-secondary)]">{r.snippet}</p>
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    {r.wrongCount} erro(s) · última tentativa {formatDate(r.lastAttemptAt)}
+                  </p>
                 </div>
-                <div className="space-y-4 px-4 py-5 sm:px-6 sm:py-6">
-                  {q.supportText ? (
-                    <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 sm:px-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Texto de apoio</p>
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{q.supportText}</p>
-                    </div>
-                  ) : null}
-                  <p className="text-[15px] font-medium leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap">{q.content}</p>
-                  {showImage ? (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={q.imageUrl!} alt="" className="max-h-[min(480px,70vh)] w-full object-contain" />
-                    </div>
-                  ) : null}
-
-                  <ul className="space-y-2">
-                    {q.alternatives.map((alt) => {
-                      const isCor = alt.letter === q.correctAnswer;
-                      const isSel = alt.letter === ans.selectedAnswer;
-                      return (
-                        <li
-                          key={alt.letter}
-                          className={cn(
-                            "flex gap-3 rounded-xl border px-3 py-2.5 text-sm",
-                            isCor && "border-emerald-200 bg-emerald-50/80",
-                            isSel && !isCor && "border-red-200 bg-red-50/80",
-                            !isCor && !isSel && "border-slate-100 bg-slate-50/50",
-                          )}
-                        >
-                          <span className="mt-0.5 font-bold text-slate-500">{alt.letter})</span>
-                          <span className="text-slate-800">{alt.content}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <span>
-                      Sua resposta:{" "}
-                      <strong className="text-red-600">{ans.selectedAnswer}</strong>
-                    </span>
-                    <span>
-                      Correta: <strong className="text-emerald-600">{q.correctAnswer}</strong>
-                    </span>
-                  </div>
-
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-3 sm:px-4">
-                    <div className="flex items-start gap-2">
-                      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-900/80">Por que errou</p>
-                        {ans.aiExplanation ? (
-                          <p className="mt-1.5 text-sm leading-relaxed text-amber-950/90">{ans.aiExplanation}</p>
-                        ) : (
-                          <p className="mt-1.5 text-sm text-amber-900/70">
-                            {ensuring ? "Gerando explicação…" : "Explicação ainda indisponível. Use o botão acima ou aguarde."}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </div>
