@@ -236,6 +236,19 @@ function computeReviewSuggestions(cur: ImportedQ, next?: ImportedQ) {
   return suggestions;
 }
 
+function isFormulaHeavySubject(label: string | null | undefined) {
+  const t = (label ?? "").trim().toLowerCase();
+  if (!t) return false;
+  const needles = [
+    "matem", "físic", "fisic", "quím", "quim", "biolog", "racioc",
+    "estat", "contab", "econom", "engenh", "cálculo", "calculo",
+    "álgebra", "algebra", "geometr", "trigonom", "log", "probabil",
+    "programa", "algorit", "comput", "informát", "informat",
+    "redes", "banco de dados", "sql",
+  ];
+  return needles.some((n) => t.includes(n));
+}
+
 /** Página 1-based no PDF para abrir direto na questão (vínculos / identificar alternativas) */
 function resolvePdfStartPageForQuestion(q: ImportedQ, assets: ImportAssetDTO[] | undefined): number {
   const sp = q.sourcePage;
@@ -272,6 +285,9 @@ function canApproveImportQuestion(
   const alts = draft.alternatives ?? [];
   const heurVis = detectLikelyVisualAlternatives(alts);
   if (alternativasVisuaisAtivas(review, heurVis)) {
+    if (review.alternativasVisuais?.dispensarExigencia?.at) {
+      // Exceção manual para falso positivo: não bloquear aprovação por recortes faltantes.
+    } else {
     const letters = alts.map((a) => a.letter.trim().toUpperCase().slice(0, 1));
     const hasBy: Record<string, boolean> = {};
     for (const L of letters) {
@@ -280,6 +296,7 @@ function canApproveImportQuestion(
     const miss = missingAlternativeImageLinks(letters, hasBy);
     if (miss.length) {
       return { ok: false, message: `Faltam recortes nas alternativas: ${miss.join(", ")}` };
+    }
     }
   }
   const importCtx: ImportContextMeta = {
@@ -1115,13 +1132,20 @@ export default function RevisaoImportacaoPage() {
           const vinculoIncomplete = dep ? !vg.ok : false;
           const heurVis = detectLikelyVisualAlternatives(draft.alternatives ?? []);
           const visOn = alternativasVisuaisAtivas(reviewFromDraft, heurVis);
+          const visExempted = Boolean(reviewFromDraft.alternativasVisuais?.dispensarExigencia?.at);
+          const subjectLabel =
+            subjects.find((s) => s.id === (draft.suggestedSubjectId ?? ""))?.name
+              ?? aiMeta?.materia
+              ?? aiMeta?.meta?.materia
+              ?? null;
+          const formulaInfo = isFormulaHeavySubject(subjectLabel);
           const altLetters = (draft.alternatives ?? []).map((a) => a.letter.trim().toUpperCase().slice(0, 1));
           const hasByLetter: Record<string, boolean> = {};
           for (const L of altLetters) {
             if (L) hasByLetter[L] = Boolean(ext.altImageByLetter[L]);
           }
           const missAlts = visOn ? missingAlternativeImageLinks(altLetters, hasByLetter) : [];
-          const altsPend = missAlts.length > 0;
+          const altsPend = missAlts.length > 0 && !visExempted;
           const cap = canApproveImportQuestion(imp, drafts, llmById, q.id);
           const anyPend = !cap.ok;
           const vExAtiva = Boolean(
@@ -1210,8 +1234,26 @@ export default function RevisaoImportacaoPage() {
                           </span>
                         )}
                         {visOn && altsPend && (
-                          <span className="inline-flex max-w-full items-center rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
-                            Alternativas em imagem: faltam {missAlts.join(", ")}
+                          <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+                            <span>Alternativas em imagem: faltam {missAlts.join(", ")}</span>
+                            {reviewFromDraft.alternativasVisuais?.aiSugeriu && !visExempted && (
+                              <button
+                                type="button"
+                                className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-extrabold text-slate-700 ring-1 ring-black/[0.08] hover:bg-white"
+                                title="Use quando a IA marcou falso positivo e as alternativas em texto já estão corretas."
+                                onClick={async () => {
+                                  await patchImportedReview(q.id, { alternativasVisuais: { dispensarExigencia: { at: new Date().toISOString() } } });
+                                  toast.success("Exigência de alternativas em imagem dispensada nesta questão");
+                                }}
+                              >
+                                Não é necessário aplicar alternativas
+                              </button>
+                            )}
+                          </span>
+                        )}
+                        {visOn && visExempted && (
+                          <span className="inline-flex max-w-full items-center rounded-full border border-slate-200/90 bg-slate-50/90 px-2.5 py-1 text-[10px] font-bold leading-snug text-slate-700">
+                            Alternativas em imagem: dispensadas manualmente
                           </span>
                         )}
                         {visOn && !altsPend && (draft.alternatives?.length ?? 0) > 0 && (
@@ -1329,6 +1371,19 @@ export default function RevisaoImportacaoPage() {
 
               {isExpanded && (
                 <div className="border-t border-black/[0.06] bg-white/60 px-5 py-8 sm:px-8 sm:py-10">
+                  {formulaInfo && (
+                    <div className="mb-5 rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-[12px] text-slate-700 shadow-sm">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="mt-[2px] h-4 w-4 shrink-0 text-slate-500" />
+                        <div className="min-w-0">
+                          <p className="font-extrabold tracking-tight text-slate-800">Atenção</p>
+                          <p className="mt-0.5 leading-relaxed text-slate-600">
+                            Esta matéria pode conter fórmulas, cálculos ou alternativas com formatação especial. Revise se as alternativas foram interpretadas corretamente.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {(vinculoIncomplete || (visOn && altsPend)) && (
                     <div className="mb-6 space-y-3">
                       {vinculoIncomplete && (
@@ -1343,7 +1398,23 @@ export default function RevisaoImportacaoPage() {
                       {visOn && altsPend && (
                         <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-xs font-semibold text-amber-950 shadow-sm">
                           <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800/90">Alternativas visuais</span>
-                          <p className="mt-1.5 leading-relaxed">Falta(m) recorte(s) de imagem para: {missAlts.join(", ")}. Use “Aplicar alternativas” ou o vínculo por letra no painel do PDF.</p>
+                          <p className="mt-1.5 leading-relaxed">
+                            Falta(m) recorte(s) de imagem para: {missAlts.join(", ")}. Use “Aplicar alternativas” ou o vínculo por letra no painel do PDF.
+                          </p>
+                          {reviewFromDraft.alternativasVisuais?.aiSugeriu && !visExempted && (
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-1.5 text-[11px] font-extrabold text-slate-700 shadow-sm hover:bg-white"
+                                title="Use quando a IA marcou falso positivo e as alternativas em texto já estão corretas."
+                                onClick={() =>
+                                  void patchImportedReview(q.id, { alternativasVisuais: { dispensarExigencia: { at: new Date().toISOString() } } })
+                                }
+                              >
+                                Não é necessário aplicar alternativas
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

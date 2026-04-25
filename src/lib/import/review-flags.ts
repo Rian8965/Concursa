@@ -16,6 +16,11 @@ export type AlternativasVisuaisFlags = {
   aiSugeriu?: boolean;
   /** Revisor marcou “alternativas visuais” */
   revisorMarcou?: boolean;
+  /**
+   * Exceção manual para falso positivo:
+   * revisor dispensou a exigência de recortes de alternativas (mantém alternativas em texto).
+   */
+  dispensarExigencia?: { at: string; note?: string };
 };
 
 export type ImportReviewMeta = {
