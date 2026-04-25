@@ -23,7 +23,7 @@ export function CompetitionTabs({ competitionId }: { competitionId: string }) {
   const base = `/concursos/${competitionId}`;
 
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-xl border border-black/[0.06] bg-[#F9FAFB] p-2.5 my-3 scrollbar-none">
+    <div className="flex gap-1 overflow-x-auto rounded-xl border border-black/[0.06] bg-[#F9FAFB] p-2.5 m-2.5 scrollbar-none">
       {TABS.map((tab) => {
         const href = `${base}${tab.href}`;
         const isActive = tab.href === ""
@@ -35,7 +35,7 @@ export function CompetitionTabs({ competitionId }: { competitionId: string }) {
             key={tab.label}
             href={href}
             className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2.5 text-[12.5px] transition-all",
+              "flex items-center gap-1.5 whitespace-nowrap rounded-lg p-2.5 m-2.5 text-[12.5px] transition-all",
               isActive
                 ? "bg-white font-semibold text-violet-700 shadow-sm"
                 : "font-medium text-[#6B7280] hover:bg-white/70 hover:text-[#111827]",

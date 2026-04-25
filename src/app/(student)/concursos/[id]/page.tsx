@@ -105,7 +105,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
       <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-sm">
         <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
         <div className="p-5">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-start gap-4 p-2.5 m-2.5">
             <div className="min-w-0 flex-1">
               {/* Badges */}
               <div className="mb-3 flex flex-wrap gap-1.5">
@@ -180,7 +180,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
           </div>
 
           {totalAnswered > 0 && (
-            <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
+            <div className="m-2.5 rounded-lg border border-violet-100 bg-violet-50/60 p-2.5">
               <div className="mb-1.5 flex items-center justify-between text-[13px] leading-normal">
                 <span className="font-semibold text-[#374151]">Desempenho geral</span>
                 <span className="font-extrabold text-violet-700">{overallAccuracy}%</span>
@@ -205,7 +205,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
             href={comp.editalUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-violet-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 p-2.5 m-2.5 text-[12px] font-semibold text-white hover:bg-violet-700"
           >
             <Download className="h-3.5 w-3.5" />
             Abrir
