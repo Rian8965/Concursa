@@ -92,7 +92,11 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
       >
         <div className="px-6 pt-9 pb-6">
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="group flex min-w-0 flex-1 items-center gap-3.5" onClick={() => setMobileOpen(false)}>
+            <Link
+              href="/dashboard"
+              className="group m-2.5 flex min-w-0 flex-1 items-center gap-3.5 px-2"
+              onClick={() => setMobileOpen(false)}
+            >
               <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
                 <Image
                   src="/brand-logo.png"
