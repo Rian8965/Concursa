@@ -109,9 +109,9 @@ export default async function MateriasPage({ params }: Props) {
           {subjectStats.map((subject) => (
             <div
               key={subject.id}
-              className="rounded-lg border border-black/[0.06] bg-white p-4 transition-shadow hover:shadow-sm"
+              className="rounded-lg border border-black/[0.06] bg-white p-4 shadow-none mt-2.5"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between m-2.5 p-2.5 overflow-hidden">
                 {/* Info da matéria */}
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2.5">
@@ -172,7 +172,7 @@ export default async function MateriasPage({ params }: Props) {
                 <div className="flex shrink-0 gap-2 sm:flex-col sm:items-end">
                   <Link
                     href={`/concursos/${id}/treino?subject=${subject.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-violet-700"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-2.5 py-2.5 text-[12px] font-semibold text-white hover:bg-violet-700 m-2.5"
                   >
                     <Play className="h-3 w-3" />
                     Treinar

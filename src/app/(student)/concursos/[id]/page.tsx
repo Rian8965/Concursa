@@ -112,7 +112,11 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                 <Badge variant={comp.status === "ACTIVE" ? "active" : "upcoming"}>
                   {comp.status === "ACTIVE" ? "Ativo" : "Em breve"}
                 </Badge>
-                {comp.examBoard && <Badge variant="secondary">{comp.examBoard.acronym}</Badge>}
+                {comp.examBoard && (
+                  <Badge variant="secondary" className="my-[10px] mx-[5px]">
+                    {comp.examBoard.acronym}
+                  </Badge>
+                )}
                 {!comp.examBoardDefined && <Badge variant="warning">Banca não definida</Badge>}
               </div>
 
@@ -176,8 +180,8 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
           </div>
 
           {totalAnswered > 0 && (
-            <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
-              <div className="mb-1.5 flex items-center justify-between text-[13px]">
+            <div className="m-[10px] rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
+              <div className="mb-1.5 flex items-center justify-between text-[13px] leading-normal">
                 <span className="font-semibold text-[#374151]">Desempenho geral</span>
                 <span className="font-extrabold text-violet-700">{overallAccuracy}%</span>
               </div>
@@ -192,10 +196,10 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
 
       {/* Edital */}
       {comp.editalUrl && (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-black/[0.06] bg-white px-4 py-3">
+        <div className="my-[10px] flex items-center justify-between gap-4 rounded-xl border border-black/[0.06] bg-white px-4 py-3">
           <div>
-            <p className="text-[13px] font-semibold text-[#111827]">Edital oficial</p>
-            <p className="text-[12px] text-[#6B7280]">Acesse o PDF do edital deste concurso</p>
+            <p className="m-[10px] text-[13px] font-semibold text-[#111827]">Edital oficial</p>
+            <p className="mx-[10px] my-[5px] text-[12px] text-[#6B7280]">Acesse o PDF do edital deste concurso</p>
           </div>
           <a
             href={comp.editalUrl}

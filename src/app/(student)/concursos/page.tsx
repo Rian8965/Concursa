@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
-  Trophy, MapPin, Calendar, Building2, Briefcase, ArrowRight, Clock, BookOpen,
+  Trophy, MapPin, Calendar, Building2, Briefcase, ArrowRight, Clock, BookOpen, Play,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 
@@ -32,7 +32,6 @@ export default async function CompetitionsPage() {
     orderBy: { enrolledAt: "desc" },
   });
 
-  // Para cada matrícula, busca matérias do cargo (ou do concurso)
   const enriched = await Promise.all(
     studentCompetitions.map(async (sc) => {
       let subjects: { id: string; name: string }[] = [];
@@ -58,22 +57,24 @@ export default async function CompetitionsPage() {
   );
 
   return (
-    <div className="orbit-stack animate-fade-in max-w-4xl">
+    <div className="space-y-8 pb-12">
       <PageHeader
         title="Meus Concursos"
         description="Concursos e cargos vinculados ao seu perfil"
       />
 
       {enriched.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-black/[0.10] bg-white px-8 py-14 text-center">
-          <Trophy className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.25} />
-          <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhum concurso vinculado</p>
-          <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-[var(--text-muted)]">
+        <div className="dash-card flex flex-col items-center justify-center px-8 py-14 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-50">
+            <Trophy className="h-8 w-8 text-violet-300" strokeWidth={1.5} />
+          </div>
+          <p className="text-[16px] font-bold text-[#0F172A]">Nenhum concurso vinculado</p>
+          <p className="mt-2 max-w-md text-[13.5px] text-[#64748B]">
             O administrador precisa vincular você a um concurso e cargo para liberar o acesso ao conteúdo.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           {enriched.map((sc) => {
             const comp = sc.competition;
             let daysLeft: number | null = null;
@@ -88,87 +89,145 @@ export default async function CompetitionsPage() {
             }
 
             return (
-              <div key={sc.id} className="overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-sm">
-                <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
-                <div className="p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      {/* Badges */}
-                      <div className="mb-2.5 flex flex-wrap gap-1.5">
+              <article
+                key={sc.id}
+                className="dash-card relative overflow-hidden p-7 sm:p-9"
+              >
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -right-10 -top-8 hidden text-violet-100 sm:block"
+                  style={{ opacity: 0.32 }}
+                >
+                  <Building2 className="h-36 w-36" strokeWidth={1.1} />
+                </div>
+
+                <div className="relative flex flex-col gap-7">
+                  {/* ── Cabeçalho alinhado à esquerda (badges + título + organização) ── */}
+                  <header>
+                    <div className="mb-5 flex flex-wrap items-center gap-3">
+                      {comp.status === "ACTIVE" ? (
+                        <span className="dash-hero-badge--active">{statusLabels[comp.status]}</span>
+                      ) : (
                         <Badge variant={statusVariants[comp.status] ?? "secondary"}>
                           {statusLabels[comp.status] ?? comp.status}
                         </Badge>
-                        {comp.examBoard && <Badge variant="secondary">{comp.examBoard.acronym}</Badge>}
-                        {!comp.examBoardDefined && <Badge variant="warning">Banca não definida</Badge>}
-                      </div>
-
-                      <h3 className="text-[15px] font-bold leading-snug text-[var(--text-primary)]">{comp.name}</h3>
-                      {comp.organization && (
-                        <p className="mt-0.5 text-[12.5px] text-[var(--text-secondary)]">{comp.organization}</p>
                       )}
+                      {comp.examBoard && (
+                        <span className="dash-hero-badge--banca">{comp.examBoard.acronym}</span>
+                      )}
+                      {!comp.examBoardDefined && (
+                        <Badge variant="warning">Banca não definida</Badge>
+                      )}
+                    </div>
 
-                      {/* Detalhes */}
-                      <div className="mt-2.5 flex flex-col gap-1.5">
-                        {comp.city && (
-                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
-                            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+                    <h3 className="max-w-[640px] pr-2 text-[20px] font-extrabold leading-[1.32] tracking-tight text-[#0F172A] sm:text-[22px]">
+                      {comp.name}
+                    </h3>
+                    {comp.organization && (
+                      <p className="mt-2 text-[13px] text-[#64748B]">{comp.organization}</p>
+                    )}
+                  </header>
+
+                  {/* ── Chips de informação (grid 2 colunas) ── */}
+                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                    {comp.city && (
+                      <div className="dash-hero-chip">
+                        <span className="dash-hero-chip__icon">
+                          <MapPin className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="dash-hero-chip__label">Local</span>
+                          <span className="dash-hero-chip__value">
                             {comp.city.name}{comp.city.state ? `, ${comp.city.state}` : ""}
-                          </div>
-                        )}
-                        {sc.jobRole && (
-                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
-                            <Briefcase className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
-                            <span className="font-semibold text-[var(--text-primary)]">{sc.jobRole.name}</span>
-                          </div>
-                        )}
-                        {comp.examBoard && (
-                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
-                            <Building2 className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
-                            {comp.examBoard.name}
-                          </div>
-                        )}
-                        {comp.examDate && (
-                          <div className="flex items-center gap-1.5 text-[12.5px] text-[#6B7280]">
-                            <Calendar className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
-                            <span>{formatDate(comp.examDate)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {sc.jobRole && (
+                      <div className="dash-hero-chip">
+                        <span className="dash-hero-chip__icon">
+                          <Briefcase className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="dash-hero-chip__label">Cargo</span>
+                          <span className="dash-hero-chip__value">{sc.jobRole.name}</span>
+                        </div>
+                      </div>
+                    )}
+                    {comp.examBoard && (
+                      <div className="dash-hero-chip">
+                        <span className="dash-hero-chip__icon">
+                          <Building2 className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="dash-hero-chip__label">Banca</span>
+                          <span className="dash-hero-chip__value">{comp.examBoard.name}</span>
+                        </div>
+                      </div>
+                    )}
+                    {comp.examDate && (
+                      <div className="dash-hero-chip">
+                        <span className="dash-hero-chip__icon">
+                          <Calendar className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="dash-hero-chip__label">Data da prova</span>
+                          <span className="dash-hero-chip__value">
+                            {formatDate(comp.examDate)}
                             {daysLeft !== null && daysLeft > 0 && (
-                              <span className="inline-flex items-center gap-1 font-semibold text-violet-700">
+                              <span className="ml-1.5 inline-flex items-center gap-1 font-semibold text-violet-700">
                                 <Clock className="h-3 w-3" />
                                 {formatCountdown(comp.examDate)}
                               </span>
                             )}
                             {daysLeft === 0 && (
-                              <span className="font-semibold text-orange-600">Hoje!</span>
+                              <span className="ml-1.5 font-semibold text-orange-600">Hoje!</span>
                             )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Matérias */}
-                      {sc.displaySubjects.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          <BookOpen className="h-3.5 w-3.5 self-center text-[#D1D5DB]" />
-                          {sc.displaySubjects.map((s) => (
-                            <span
-                              key={s.id}
-                              className="rounded-md border border-black/[0.07] bg-[var(--bg-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
-                            >
-                              {s.name}
-                            </span>
-                          ))}
+                          </span>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                  </div>
 
+                  {/* ── Matérias liberadas (chips compactos) ── */}
+                  {sc.displaySubjects.length > 0 && (
+                    <div>
+                      <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748B]">
+                        <BookOpen className="h-3.5 w-3.5 text-violet-400" />
+                        Matérias liberadas
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {sc.displaySubjects.map((s) => (
+                          <span
+                            key={s.id}
+                            className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-1.5 text-[12px] font-semibold text-violet-700"
+                          >
+                            {s.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Ações (alinhadas à esquerda, botão primário grande) ── */}
+                  <div className="flex flex-wrap items-center gap-3.5 pt-1">
+                    <Link
+                      href={`/concursos/${comp.id}/treino`}
+                      className="dash-btn-primary"
+                    >
+                      <Play className="h-[17px] w-[17px]" strokeWidth={2.4} />
+                      Treinar
+                    </Link>
                     <Link
                       href={`/concursos/${comp.id}`}
-                      className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700 sm:w-auto"
+                      className="dash-btn-secondary"
                     >
-                      Estudar <ArrowRight className="h-3.5 w-3.5" />
+                      Ver detalhes
+                      <ArrowRight className="h-[17px] w-[17px]" strokeWidth={2.2} />
                     </Link>
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>

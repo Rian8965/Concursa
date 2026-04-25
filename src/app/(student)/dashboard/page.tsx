@@ -131,37 +131,37 @@ export default async function StudentDashboardPage() {
       : null;
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-10 pb-12">
 
       {/* ═══════════════════════════════════════════════════════════════
           HEADER — saudação premium + card "70 dias" destacado
          ═══════════════════════════════════════════════════════════════ */}
-      <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <header className="flex flex-col gap-7 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-violet-600">
             {greeting},
           </p>
-          <h1 className="mt-1 text-[40px] font-extrabold leading-[1.05] tracking-tight text-[#0F172A] sm:text-[44px]">
+          <h1 className="mt-2 text-[40px] font-extrabold leading-[1.05] tracking-tight text-[#0F172A] sm:text-[44px]">
             {firstName}
           </h1>
-          <p className="mt-3 flex items-center gap-2 text-[14px] font-medium text-[#475569]">
+          <p className="mt-4 flex items-center gap-2 text-[14px] font-medium text-[#475569]">
             <Calendar className="h-[15px] w-[15px] text-violet-400" />
             {formatDate(now, "EEEE, dd 'de' MMMM 'de' yyyy")}
           </p>
-          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#64748B]">
+          <p className="mt-3 flex items-center gap-2 text-[13px] text-[#64748B]">
             <Sparkles className="h-[14px] w-[14px] text-amber-500" />
             Cada questão te aproxima da aprovação. Continue firme!
           </p>
         </div>
 
         {daysLeft !== null && (
-          <div className="dash-exam-countdown shrink-0 self-start lg:min-w-[230px]">
-            <Calendar className="h-7 w-7 shrink-0 text-amber-700/80" strokeWidth={1.8} />
+          <div className="dash-exam-countdown shrink-0 self-start lg:min-w-[260px]">
+            <Calendar className="h-8 w-8 shrink-0 text-amber-700/80" strokeWidth={1.8} />
             <div className="relative z-10">
-              <p className="text-[40px] font-extrabold leading-none tracking-tight text-amber-900">
+              <p className="text-[44px] font-extrabold leading-none tracking-tight text-amber-900">
                 {daysLeft}
               </p>
-              <p className="mt-1 text-[12.5px] font-semibold leading-snug text-amber-800">
+              <p className="mt-2 text-[12.5px] font-semibold leading-snug text-amber-800">
                 {daysLeft === 1 ? "dia" : "dias"} para a prova
               </p>
             </div>
@@ -173,7 +173,7 @@ export default async function StudentDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════════
           MÉTRICAS — 4 cards com ícones em blocos coloridos
          ═══════════════════════════════════════════════════════════════ */}
-      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             label: "Questões respondidas",
@@ -215,17 +215,19 @@ export default async function StudentDashboardPage() {
         ].map((s) => (
           <div key={s.label} className="dash-metric">
             <div className="dash-metric__icon" style={{ background: s.bg }}>
-              <s.icon className="h-6 w-6" style={{ color: s.color }} strokeWidth={2} />
+              <s.icon className="h-7 w-7" style={{ color: s.color }} strokeWidth={2} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-semibold text-[#64748B]">{s.label}</p>
+              <p className="text-[12.5px] font-semibold leading-tight text-[#64748B]">
+                {s.label}
+              </p>
               <p
-                className="mt-1.5 text-[32px] font-extrabold leading-none tracking-tight"
+                className="mt-3 text-[34px] font-extrabold leading-none tracking-tight"
                 style={{ color: s.color }}
               >
                 {s.value}
               </p>
-              <p className="mt-2 text-[12px] text-[#94A3B8]">{s.sub}</p>
+              <p className="mt-3 text-[12px] leading-snug text-[#94A3B8]">{s.sub}</p>
             </div>
           </div>
         ))}
@@ -234,83 +236,111 @@ export default async function StudentDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════════
           GRADE PRINCIPAL — concurso ativo (esq) + ações rápidas (dir)
          ═══════════════════════════════════════════════════════════════ */}
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid grid-cols-1 gap-7 xl:grid-cols-[minmax(0,1fr)_380px]">
 
         {/* ───── Coluna esquerda ───── */}
-        <div className="space-y-6">
+        <div className="space-y-7">
 
           {/* CARD HERO: Concurso ativo */}
           {mainComp ? (
-            <div className="dash-card relative overflow-hidden p-7 sm:p-8">
-              {/* Ícone decorativo de fundo */}
+            <div className="dash-card relative overflow-hidden border-[10px] rotate-[360deg] p-9 sm:p-12">
+              {/* Ícone decorativo de fundo (afastado) */}
               <div
                 aria-hidden
-                className="pointer-events-none absolute -right-6 -top-4 hidden text-violet-100 sm:block"
-                style={{ opacity: 0.55 }}
+                className="pointer-events-none absolute -right-12 -top-10 hidden text-violet-100 sm:block"
+                style={{ opacity: 0.32 }}
               >
-                <Building2 className="h-32 w-32" strokeWidth={1.2} />
+                <Building2 className="h-44 w-44" strokeWidth={1.1} />
               </div>
 
-              <div className="relative">
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <Badge variant={mainComp.competition.status === "ACTIVE" ? "active" : "upcoming"}>
-                    {mainComp.competition.status === "ACTIVE" ? "Ativo" : "Em breve"}
-                  </Badge>
+              <div className="relative m-[15px]">
+                {/* ─── BADGES com pill-style premium e ponto pulsante ─── */}
+                <div className="mb-7 flex flex-wrap items-center gap-3">
+                  {mainComp.competition.status === "ACTIVE" ? (
+                    <span className="dash-hero-badge--active">Ativo</span>
+                  ) : (
+                    <Badge variant="upcoming">Em breve</Badge>
+                  )}
                   {mainComp.competition.examBoard && (
-                    <span className="rounded-md bg-violet-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-700">
+                    <span className="dash-hero-badge--banca">
                       {mainComp.competition.examBoard.acronym}
                     </span>
                   )}
                 </div>
 
-                <h2 className="max-w-[88%] text-[20px] font-extrabold leading-[1.25] tracking-tight text-[#0F172A] sm:text-[22px]">
+                {/* ─── TÍTULO afastado das bordas e do ícone decorativo ─── */}
+                <h2 className="max-w-[640px] pr-2 text-[24px] font-extrabold leading-[1.32] tracking-tight text-[#0F172A] sm:text-[26px]">
                   {mainComp.competition.name}
                 </h2>
 
-                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2.5 text-[13px] text-[#475569]">
+                {/* ─── INFO em chips premium (grid 2 colunas) ─── */}
+                <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                   {mainComp.competition.city && (
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="h-4 w-4 shrink-0 text-violet-400" />
-                      {mainComp.competition.city.name}, {mainComp.competition.city.state}
-                    </span>
+                    <div className="dash-hero-chip">
+                      <span className="dash-hero-chip__icon">
+                        <MapPin className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="dash-hero-chip__label">Local</span>
+                        <span className="dash-hero-chip__value">
+                          {mainComp.competition.city.name}, {mainComp.competition.city.state}
+                        </span>
+                      </div>
+                    </div>
                   )}
                   {mainComp.jobRole && (
-                    <span className="flex items-center gap-1.5 font-semibold text-[#1E293B]">
-                      <Briefcase className="h-4 w-4 shrink-0 text-violet-400" />
-                      {mainComp.jobRole.name}
-                    </span>
+                    <div className="dash-hero-chip">
+                      <span className="dash-hero-chip__icon">
+                        <Briefcase className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="dash-hero-chip__label">Cargo</span>
+                        <span className="dash-hero-chip__value">{mainComp.jobRole.name}</span>
+                      </div>
+                    </div>
                   )}
                   {jobRoleArea && (
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 shrink-0 text-violet-400" />
-                      Área: {jobRoleArea}
-                    </span>
+                    <div className="dash-hero-chip">
+                      <span className="dash-hero-chip__icon">
+                        <Sparkles className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="dash-hero-chip__label">Área</span>
+                        <span className="dash-hero-chip__value">{jobRoleArea}</span>
+                      </div>
+                    </div>
                   )}
                   {mainComp.competition.examDate && (
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="h-4 w-4 shrink-0 text-violet-400" />
-                      <span className="font-medium text-[#1E293B]">
-                        {formatDate(mainComp.competition.examDate)}
+                    <div className="dash-hero-chip">
+                      <span className="dash-hero-chip__icon">
+                        <Calendar className="h-3.5 w-3.5 text-violet-500" strokeWidth={2.2} />
                       </span>
-                      {daysLeft !== null && daysLeft > 0 && (
-                        <span className="font-semibold text-violet-700">
-                          · {formatCountdown(mainComp.competition.examDate)}
+                      <div className="min-w-0 flex-1">
+                        <span className="dash-hero-chip__label">Data da prova</span>
+                        <span className="dash-hero-chip__value">
+                          {formatDate(mainComp.competition.examDate)}
+                          {daysLeft !== null && daysLeft > 0 && (
+                            <span className="ml-1.5 font-semibold text-violet-700">
+                              · {formatCountdown(mainComp.competition.examDate)}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
+                      </div>
+                    </div>
                   )}
                 </div>
 
+                {/* ─── Bloco "questões disponíveis" ─── */}
                 {availableQuestions > 0 && (
-                  <div className="mt-5 flex items-center gap-3 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-fuchsia-50/50 px-5 py-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+                  <div className="mt-8 flex items-center gap-4 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-fuchsia-50/50 px-6 py-5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
                       <Database className="h-5 w-5 text-violet-600" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-bold text-violet-900">
+                      <p className="text-[15px] font-bold leading-snug text-violet-900">
                         {availableQuestions.toLocaleString("pt-BR")} questões disponíveis
                       </p>
-                      <p className="text-[12px] text-violet-700/80">
+                      <p className="mt-1 text-[12.5px] text-violet-700/80">
                         {questionsBanca
                           ? `Da banca ${questionsBanca} nas suas matérias`
                           : "Nas suas matérias"}
@@ -319,12 +349,13 @@ export default async function StudentDashboardPage() {
                   </div>
                 )}
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
+                {/* ─── Botões maiores com mais respiro ─── */}
+                <div className="mt-9 flex flex-wrap items-center gap-4">
                   <Link
                     href={`/concursos/${mainComp.competitionId}/treino`}
                     className="dash-btn-primary"
                   >
-                    <Play className="h-4 w-4" />
+                    <Play className="h-[17px] w-[17px]" strokeWidth={2.4} />
                     Treinar agora
                   </Link>
                   <Link
@@ -332,7 +363,7 @@ export default async function StudentDashboardPage() {
                     className="dash-btn-secondary"
                   >
                     Ver detalhes
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-[17px] w-[17px]" strokeWidth={2.2} />
                   </Link>
                 </div>
               </div>
@@ -350,39 +381,37 @@ export default async function StudentDashboardPage() {
           )}
 
           {/* GRÁFICOS — lado a lado, cards generosos */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Evolução semanal */}
-            <div className="dash-card p-6">
-              <div className="mb-5 flex items-start justify-between gap-3">
+            <div className="dash-card m-[15px] p-[10px]">
+              <div className="mb-7 flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
                     Evolução semanal
                   </h3>
-                  <p className="mt-0.5 text-[12px] text-[#94A3B8]">
+                  <p className="mt-1.5 text-[12px] text-[#94A3B8]">
                     Questões e acertos · 7 dias
                   </p>
                 </div>
                 {weekTotal > 0 && (
                   <div className="text-right">
-                    <p className="text-[20px] font-extrabold leading-none text-violet-700">
+                    <p className="text-[22px] font-extrabold leading-none text-violet-700">
                       {weekTotal}
                     </p>
-                    <p className="mt-1 text-[10.5px] font-medium text-[#94A3B8]">
+                    <p className="mt-1.5 text-[10.5px] font-medium text-[#94A3B8]">
                       respondidas
                     </p>
                   </div>
                 )}
               </div>
-              <div className="-mx-1">
-                <WeeklyPerformanceChart data={weekData} />
-              </div>
+              <WeeklyPerformanceChart data={weekData} />
               {weekTotal > 0 && (
-                <div className="mt-4 flex items-center gap-4 border-t border-slate-100 pt-3 text-[11.5px] text-[#64748B]">
-                  <span className="flex items-center gap-1.5">
+                <div className="mt-6 flex items-center gap-5 border-t border-slate-100 pt-4 text-[11.5px] text-[#64748B]">
+                  <span className="flex items-center gap-2">
                     <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-500" />
                     Acertos
                   </span>
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-2">
                     <span className="inline-block h-2.5 w-2.5 rounded-sm bg-slate-200" />
                     Total
                   </span>
@@ -391,27 +420,25 @@ export default async function StudentDashboardPage() {
             </div>
 
             {/* Taxa de acerto */}
-            <div className="dash-card p-6">
-              <div className="mb-5 flex items-start justify-between gap-3">
+            <div className="dash-card m-[15px] p-[10px]">
+              <div className="mb-7 flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
                     Taxa de acerto
                   </h3>
-                  <p className="mt-0.5 text-[12px] text-[#94A3B8]">
+                  <p className="mt-1.5 text-[12px] text-[#94A3B8]">
                     Evolução diária · 7 dias
                   </p>
                 </div>
                 {weekTotal > 0 && (
-                  <span className="rounded-full bg-violet-50 px-3 py-1 text-[11.5px] font-bold text-violet-700">
+                  <span className="shrink-0 rounded-full bg-violet-50 px-3.5 py-1.5 text-[11.5px] font-bold text-violet-700">
                     Semana: {Math.round((weekCorrect / weekTotal) * 100)}%
                   </span>
                 )}
               </div>
-              <div className="-mx-1">
-                <AccuracyTrendChart data={weekData} />
-              </div>
+              <AccuracyTrendChart data={weekData} />
               {weekTotal > 0 && (
-                <div className="mt-4 border-t border-slate-100 pt-3 text-right text-[11.5px] text-[#94A3B8]">
+                <div className="mt-6 border-t border-slate-100 pt-4 text-right text-[11.5px] text-[#94A3B8]">
                   {weekCorrect} de {weekTotal} acertos
                 </div>
               )}
@@ -420,14 +447,14 @@ export default async function StudentDashboardPage() {
         </div>
 
         {/* ───── Coluna direita: Ações rápidas + Plano + Outros ───── */}
-        <aside className="space-y-5">
+        <aside className="space-y-6">
 
           {/* AÇÕES RÁPIDAS */}
-          <div className="dash-card p-5 sm:p-6">
-            <h3 className="mb-4 text-[12px] font-bold uppercase tracking-[0.12em] text-[#64748B]">
+          <div className="dash-card p-6 sm:p-7">
+            <h3 className="mb-6 p-[10px] text-[12px] font-bold uppercase tracking-[0.14em] text-[#64748B]">
               Ações rápidas
             </h3>
-            <div className="space-y-1">
+            <div>
               {[
                 {
                   icon: Play,
@@ -472,15 +499,15 @@ export default async function StudentDashboardPage() {
                     className="dash-quick-action__icon"
                     style={{ background: a.bg }}
                   >
-                    <a.icon className="h-4.5 w-4.5" style={{ color: a.color }} strokeWidth={2.2} />
+                    <a.icon className="h-5 w-5" style={{ color: a.color }} strokeWidth={2.2} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={`truncate text-[13.5px] font-bold text-[#0F172A] ${a.highlight ? "" : ""}`}
-                    >
+                  <div className="dash-quick-action__text">
+                    <p className="truncate text-[14px] font-bold leading-tight text-[#0F172A]">
                       {a.label}
                     </p>
-                    <p className="truncate text-[11.5px] text-[#94A3B8]">{a.sub}</p>
+                    <p className="truncate text-[11.5px] leading-snug text-[#94A3B8]">
+                      {a.sub}
+                    </p>
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" />
                 </Link>
@@ -495,11 +522,11 @@ export default async function StudentDashboardPage() {
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] opacity-80">
                   Seu plano
                 </p>
-                <p className="mt-1.5 text-[20px] font-extrabold leading-tight">
+                <p className="mt-2.5 text-[22px] font-extrabold leading-tight">
                   {profile.plan.name}
                 </p>
                 {profile.accessExpiresAt && (
-                  <p className="mt-2 text-[12.5px] opacity-80">
+                  <p className="mt-3 text-[12.5px] opacity-80">
                     Válido até {formatDate(profile.accessExpiresAt)}
                   </p>
                 )}
@@ -509,9 +536,9 @@ export default async function StudentDashboardPage() {
 
           {/* OUTROS CONCURSOS */}
           {(profile?.studentCompetitions.length ?? 0) > 1 && (
-            <div className="dash-card p-5 sm:p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#64748B]">
+            <div className="dash-card p-6 sm:p-7">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#64748B]">
                   Mais concursos
                 </h3>
                 <Link
@@ -521,7 +548,7 @@ export default async function StudentDashboardPage() {
                   Ver todos →
                 </Link>
               </div>
-              <div className="space-y-1">
+              <div>
                 {(profile?.studentCompetitions ?? []).slice(1).map((sc) => (
                   <Link
                     key={sc.id}
@@ -532,9 +559,9 @@ export default async function StudentDashboardPage() {
                       className="dash-quick-action__icon"
                       style={{ background: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)" }}
                     >
-                      <Trophy className="h-4.5 w-4.5 text-violet-500" />
+                      <Trophy className="h-5 w-5 text-violet-500" />
                     </div>
-                    <span className="flex-1 truncate text-[13px] font-semibold text-[#0F172A]">
+                    <span className="flex-1 truncate text-[13.5px] font-semibold text-[#0F172A]">
                       {sc.competition.name}
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-violet-500" />

@@ -90,22 +90,22 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         )}
         style={{ width: "var(--sidebar-w)" }}
       >
-        <div className="px-5 pt-7 pb-5">
+        <div className="px-6 pt-9 pb-6">
           <div className="flex items-center gap-2">
             <Link href="/dashboard" className="group flex min-w-0 flex-1 items-center gap-3.5" onClick={() => setMobileOpen(false)}>
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
                 <Image
                   src="/brand-logo.png"
                   alt={BRAND_NAME}
-                  width={44}
-                  height={44}
+                  width={48}
+                  height={48}
                   className="h-full w-full object-cover"
                   priority
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-extrabold leading-snug tracking-tight text-white sm:text-[13px]">{BRAND_NAME}</p>
-                <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Área do aluno</p>
+                <p className="text-[12px] font-extrabold leading-[1.25] tracking-tight text-white sm:text-[13px]">{BRAND_NAME}</p>
+                <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">Área do aluno</p>
               </div>
             </Link>
             <button
@@ -119,9 +119,9 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
           </div>
         </div>
 
-        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+        <div className="mx-5 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
 
-        <nav className="flex flex-1 flex-col gap-0 overflow-y-auto overscroll-contain px-3 py-4">
+        <nav className="flex flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-6">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
@@ -133,10 +133,10 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
               >
                 <item.icon
                   className={cn(
-                    "h-[17px] w-[17px] shrink-0 transition-colors",
-                    isActive ? "text-[var(--accent-on-dark)]" : "text-white/45",
+                    "h-[18px] w-[18px] shrink-0 transition-colors",
+                    isActive ? "text-white" : "text-white/55",
                   )}
-                  strokeWidth={isActive ? 2.25 : 1.85}
+                  strokeWidth={isActive ? 2.4 : 1.9}
                 />
                 <span>{item.label}</span>
               </Link>
@@ -144,14 +144,14 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
           })}
         </nav>
 
-        <div className="border-t border-white/10 bg-black/15 px-3 py-4 backdrop-blur-sm">
+        <div className="mx-4 mb-4 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-4 backdrop-blur-sm">
           <Link
             href="/perfil"
-            className="mb-2 flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-white/8"
+            className="mb-3 flex items-center gap-3 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-white/8"
             onClick={() => setMobileOpen(false)}
           >
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold text-white"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[12px] font-bold text-white"
               style={{
                 background: "linear-gradient(135deg, #FB923C, #EA580C)",
                 boxShadow: "0 2px 12px rgba(234,88,12,0.35)",
@@ -160,10 +160,10 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold leading-tight text-white">{studentName ?? "Aluno"}</p>
-              <p className="mt-0.5 truncate text-[11px] text-white/45">{planName ?? "Plano"}</p>
+              <p className="truncate text-[13.5px] font-semibold leading-tight text-white">{studentName ?? "Aluno"}</p>
+              <p className="mt-1 truncate text-[11.5px] text-white/55">{planName ?? "Plano"}</p>
             </div>
-            <User className="h-4 w-4 shrink-0 text-white/35" />
+            <User className="h-4 w-4 shrink-0 text-white/40" />
           </Link>
 
           <button
@@ -171,7 +171,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
             onClick={() => void signOut({ redirect: false }).then(() => { window.location.href = "/login"; })}
             className="btn-logout"
           >
-            <LogOut className="h-[13px] w-[13px]" />
+            <LogOut className="h-[14px] w-[14px]" />
             <span>Sair</span>
           </button>
         </div>

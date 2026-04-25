@@ -51,25 +51,26 @@ export function WeeklyPerformanceChart({ data }: PerformanceChartProps) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={210}>
-      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: -18 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: -10 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
         <XAxis
           dataKey="day"
           tick={{ fontSize: 11.5, fill: "#94A3B8", fontWeight: 600 }}
           axisLine={false}
           tickLine={false}
-          dy={6}
+          dy={8}
         />
         <YAxis
           tick={{ fontSize: 10.5, fill: "#CBD5E1" }}
           axisLine={false}
           tickLine={false}
           allowDecimals={false}
+          width={32}
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(139, 92, 246, 0.06)" }} />
-        <Bar dataKey="correct" radius={[6, 6, 0, 0]} fill="#8B5CF6" maxBarSize={28} />
-        <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#E5E7EB" maxBarSize={28} />
+        <Bar dataKey="correct" radius={[6, 6, 0, 0]} fill="#8B5CF6" maxBarSize={26} />
+        <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#E5E7EB" maxBarSize={26} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -86,8 +87,8 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={210}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: -18 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: -10 }}>
         <defs>
           <linearGradient id="accuracyGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.22} />
@@ -100,7 +101,7 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
           tick={{ fontSize: 11, fill: "#94A3B8", fontWeight: 600 }}
           axisLine={false}
           tickLine={false}
-          dy={6}
+          dy={8}
         />
         <YAxis
           domain={[0, 100]}
@@ -108,6 +109,7 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
           axisLine={false}
           tickLine={false}
           unit="%"
+          width={36}
         />
         <Tooltip
           formatter={(value) => [formatAccuracyTooltipPercent(value), "Acerto"]}
