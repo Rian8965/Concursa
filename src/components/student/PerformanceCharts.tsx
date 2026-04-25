@@ -4,6 +4,15 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell,
 } from "recharts";
+import type { TooltipValueType } from "recharts";
+
+/** Recharts `ValueType` can be a scalar or a readonly array — normalize for display. */
+function formatAccuracyTooltipPercent(value: TooltipValueType | undefined): string {
+  if (value == null) return "0%";
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw == null || raw === "") return "0%";
+  return `${raw}%`;
+}
 
 interface DayData {
   day: string;
@@ -90,7 +99,7 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
         <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#D1D5DB" }} axisLine={false} tickLine={false} unit="%" />
         <Tooltip
-          formatter={(value: number | string | null | undefined) => [`${value ?? 0}%`, "Acerto"]}
+          formatter={(value) => [formatAccuracyTooltipPercent(value), "Acerto"]}
           contentStyle={{ borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 12 }}
         />
         <Area
