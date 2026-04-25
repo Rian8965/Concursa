@@ -588,6 +588,11 @@ export default function RevisaoImportacaoPage() {
   }
 
   function setQuestionDecision(qid: string, next: Decision) {
+    const row = imp?.importedQuestions.find((q) => q.id === qid);
+    if (row?.status === "PUBLISHED") {
+      toast.info("Esta questão já foi publicada. Não é possível alterar a decisão.");
+      return;
+    }
     if (next === "pending" || next === "reject" || !imp) {
       setDecisions((p) => ({ ...p, [qid]: next }));
       return;
@@ -1081,6 +1086,7 @@ export default function RevisaoImportacaoPage() {
       <div className="flex flex-col gap-5">
         {filteredQuestions.slice(0, visibleCount).map((q) => {
           const d = decisions[q.id] ?? "pending";
+          const alreadyPublished = q.status === "PUBLISHED";
           const isExpanded = expanded[q.id] ?? false;
           const draft = drafts[q.id] ?? q;
           const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
@@ -1180,7 +1186,13 @@ export default function RevisaoImportacaoPage() {
                             d === "pending" && "bg-slate-100 text-slate-800 ring-slate-200/90",
                           )}
                         >
-                          {d === "approve" ? "Aprovada na revisão" : d === "reject" ? "Rejeitada" : "Pendente de decisão"}
+                          {alreadyPublished
+                            ? "Já publicada"
+                            : d === "approve"
+                              ? "Aprovada na revisão"
+                              : d === "reject"
+                                ? "Rejeitada"
+                                : "Pendente de decisão"}
                         </span>
                         {warnings.length > 0 && (
                           <span className="inline-flex max-w-full items-center rounded-full bg-amber-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200/80 whitespace-normal">
@@ -1262,9 +1274,14 @@ export default function RevisaoImportacaoPage() {
                       d === "approve"
                         ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
                         : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
-                      anyPend && d !== "approve" && "opacity-55",
+                      (anyPend && d !== "approve") && "opacity-55",
+                      alreadyPublished && "cursor-not-allowed opacity-60",
                     )}
                     onClick={() => {
+                      if (alreadyPublished) {
+                        toast.info("Esta questão já foi publicada. Não é possível aprovar novamente.");
+                        return;
+                      }
                       if (d === "approve") setDecisions((prev) => ({ ...prev, [q.id]: "pending" }));
                       else setQuestionDecision(q.id, "approve");
                     }}
@@ -1280,8 +1297,15 @@ export default function RevisaoImportacaoPage() {
                       d === "reject"
                         ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
                         : "border-red-200 bg-white text-red-700 hover:bg-red-50",
+                      alreadyPublished && "cursor-not-allowed opacity-60",
                     )}
-                    onClick={() => setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }))}
+                    onClick={() => {
+                      if (alreadyPublished) {
+                        toast.info("Esta questão já foi publicada. Não é possível rejeitar agora.");
+                        return;
+                      }
+                      setDecisions((prev) => ({ ...prev, [q.id]: d === "reject" ? "pending" : "reject" }));
+                    }}
                     title="Rejeitar"
                     aria-pressed={d === "reject"}
                   >
