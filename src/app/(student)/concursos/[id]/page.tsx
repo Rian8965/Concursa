@@ -232,7 +232,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                 key={action.label}
                 href={action.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3.5 text-[13px] font-medium transition-shadow",
+                  "flex items-center gap-3 rounded-xl p-2.5 m-2.5 text-[13px] font-medium transition-shadow",
                   action.primary
                     ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
                     : "border border-black/[0.07] bg-white text-[#374151] hover:shadow-sm",
