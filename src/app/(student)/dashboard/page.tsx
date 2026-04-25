@@ -5,8 +5,9 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   BookOpen, Target, Trophy, Zap,
-  ArrowRight, Clock, Calendar, MapPin, Briefcase,
+  ArrowRight, Calendar, MapPin, Briefcase,
   Play, TrendingUp, CheckCircle2, Database,
+  Building2, Sparkles, ChevronRight,
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 import { WeeklyPerformanceChart, AccuracyTrendChart } from "@/components/student/PerformanceCharts";
@@ -52,7 +53,7 @@ export default async function StudentDashboardPage() {
         where: { isActive: true },
         include: {
           competition: { include: { city: true, examBoard: true } },
-          jobRole: { select: { id: true, name: true } },
+          jobRole: { select: { id: true, name: true, area: true } },
         },
         take: 3,
       },
@@ -62,7 +63,6 @@ export default async function StudentDashboardPage() {
   const profileId = profile?.id ?? "";
   const mainComp = profile?.studentCompetitions?.[0] ?? null;
 
-  // Stats gerais
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -82,7 +82,6 @@ export default async function StudentDashboardPage() {
   const weekTotal = weekAnswers.length;
   const weekCorrect = weekAnswers.filter((a) => a.isCorrect).length;
 
-  // Questões disponíveis (por banca ou por matérias)
   let availableQuestions = 0;
   let questionsBanca: string | null = null;
   if (mainComp) {
@@ -126,37 +125,62 @@ export default async function StudentDashboardPage() {
     ? Math.floor((mainExamMs - Date.now()) / 86400000)
     : null;
 
-  return (
-    <div className="space-y-6 pb-8">
+  const jobRoleArea =
+    mainComp?.jobRole && "area" in mainComp.jobRole
+      ? (mainComp.jobRole as { area?: string | null }).area ?? null
+      : null;
 
-      {/* ── Cabeçalho ── */}
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-violet-500">{greeting}</p>
-          <h1 className="mt-0.5 text-[26px] font-extrabold tracking-tight text-[#111827]">{firstName}</h1>
-          <p className="mt-1 text-[13px] text-gray-500">
+  return (
+    <div className="space-y-8 pb-10">
+
+      {/* ═══════════════════════════════════════════════════════════════
+          HEADER — saudação premium + card "70 dias" destacado
+         ═══════════════════════════════════════════════════════════════ */}
+      <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-violet-600">
+            {greeting},
+          </p>
+          <h1 className="mt-1 text-[40px] font-extrabold leading-[1.05] tracking-tight text-[#0F172A] sm:text-[44px]">
+            {firstName}
+          </h1>
+          <p className="mt-3 flex items-center gap-2 text-[14px] font-medium text-[#475569]">
+            <Calendar className="h-[15px] w-[15px] text-violet-400" />
             {formatDate(now, "EEEE, dd 'de' MMMM 'de' yyyy")}
           </p>
+          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#64748B]">
+            <Sparkles className="h-[14px] w-[14px] text-amber-500" />
+            Cada questão te aproxima da aprovação. Continue firme!
+          </p>
         </div>
+
         {daysLeft !== null && (
-          <div className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 text-center">
-            <p className="text-[28px] font-extrabold leading-none tracking-tight text-amber-900">{daysLeft}</p>
-            <p className="mt-1 text-[11px] font-semibold text-amber-700">
-              {daysLeft === 1 ? "dia" : "dias"} para a prova
-            </p>
+          <div className="dash-exam-countdown shrink-0 self-start lg:min-w-[230px]">
+            <Calendar className="h-7 w-7 shrink-0 text-amber-700/80" strokeWidth={1.8} />
+            <div className="relative z-10">
+              <p className="text-[40px] font-extrabold leading-none tracking-tight text-amber-900">
+                {daysLeft}
+              </p>
+              <p className="mt-1 text-[12.5px] font-semibold leading-snug text-amber-800">
+                {daysLeft === 1 ? "dia" : "dias"} para a prova
+              </p>
+            </div>
+            <span className="dash-exam-countdown__icon" aria-hidden>🏆</span>
           </div>
         )}
-      </div>
+      </header>
 
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* ═══════════════════════════════════════════════════════════════
+          MÉTRICAS — 4 cards com ícones em blocos coloridos
+         ═══════════════════════════════════════════════════════════════ */}
+      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             label: "Questões respondidas",
             value: totalAnswered,
             icon: BookOpen,
             color: "#7C3AED",
-            bg: "#F5F3FF",
+            bg: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)",
             sub: `${weekTotal} essa semana`,
           },
           {
@@ -164,7 +188,12 @@ export default async function StudentDashboardPage() {
             value: `${accuracy}%`,
             icon: Target,
             color: accuracy >= 70 ? "#059669" : accuracy >= 50 ? "#D97706" : "#DC2626",
-            bg: accuracy >= 70 ? "#F0FDF4" : accuracy >= 50 ? "#FFFBEB" : "#FEF2F2",
+            bg:
+              accuracy >= 70
+                ? "linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)"
+                : accuracy >= 50
+                ? "linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)"
+                : "linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)",
             sub: `${correctAnswers} acertos no total`,
           },
           {
@@ -172,7 +201,7 @@ export default async function StudentDashboardPage() {
             value: trainingSessions,
             icon: Zap,
             color: "#7C3AED",
-            bg: "#F5F3FF",
+            bg: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)",
             sub: "sessões de treino",
           },
           {
@@ -180,68 +209,89 @@ export default async function StudentDashboardPage() {
             value: simulatedExams,
             icon: Trophy,
             color: "#059669",
-            bg: "#F0FDF4",
+            bg: "linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)",
             sub: "simulados completos",
           },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11.5px] font-semibold text-gray-500">{s.label}</p>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: s.bg }}>
-                <s.icon className="h-4 w-4" style={{ color: s.color }} />
-              </div>
+          <div key={s.label} className="dash-metric">
+            <div className="dash-metric__icon" style={{ background: s.bg }}>
+              <s.icon className="h-6 w-6" style={{ color: s.color }} strokeWidth={2} />
             </div>
-            <p className="text-[24px] font-extrabold leading-none tracking-tight" style={{ color: s.color }}>
-              {s.value}
-            </p>
-            <p className="mt-1.5 text-[11px] text-gray-400">{s.sub}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-[#64748B]">{s.label}</p>
+              <p
+                className="mt-1.5 text-[32px] font-extrabold leading-none tracking-tight"
+                style={{ color: s.color }}
+              >
+                {s.value}
+              </p>
+              <p className="mt-2 text-[12px] text-[#94A3B8]">{s.sub}</p>
+            </div>
           </div>
         ))}
-      </div>
+      </section>
 
-      {/* ── Grade principal ── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
+      {/* ═══════════════════════════════════════════════════════════════
+          GRADE PRINCIPAL — concurso ativo (esq) + ações rápidas (dir)
+         ═══════════════════════════════════════════════════════════════ */}
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
 
-        {/* Coluna esquerda */}
-        <div className="space-y-5">
+        {/* ───── Coluna esquerda ───── */}
+        <div className="space-y-6">
 
-          {/* Concurso principal */}
+          {/* CARD HERO: Concurso ativo */}
           {mainComp ? (
-            <div className="overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-sm">
-              <div className="h-[3px] bg-gradient-to-r from-violet-600 to-fuchsia-500" />
-              <div className="p-5">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="dash-card relative overflow-hidden p-7 sm:p-8">
+              {/* Ícone decorativo de fundo */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -right-6 -top-4 hidden text-violet-100 sm:block"
+                style={{ opacity: 0.55 }}
+              >
+                <Building2 className="h-32 w-32" strokeWidth={1.2} />
+              </div>
+
+              <div className="relative">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
                   <Badge variant={mainComp.competition.status === "ACTIVE" ? "active" : "upcoming"}>
                     {mainComp.competition.status === "ACTIVE" ? "Ativo" : "Em breve"}
                   </Badge>
                   {mainComp.competition.examBoard && (
-                    <span className="rounded-md bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-700">
+                    <span className="rounded-md bg-violet-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-700">
                       {mainComp.competition.examBoard.acronym}
                     </span>
                   )}
                 </div>
 
-                <h2 className="text-[15px] font-bold leading-snug text-[#111827]">
+                <h2 className="max-w-[88%] text-[20px] font-extrabold leading-[1.25] tracking-tight text-[#0F172A] sm:text-[22px]">
                   {mainComp.competition.name}
                 </h2>
 
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-gray-500">
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2.5 text-[13px] text-[#475569]">
                   {mainComp.competition.city && (
                     <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <MapPin className="h-4 w-4 shrink-0 text-violet-400" />
                       {mainComp.competition.city.name}, {mainComp.competition.city.state}
                     </span>
                   )}
                   {mainComp.jobRole && (
-                    <span className="flex items-center gap-1.5 font-semibold text-[#374151]">
-                      <Briefcase className="h-3.5 w-3.5 shrink-0 text-violet-400" />
+                    <span className="flex items-center gap-1.5 font-semibold text-[#1E293B]">
+                      <Briefcase className="h-4 w-4 shrink-0 text-violet-400" />
                       {mainComp.jobRole.name}
+                    </span>
+                  )}
+                  {jobRoleArea && (
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 shrink-0 text-violet-400" />
+                      Área: {jobRoleArea}
                     </span>
                   )}
                   {mainComp.competition.examDate && (
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                      {formatDate(mainComp.competition.examDate)}
+                      <Calendar className="h-4 w-4 shrink-0 text-violet-400" />
+                      <span className="font-medium text-[#1E293B]">
+                        {formatDate(mainComp.competition.examDate)}
+                      </span>
                       {daysLeft !== null && daysLeft > 0 && (
                         <span className="font-semibold text-violet-700">
                           · {formatCountdown(mainComp.competition.examDate)}
@@ -251,15 +301,16 @@ export default async function StudentDashboardPage() {
                   )}
                 </div>
 
-                {/* Questões disponíveis */}
                 {availableQuestions > 0 && (
-                  <div className="mt-4 flex items-center gap-3 rounded-lg bg-violet-50 px-4 py-3">
-                    <Database className="h-4.5 w-4.5 shrink-0 text-violet-500" />
-                    <div>
-                      <p className="text-[13px] font-bold text-violet-900">
+                  <div className="mt-5 flex items-center gap-3 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-fuchsia-50/50 px-5 py-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+                      <Database className="h-5 w-5 text-violet-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-bold text-violet-900">
                         {availableQuestions.toLocaleString("pt-BR")} questões disponíveis
                       </p>
-                      <p className="text-[11.5px] text-violet-600">
+                      <p className="text-[12px] text-violet-700/80">
                         {questionsBanca
                           ? `Da banca ${questionsBanca} nas suas matérias`
                           : "Nas suas matérias"}
@@ -268,55 +319,71 @@ export default async function StudentDashboardPage() {
                   </div>
                 )}
 
-                <div className="mt-4 flex gap-2">
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <Link
                     href={`/concursos/${mainComp.competitionId}/treino`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-violet-700"
+                    className="dash-btn-primary"
                   >
-                    <Play className="h-3.5 w-3.5" /> Treinar
+                    <Play className="h-4 w-4" />
+                    Treinar agora
                   </Link>
                   <Link
                     href={`/concursos/${mainComp.competitionId}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50"
+                    className="dash-btn-secondary"
                   >
-                    Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
+                    Ver detalhes
+                    <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center">
-              <Trophy className="mx-auto mb-3 h-9 w-9 text-gray-300" strokeWidth={1.25} />
-              <p className="text-[14px] font-semibold text-gray-700">Nenhum concurso vinculado</p>
-              <p className="mt-1 text-[12.5px] text-gray-400">O administrador precisa vincular você a um concurso.</p>
+            <div className="dash-card flex flex-col items-center justify-center px-8 py-14 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-50">
+                <Trophy className="h-8 w-8 text-violet-300" strokeWidth={1.5} />
+              </div>
+              <p className="text-[16px] font-bold text-[#0F172A]">Nenhum concurso vinculado</p>
+              <p className="mt-2 max-w-md text-[13.5px] text-[#64748B]">
+                O administrador precisa vincular você a um concurso para liberar o conteúdo.
+              </p>
             </div>
           )}
 
-          {/* Gráficos lado a lado (weekly + accuracy trend) */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* GRÁFICOS — lado a lado, cards generosos */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* Evolução semanal */}
-            <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
+            <div className="dash-card p-6">
+              <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[13px] font-bold text-[#111827]">Evolução semanal</h3>
-                  <p className="text-[11.5px] text-gray-400">Questões e acertos · 7 dias</p>
+                  <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
+                    Evolução semanal
+                  </h3>
+                  <p className="mt-0.5 text-[12px] text-[#94A3B8]">
+                    Questões e acertos · 7 dias
+                  </p>
                 </div>
                 {weekTotal > 0 && (
                   <div className="text-right">
-                    <p className="text-[13px] font-bold text-violet-700">{weekTotal}</p>
-                    <p className="text-[10.5px] text-gray-400">respondidas</p>
+                    <p className="text-[20px] font-extrabold leading-none text-violet-700">
+                      {weekTotal}
+                    </p>
+                    <p className="mt-1 text-[10.5px] font-medium text-[#94A3B8]">
+                      respondidas
+                    </p>
                   </div>
                 )}
               </div>
-              <WeeklyPerformanceChart data={weekData} />
+              <div className="-mx-1">
+                <WeeklyPerformanceChart data={weekData} />
+              </div>
               {weekTotal > 0 && (
-                <div className="mt-2 flex items-center gap-3 text-[10.5px]">
+                <div className="mt-4 flex items-center gap-4 border-t border-slate-100 pt-3 text-[11.5px] text-[#64748B]">
                   <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-violet-500" />
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-500" />
                     Acertos
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-gray-200" />
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-slate-200" />
                     Total
                   </span>
                 </div>
@@ -324,92 +391,160 @@ export default async function StudentDashboardPage() {
             </div>
 
             {/* Taxa de acerto */}
-            <div className="rounded-xl border border-black/[0.07] bg-white p-5 shadow-sm">
-              <div className="mb-3">
-                <h3 className="text-[13px] font-bold text-[#111827]">Taxa de acerto</h3>
-                <p className="text-[11.5px] text-gray-400">Evolução diária · 7 dias</p>
-              </div>
-              <AccuracyTrendChart data={weekData} />
-              {weekTotal > 0 && (
-                <div className="mt-2 flex items-center justify-between text-[11px]">
-                  <span className="font-semibold text-violet-700">
-                    Semana: {weekTotal > 0 ? Math.round((weekCorrect / weekTotal) * 100) : 0}%
+            <div className="dash-card p-6">
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[15px] font-bold tracking-tight text-[#0F172A]">
+                    Taxa de acerto
+                  </h3>
+                  <p className="mt-0.5 text-[12px] text-[#94A3B8]">
+                    Evolução diária · 7 dias
+                  </p>
+                </div>
+                {weekTotal > 0 && (
+                  <span className="rounded-full bg-violet-50 px-3 py-1 text-[11.5px] font-bold text-violet-700">
+                    Semana: {Math.round((weekCorrect / weekTotal) * 100)}%
                   </span>
-                  <span className="text-gray-400">{weekCorrect} de {weekTotal} acertos</span>
+                )}
+              </div>
+              <div className="-mx-1">
+                <AccuracyTrendChart data={weekData} />
+              </div>
+              {weekTotal > 0 && (
+                <div className="mt-4 border-t border-slate-100 pt-3 text-right text-[11.5px] text-[#94A3B8]">
+                  {weekCorrect} de {weekTotal} acertos
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Coluna direita: ações + outros concursos */}
-        <div className="space-y-4">
+        {/* ───── Coluna direita: Ações rápidas + Plano + Outros ───── */}
+        <aside className="space-y-5">
 
-          {/* Ações rápidas */}
-          <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
-            <h3 className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-gray-500">Ações rápidas</h3>
-            <div className="space-y-1.5">
+          {/* AÇÕES RÁPIDAS */}
+          <div className="dash-card p-5 sm:p-6">
+            <h3 className="mb-4 text-[12px] font-bold uppercase tracking-[0.12em] text-[#64748B]">
+              Ações rápidas
+            </h3>
+            <div className="space-y-1">
               {[
-                { icon: Play, label: "Iniciar Treino", sub: "Questões das suas matérias", href: mainComp ? `/concursos/${mainComp.competitionId}/treino` : "/concursos", color: "#7C3AED" },
-                { icon: Target, label: "Novo Simulado", sub: "Teste cronometrado", href: mainComp ? `/concursos/${mainComp.competitionId}/simulado` : "/concursos", color: "#059669" },
-                { icon: TrendingUp, label: "Ver Desempenho", sub: "Análise completa", href: mainComp ? `/concursos/${mainComp.competitionId}/desempenho` : "/concursos", color: "#2563EB" },
-                { icon: CheckCircle2, label: "Revisar Erros", sub: "Com explicação da IA", href: "/revisar-erros", color: "#D97706" },
+                {
+                  icon: Play,
+                  label: "Iniciar Treino",
+                  sub: "Questões das suas matérias",
+                  href: mainComp ? `/concursos/${mainComp.competitionId}/treino` : "/concursos",
+                  color: "#7C3AED",
+                  bg: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)",
+                  highlight: true,
+                },
+                {
+                  icon: Target,
+                  label: "Novo Simulado",
+                  sub: "Teste cronometrado",
+                  href: mainComp ? `/concursos/${mainComp.competitionId}/simulado` : "/concursos",
+                  color: "#059669",
+                  bg: "linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)",
+                },
+                {
+                  icon: TrendingUp,
+                  label: "Ver Desempenho",
+                  sub: "Análise completa",
+                  href: mainComp ? `/concursos/${mainComp.competitionId}/desempenho` : "/concursos",
+                  color: "#2563EB",
+                  bg: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Revisar Erros",
+                  sub: "Com explicação da IA",
+                  href: "/revisar-erros",
+                  color: "#D97706",
+                  bg: "linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)",
+                },
               ].map((a) => (
                 <Link
                   key={a.label}
                   href={a.href}
-                  className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50"
+                  className="dash-quick-action group"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ background: `${a.color}18`, border: `1px solid ${a.color}28` }}>
-                    <a.icon className="h-3.5 w-3.5" style={{ color: a.color }} />
+                  <div
+                    className="dash-quick-action__icon"
+                    style={{ background: a.bg }}
+                  >
+                    <a.icon className="h-4.5 w-4.5" style={{ color: a.color }} strokeWidth={2.2} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-[#111827]">{a.label}</p>
-                    <p className="text-[11px] text-gray-400">{a.sub}</p>
+                    <p
+                      className={`truncate text-[13.5px] font-bold text-[#0F172A] ${a.highlight ? "" : ""}`}
+                    >
+                      {a.label}
+                    </p>
+                    <p className="truncate text-[11.5px] text-[#94A3B8]">{a.sub}</p>
                   </div>
-                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300 group-hover:text-violet-500" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" />
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Plano */}
+          {/* PLANO */}
           {profile?.plan && (
-            <div className="rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 p-4 text-white shadow-md">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] opacity-70">Seu plano</p>
-              <p className="mt-1 text-[16px] font-extrabold">{profile.plan.name}</p>
-              {profile.accessExpiresAt && (
-                <p className="mt-1 text-[12px] opacity-65">Válido até {formatDate(profile.accessExpiresAt)}</p>
-              )}
+            <div className="dash-plan-card">
+              <div className="relative z-10">
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] opacity-80">
+                  Seu plano
+                </p>
+                <p className="mt-1.5 text-[20px] font-extrabold leading-tight">
+                  {profile.plan.name}
+                </p>
+                {profile.accessExpiresAt && (
+                  <p className="mt-2 text-[12.5px] opacity-80">
+                    Válido até {formatDate(profile.accessExpiresAt)}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Outros concursos */}
+          {/* OUTROS CONCURSOS */}
           {(profile?.studentCompetitions.length ?? 0) > 1 && (
-            <div className="rounded-xl border border-black/[0.07] bg-white p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-[12px] font-bold uppercase tracking-[0.08em] text-gray-500">Mais concursos</h3>
-                <Link href="/concursos" className="text-[12px] font-semibold text-violet-600 hover:text-violet-800">
-                  Ver todos
+            <div className="dash-card p-5 sm:p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#64748B]">
+                  Mais concursos
+                </h3>
+                <Link
+                  href="/concursos"
+                  className="text-[12.5px] font-bold text-violet-600 hover:text-violet-700"
+                >
+                  Ver todos →
                 </Link>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {(profile?.studentCompetitions ?? []).slice(1).map((sc) => (
                   <Link
                     key={sc.id}
                     href={`/concursos/${sc.competitionId}`}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-gray-50"
+                    className="dash-quick-action group"
                   >
-                    <Trophy className="h-4 w-4 shrink-0 text-violet-400" />
-                    <span className="flex-1 truncate text-[13px] font-medium text-gray-700">{sc.competition.name}</span>
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+                    <div
+                      className="dash-quick-action__icon"
+                      style={{ background: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)" }}
+                    >
+                      <Trophy className="h-4.5 w-4.5 text-violet-500" />
+                    </div>
+                    <span className="flex-1 truncate text-[13px] font-semibold text-[#0F172A]">
+                      {sc.competition.name}
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-violet-500" />
                   </Link>
                 ))}
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </aside>
+      </section>
     </div>
   );
 }

@@ -77,10 +77,10 @@
   --accent-border:    rgba(234, 88, 12, 0.35);
 
   /* ── Sidebar escura (menu lateral) ── */
-  --sidebar-dark-top:    #4C1D95;
-  --sidebar-dark-mid:    #3B0764;
-  --sidebar-dark-bottom: #1E0638;
-  --sidebar-dark-glow:   rgba(249, 115, 22, 0.12);
+  --sidebar-dark-top:    #2A0E5C;
+  --sidebar-dark-mid:    #1A0640;
+  --sidebar-dark-bottom: #0F0226;
+  --sidebar-dark-glow:   rgba(168, 85, 247, 0.14);
 
   /* ── GRADIENTES ── */
   --gradient-brand:   linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
@@ -111,7 +111,7 @@
   --r-full: 9999px;
 
   /* ── ADMIN SHELL (área útil ampla em telas grandes) ── */
-  --sidebar-w: 268px;
+  --sidebar-w: 280px;
   --admin-shell-gap: 18px;
   --admin-content-max: min(1580px, calc(100vw - var(--sidebar-w) - var(--admin-shell-gap) - 28px));
   --orbit-line: rgba(124,58,237,0.12);
@@ -742,15 +742,17 @@ h1, h2, h3, h4, h5, h6 {
 
 .student-main-inner {
   width: 100%;
-  max-width: min(1200px, calc(100vw - var(--sidebar-w) - 32px));
+  max-width: min(1480px, calc(100vw - var(--sidebar-w) - 32px));
   margin: 0 auto;
-  padding: clamp(24px, 3.5vw, 44px) clamp(18px, 3vw, 40px) 64px;
+  padding: clamp(28px, 3.5vw, 56px) clamp(22px, 3.6vw, 56px) 80px;
 }
 
 @media (min-width: 1280px) {
   .student-main-inner {
-    padding-top: 44px;
-    padding-bottom: 80px;
+    padding-top: 56px;
+    padding-bottom: 96px;
+    padding-left: clamp(36px, 4vw, 64px);
+    padding-right: clamp(36px, 4vw, 64px);
   }
 }
 
@@ -781,6 +783,189 @@ h1, h2, h3, h4, h5, h6 {
   padding: clamp(48px, 8vw, 72px) clamp(20px, 4vw, 40px);
   text-align: center;
   box-shadow: var(--shadow-sm);
+}
+
+/* ============================================================
+   DASHBOARD ALUNO — sistema visual premium (refatoração)
+   ============================================================ */
+
+/* Card base premium reutilizado em todo o dashboard */
+.dash-card {
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  border-radius: 22px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 12px 28px rgba(17, 24, 39, 0.04),
+    0 4px 8px rgba(17, 24, 39, 0.03);
+  transition: box-shadow var(--t-base), border-color var(--t-base), transform var(--t-base);
+}
+.dash-card:hover {
+  border-color: rgba(124, 58, 237, 0.14);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 18px 38px rgba(17, 24, 39, 0.07),
+    0 6px 12px rgba(91, 33, 182, 0.05);
+}
+
+/* Card de dias para a prova — destaque quente claro */
+.dash-exam-countdown {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 28px 22px 26px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #FFF6E5 0%, #FFE9C7 100%);
+  border: 1px solid rgba(217, 119, 6, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.75) inset,
+    0 14px 32px rgba(217, 119, 6, 0.10);
+  position: relative;
+  overflow: hidden;
+}
+.dash-exam-countdown__icon {
+  position: absolute;
+  right: -14px;
+  bottom: -10px;
+  font-size: 92px;
+  line-height: 1;
+  opacity: 0.25;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(217, 119, 6, 0.18));
+}
+
+/* Cards de métricas — visual premium com ícone em bloco colorido */
+.dash-metric {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 22px 22px 22px;
+  border-radius: 22px;
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 10px 24px rgba(17, 24, 39, 0.04);
+  transition: transform var(--t-base), box-shadow var(--t-base), border-color var(--t-base);
+}
+.dash-metric:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124, 58, 237, 0.12);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 16px 36px rgba(17, 24, 39, 0.07);
+}
+.dash-metric__icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Botão "Treinar" hero do card de concurso */
+.dash-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 28px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+  background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 50%, #6D28D9 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 10px 28px rgba(124, 58, 237, 0.32);
+  border: none;
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-base);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dash-btn-primary:hover {
+  transform: translateY(-1.5px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.28) inset,
+    0 14px 36px rgba(124, 58, 237, 0.40);
+}
+
+/* Botão secundário ao lado de "Treinar" */
+.dash-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 24, 39, 0.10);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dash-btn-secondary:hover {
+  background: #FAFAFD;
+  border-color: rgba(124, 58, 237, 0.22);
+  transform: translateY(-1px);
+}
+
+/* Painel de ações rápidas — itens premium */
+.dash-quick-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: transparent;
+  text-decoration: none;
+  transition: background var(--t-fast), transform var(--t-fast);
+  border: 1px solid transparent;
+}
+.dash-quick-action:hover {
+  background: linear-gradient(135deg, #FAF5FF 0%, #F5F3FF 100%);
+  border-color: rgba(124, 58, 237, 0.10);
+  transform: translateX(2px);
+}
+.dash-quick-action__icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Plano (gradiente roxo) */
+.dash-plan-card {
+  background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C084FC 100%);
+  border-radius: 22px;
+  padding: 22px 22px 24px;
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 14px 36px rgba(124, 58, 237, 0.30);
+  position: relative;
+  overflow: hidden;
+}
+.dash-plan-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.18), transparent 55%),
+    radial-gradient(circle at 0% 100%, rgba(0, 0, 0, 0.1), transparent 50%);
+  pointer-events: none;
 }
 
 /* ============================================================
@@ -829,15 +1014,17 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-app .nav-item.active {
-  background: linear-gradient(90deg, rgba(249, 115, 22, 0.22) 0%, rgba(124, 58, 237, 0.38) 100%);
+  background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
   color: #fff;
-  font-weight: 600;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset;
+  font-weight: 700;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 8px 22px rgba(124, 58, 237, 0.42);
 }
 
 .sidebar-app .nav-item.active::before {
-  background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  box-shadow: 0 2px 12px rgba(249, 115, 22, 0.45);
+  background: linear-gradient(180deg, #C4B5FD, #A78BFA);
+  box-shadow: 0 2px 12px rgba(168, 85, 247, 0.55);
 }
 
 .sidebar-app .btn-logout {

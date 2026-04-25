@@ -2,7 +2,7 @@
 
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Cell,
+  ResponsiveContainer, BarChart, Bar,
 } from "recharts";
 import type { TooltipValueType } from "recharts";
 
@@ -25,8 +25,6 @@ interface PerformanceChartProps {
   data: DayData[];
 }
 
-const DAYS_BR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -46,31 +44,32 @@ function CustomTooltip({ active, payload, label }: any) {
 export function WeeklyPerformanceChart({ data }: PerformanceChartProps) {
   if (data.every((d) => d.total === 0)) {
     return (
-      <div className="flex h-[160px] items-center justify-center">
+      <div className="flex h-[210px] items-center justify-center">
         <p className="text-[13px] text-gray-400">Nenhuma questão respondida esta semana</p>
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={160}>
-      <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+    <ResponsiveContainer width="100%" height={210}>
+      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: -18 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
         <XAxis
           dataKey="day"
-          tick={{ fontSize: 11, fill: "#9CA3AF", fontWeight: 600 }}
+          tick={{ fontSize: 11.5, fill: "#94A3B8", fontWeight: 600 }}
           axisLine={false}
           tickLine={false}
+          dy={6}
         />
         <YAxis
-          tick={{ fontSize: 10, fill: "#D1D5DB" }}
+          tick={{ fontSize: 10.5, fill: "#CBD5E1" }}
           axisLine={false}
           tickLine={false}
           allowDecimals={false}
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(139, 92, 246, 0.06)" }} />
-        <Bar dataKey="correct" radius={[4, 4, 0, 0]} fill="#8B5CF6" maxBarSize={32} />
-        <Bar dataKey="total" radius={[4, 4, 0, 0]} fill="#E5E7EB" maxBarSize={32} />
+        <Bar dataKey="correct" radius={[6, 6, 0, 0]} fill="#8B5CF6" maxBarSize={28} />
+        <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#E5E7EB" maxBarSize={28} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -80,27 +79,39 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
   const filtered = data.filter((d) => d.total > 0);
   if (filtered.length === 0) {
     return (
-      <div className="flex h-[120px] items-center justify-center">
-        <p className="text-[12px] text-gray-400">Sem dados</p>
+      <div className="flex h-[210px] items-center justify-center">
+        <p className="text-[12.5px] text-gray-400">Sem dados de acerto ainda</p>
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={120}>
-      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
+    <ResponsiveContainer width="100%" height={210}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: -18 }}>
         <defs>
           <linearGradient id="accuracyGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
+            <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.22} />
             <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-        <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#D1D5DB" }} axisLine={false} tickLine={false} unit="%" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+        <XAxis
+          dataKey="day"
+          tick={{ fontSize: 11, fill: "#94A3B8", fontWeight: 600 }}
+          axisLine={false}
+          tickLine={false}
+          dy={6}
+        />
+        <YAxis
+          domain={[0, 100]}
+          tick={{ fontSize: 10.5, fill: "#CBD5E1" }}
+          axisLine={false}
+          tickLine={false}
+          unit="%"
+        />
         <Tooltip
           formatter={(value) => [formatAccuracyTooltipPercent(value), "Acerto"]}
-          contentStyle={{ borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 12 }}
+          contentStyle={{ borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12, padding: "8px 12px" }}
         />
         <Area
           type="monotone"
@@ -108,8 +119,8 @@ export function AccuracyTrendChart({ data }: PerformanceChartProps) {
           stroke="#8B5CF6"
           strokeWidth={2.5}
           fill="url(#accuracyGrad)"
-          dot={{ r: 3, fill: "#8B5CF6", strokeWidth: 0 }}
-          activeDot={{ r: 5, fill: "#7C3AED" }}
+          dot={{ r: 3.5, fill: "#8B5CF6", strokeWidth: 0 }}
+          activeDot={{ r: 6, fill: "#7C3AED" }}
         />
       </AreaChart>
     </ResponsiveContainer>
