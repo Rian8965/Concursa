@@ -1,9 +1,11 @@
+import type { Difficulty } from "@prisma/client";
+
 export type QuestionContextKeyInput = {
   competitionId: string;
   jobRoleId: string | null;
   examBoardId: string | null;
   subjectIds: string[];
-  difficulty?: string | null;
+  difficulty?: Difficulty | string | null;
 };
 
 export function buildQuestionContextKey(input: QuestionContextKeyInput) {

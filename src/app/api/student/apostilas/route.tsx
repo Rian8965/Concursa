@@ -9,6 +9,7 @@ import {
 } from "@/components/pdf/apostila-document";
 import { getEligibleSubjectsForStudentCompetition } from "@/lib/questions/eligible-subjects";
 import { selectQuestionsForStudent } from "@/lib/questions/select-questions";
+import type { Difficulty } from "@prisma/client";
 
 const MIN_Q = 5;
 const MAX_Q = 60;
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const competitionId = body.competitionId as string | undefined;
   const requestedSubjectIds = Array.isArray(body.subjectIds) ? body.subjectIds.filter(Boolean) as string[] : [];
-  const difficulty = typeof body.difficulty === "string" && body.difficulty !== "ALL" ? body.difficulty : null;
+  const difficultyRaw = typeof body.difficulty === "string" && body.difficulty !== "ALL" ? body.difficulty : null;
+  const difficulty: Difficulty | null =
+    difficultyRaw === "EASY" || difficultyRaw === "MEDIUM" || difficultyRaw === "HARD" ? difficultyRaw : null;
   const includeAnswerKey = body.includeAnswerKey !== false;
 
   let count = typeof body.questionCount === "number" ? body.questionCount : DEFAULT_Q;

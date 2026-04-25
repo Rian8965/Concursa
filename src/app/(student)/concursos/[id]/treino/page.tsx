@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Play, CheckCircle2, XCircle, ArrowRight, ArrowLeft,
@@ -200,6 +200,7 @@ const DIFFICULTIES = [
 export default function TreinoPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const competitionId = params.id as string;
 
   const [phase, setPhase] = useState<Phase>("config");
@@ -219,19 +220,14 @@ export default function TreinoPage() {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
       .then((r) => r.json())
       .then((d: { subjects?: { id: string; name: string }[] }) => {
-        if (d.subjects?.length) setSubjects(d.subjects);
-        else {
-          fetch("/api/admin/subjects")
-            .then((r) => r.json())
-            .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
+        setSubjects(d.subjects ?? []);
+        const pre = searchParams.get("subject")?.trim();
+        if (pre && (d.subjects ?? []).some((s) => s.id === pre)) {
+          setSelectedSubjects([pre]);
         }
       })
-      .catch(() => {
-        fetch("/api/admin/subjects")
-          .then((r) => r.json())
-          .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
-      });
-  }, [competitionId]);
+      .catch(() => setSubjects([]));
+  }, [competitionId, searchParams]);
 
   async function startTraining() {
     setPhase("loading");
@@ -321,7 +317,7 @@ export default function TreinoPage() {
             </p>
             {subjects.length === 0 ? (
               <p style={{ fontSize: 13, color: "#9CA3AF" }}>
-                Nenhuma matéria disponível — todas as questões serão usadas
+                Nenhuma matéria disponível para o seu cargo neste concurso (ou o vínculo ainda não foi configurado).
               </p>
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

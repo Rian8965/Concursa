@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { Prisma } from "@prisma/client";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -77,16 +78,29 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
   // Conta questões disponíveis para o aluno (com filtro de banca se definida)
   const subjectIds = displaySubjects.map((s) => s.id);
   const hasBanca = comp.examBoardDefined && comp.examBoardId;
-  const questionsAvailable = subjectIds.length > 0
-    ? await prisma.question.count({
-        where: {
+  const poolWhere: Prisma.QuestionWhereInput | null =
+    subjectIds.length > 0
+      ? {
           status: "ACTIVE",
           alternatives: { some: {} },
-          subjectId: { in: subjectIds },
-          ...(hasBanca && { examBoardId: comp.examBoardId! }),
-        },
-      })
-    : 0;
+          AND: [
+            {
+              OR: [
+                { subjectId: { in: subjectIds } },
+                { aiMeta: { suggestedSubjectId: { in: subjectIds } } },
+              ],
+            },
+            ...(hasBanca && comp.examBoardId
+              ? [
+                  {
+                    OR: [{ examBoardId: comp.examBoardId }, { aiMeta: { suggestedExamBoardId: comp.examBoardId } }],
+                  } satisfies Prisma.QuestionWhereInput,
+                ]
+              : []),
+          ],
+        }
+      : null;
+  const questionsAvailable = poolWhere ? await prisma.question.count({ where: poolWhere }) : 0;
 
   // Dias restantes para a prova
   let daysLeft: number | null = null;

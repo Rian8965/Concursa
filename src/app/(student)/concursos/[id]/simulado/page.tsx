@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Target, CheckCircle2, XCircle, Clock, ArrowLeft, ArrowRight,
@@ -260,6 +260,7 @@ function ReportModal({
 export default function SimuladoPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const competitionId = params.id as string;
 
   const [phase, setPhase] = useState<Phase>("config");
@@ -292,19 +293,14 @@ export default function SimuladoPage() {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
       .then((r) => r.json())
       .then((d: { subjects?: { id: string; name: string }[] }) => {
-        if (d.subjects?.length) setSubjects(d.subjects);
-        else {
-          fetch("/api/admin/subjects")
-            .then((r) => r.json())
-            .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
+        setSubjects(d.subjects ?? []);
+        const pre = searchParams.get("subject")?.trim();
+        if (pre && (d.subjects ?? []).some((s) => s.id === pre)) {
+          setSelectedSubjects([pre]);
         }
       })
-      .catch(() => {
-        fetch("/api/admin/subjects")
-          .then((r) => r.json())
-          .then((d2: { subjects?: { id: string; name: string }[] }) => setSubjects(d2.subjects ?? []));
-      });
-  }, [competitionId]);
+      .catch(() => setSubjects([]));
+  }, [competitionId, searchParams]);
 
   const submitExam = useCallback(async (spent: number) => {
     const currentExamId = examIdRef.current;
@@ -481,7 +477,7 @@ export default function SimuladoPage() {
             </div>
           </div>
 
-          {subjects.length > 0 && (
+          {subjects.length > 0 ? (
             <div style={{ marginBottom: 24 }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 10 }}>
                 Matérias (opcional)
@@ -505,6 +501,12 @@ export default function SimuladoPage() {
                   </button>
                 ))}
               </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>
+                Nenhuma matéria disponível para o seu cargo neste concurso (ou o vínculo ainda não foi configurado).
+              </p>
             </div>
           )}
 

@@ -14,18 +14,22 @@ export async function getEligibleSubjectsForStudentCompetition(input: {
     select: { jobRoleId: true },
   });
 
-  if (enrollment?.jobRoleId) {
+  if (!enrollment) {
+    return { enrolled: false as const, subjectIds: [] as string[], jobRoleId: null as string | null };
+  }
+
+  if (enrollment.jobRoleId) {
     const links = await prisma.competitionJobRoleSubject.findMany({
       where: { competitionId: input.competitionId, jobRoleId: enrollment.jobRoleId },
       select: { subjectId: true },
     });
-    return { subjectIds: links.map((l) => l.subjectId), jobRoleId: enrollment.jobRoleId };
+    return { enrolled: true as const, subjectIds: links.map((l) => l.subjectId), jobRoleId: enrollment.jobRoleId };
   }
 
   const links = await prisma.competitionSubject.findMany({
     where: { competitionId: input.competitionId },
     select: { subjectId: true },
   });
-  return { subjectIds: links.map((l) => l.subjectId), jobRoleId: null };
+  return { enrolled: true as const, subjectIds: links.map((l) => l.subjectId), jobRoleId: null };
 }
 

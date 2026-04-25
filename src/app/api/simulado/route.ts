@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getEligibleSubjectsForStudentCompetition } from "@/lib/questions/eligible-subjects";
 import { selectQuestionsForStudent } from "@/lib/questions/select-questions";
+import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -22,33 +23,87 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "concurso obrigatório" }, { status: 400 });
   }
 
-  const { subjectIds: allowedSubjectIds, jobRoleId } = await getEligibleSubjectsForStudentCompetition({
+  const { enrolled, subjectIds: allowedSubjectIds, jobRoleId } = await getEligibleSubjectsForStudentCompetition({
     studentProfileId: profile.id,
     competitionId,
   });
 
-  const effectiveSubjectIds: string[] | undefined = subjectIds?.length
-    ? allowedSubjectIds?.length
-      ? subjectIds.filter((id) => allowedSubjectIds!.includes(id))
-      : subjectIds
-    : allowedSubjectIds?.length ? allowedSubjectIds : undefined;
+  if (!enrolled) {
+    return NextResponse.json(
+      { code: "NOT_ENROLLED", error: "Você não está inscrito neste concurso." },
+      { status: 403 },
+    );
+  }
+
+  if (!allowedSubjectIds.length) {
+    return NextResponse.json(
+      {
+        code: jobRoleId ? "NO_SUBJECTS_FOR_JOB" : "NO_SUBJECTS_FOR_COMPETITION",
+        error: jobRoleId
+          ? "Não há matérias vinculadas ao seu cargo neste concurso. Peça ao administrador para configurar as matérias do cargo."
+          : "Não há matérias vinculadas a este concurso. Peça ao administrador para configurar as matérias do edital.",
+      },
+      { status: 400 },
+    );
+  }
+
+  let effectiveSubjectIds: string[] = allowedSubjectIds;
+  if (subjectIds?.length) {
+    const inter = subjectIds.filter((id) => allowedSubjectIds.includes(id));
+    effectiveSubjectIds = inter.length ? inter : allowedSubjectIds;
+  }
 
   // CORREÇÃO CRÍTICA: filtrar por matéria quando disponível, sem exigir competitionId nas questões
   // + filtro por banca quando o concurso tem banca definida
   let examBoardId: string | null = null;
+  let boardRequired = false;
   if (competitionId) {
     const comp = await prisma.competition.findUnique({
       where: { id: competitionId },
       select: { examBoardId: true, examBoardDefined: true },
     });
-    if (comp?.examBoardDefined && comp.examBoardId) examBoardId = comp.examBoardId;
+    boardRequired = Boolean(comp?.examBoardDefined && comp.examBoardId);
+    if (boardRequired) examBoardId = comp!.examBoardId!;
+  }
+
+  const poolBase: Prisma.QuestionWhereInput = {
+    status: "ACTIVE",
+    alternatives: { some: {} },
+    AND: [
+      {
+        OR: [
+          { subjectId: { in: effectiveSubjectIds } },
+          { aiMeta: { suggestedSubjectId: { in: effectiveSubjectIds } } },
+        ],
+      },
+      ...(examBoardId
+        ? [
+            {
+              OR: [{ examBoardId: examBoardId }, { aiMeta: { suggestedExamBoardId: examBoardId } }],
+            } as Prisma.QuestionWhereInput,
+          ]
+        : []),
+    ],
+  };
+
+  const available = await prisma.question.count({ where: poolBase });
+  if (available === 0) {
+    return NextResponse.json(
+      {
+        code: boardRequired ? "NO_QUESTIONS_FOR_BOARD" : "NO_QUESTIONS_FOR_SUBJECTS",
+        error: boardRequired
+          ? "Não há questões ativas compatíveis com a banca deste concurso e com as matérias do seu cargo."
+          : "Não há questões ativas compatíveis com as matérias do seu cargo (ou do concurso).",
+      },
+      { status: 404 },
+    );
   }
 
   const { questions: picked } = await selectQuestionsForStudent({
     studentProfileId: profile.id,
     competitionId,
     jobRoleId,
-    subjectIds: effectiveSubjectIds ?? allowedSubjectIds,
+    subjectIds: effectiveSubjectIds,
     examBoardId,
     difficulty: null,
     quantity: Math.max(1, Math.min(120, Math.floor(quantity ?? 20))),
@@ -56,6 +111,15 @@ export async function POST(req: NextRequest) {
   });
 
   const shuffled = picked.map((p) => p.question);
+  if (!shuffled.length) {
+    return NextResponse.json(
+      {
+        code: "NO_QUESTIONS_MATCH_FILTERS",
+        error: "Não foi possível montar a lista de questões. Tente reduzir a quantidade ou verifique se há questões ativas suficientes.",
+      },
+      { status: 404 },
+    );
+  }
 
   const isFreeMode = !timeLimitMinutes || timeLimitMinutes <= 0;
   const timeAllowedSeconds = isFreeMode ? null : timeLimitMinutes * 60;
@@ -85,7 +149,12 @@ export async function POST(req: NextRequest) {
       difficulty: q.difficulty,
       hasImage: q.hasImage,
       imageUrl: q.imageUrl,
-      alternatives: q.alternatives.map((a) => ({ id: a.id, letter: a.letter, content: a.content })),
+      alternatives: q.alternatives.map((a) => ({
+        id: a.id,
+        letter: a.letter,
+        content: a.content,
+        imageUrl: a.imageUrl ?? null,
+      })),
     })),
   });
 }

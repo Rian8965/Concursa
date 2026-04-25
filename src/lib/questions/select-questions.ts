@@ -1,3 +1,4 @@
+import { Difficulty, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { buildQuestionContextKey } from "./context-key";
 
@@ -9,7 +10,7 @@ export type SelectQuestionsInput = {
   jobRoleId: string | null;
   subjectIds: string[];
   examBoardId: string | null;
-  difficulty?: string | null;
+  difficulty?: Difficulty | null;
   quantity: number;
   deliveryType: DeliveryType;
 };
@@ -23,11 +24,24 @@ export async function selectQuestionsForStudent(input: SelectQuestionsInput) {
     difficulty: input.difficulty ?? null,
   });
 
-  const baseWhere: Record<string, unknown> = {
+  const subjectOr: Prisma.QuestionWhereInput[] = [];
+  if (input.subjectIds.length) {
+    subjectOr.push({ subjectId: { in: input.subjectIds } });
+    subjectOr.push({ aiMeta: { suggestedSubjectId: { in: input.subjectIds } } });
+  }
+
+  const andClauses: Prisma.QuestionWhereInput[] = [];
+  if (subjectOr.length) andClauses.push({ OR: subjectOr });
+  if (input.examBoardId) {
+    andClauses.push({
+      OR: [{ examBoardId: input.examBoardId }, { aiMeta: { suggestedExamBoardId: input.examBoardId } }],
+    });
+  }
+
+  const baseWhere: Prisma.QuestionWhereInput = {
     status: "ACTIVE",
     alternatives: { some: {} },
-    ...(input.subjectIds.length ? { subjectId: { in: input.subjectIds } } : {}),
-    ...(input.examBoardId ? { examBoardId: input.examBoardId } : {}),
+    ...(andClauses.length ? { AND: andClauses } : {}),
     ...(input.difficulty ? { difficulty: input.difficulty } : {}),
   };
 
@@ -42,7 +56,7 @@ export async function selectQuestionsForStudent(input: SelectQuestionsInput) {
   });
   const usedIds = usedRows.map((r) => r.questionId);
 
-  const unusedWhere = usedIds.length ? { ...baseWhere, id: { notIn: usedIds } } : baseWhere;
+  const unusedWhere: Prisma.QuestionWhereInput = usedIds.length ? { AND: [baseWhere, { id: { notIn: usedIds } }] } : baseWhere;
 
   const unused = await prisma.question.findMany({
     where: unusedWhere,
@@ -92,15 +106,18 @@ export async function selectQuestionsForStudent(input: SelectQuestionsInput) {
     .map((x) => ({ question: x.q, reason: x.pick.reason, contextKey }));
 
   // Registra entregas (anti-repetição por filtro)
-  await prisma.usedQuestion.createMany({
-    data: ordered.map((o) => ({
-      studentProfileId: input.studentProfileId,
-      questionId: o.question.id,
-      usedInType: input.deliveryType,
-      contextKey,
-      reason: o.reason,
-    })),
-  });
+  if (ordered.length) {
+    await prisma.usedQuestion.createMany({
+      data: ordered.map((o) => ({
+        studentProfileId: input.studentProfileId,
+        questionId: o.question.id,
+        usedInType: input.deliveryType,
+        contextKey,
+        reason: o.reason,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   return { contextKey, questions: ordered };
 }
