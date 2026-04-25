@@ -498,6 +498,7 @@ enum SessionType {
   TRAINING
   EXAM
   REVIEW
+  MANUAL
 }
 
 // ============================================================
@@ -610,10 +611,16 @@ model UsedQuestion {
   questionId       String
   usedInType       UsedInType
   usedAt           DateTime   @default(now())
+  /// Chave do contexto (concurso/cargo/matérias/banca/dificuldade) para anti-repetição por filtro
+  contextKey       String?
+  /// Motivo: nova ou repetida por esgotamento do banco no filtro
+  reason           UsedQuestionReason @default(NEW)
 
   studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   question       Question       @relation(fields: [questionId], references: [id])
 
+  @@index([studentProfileId, usedInType, contextKey])
+  @@index([studentProfileId, questionId])
   @@map("used_questions")
 }
 
@@ -621,6 +628,11 @@ enum UsedInType {
   TRAINING
   EXAM
   APOSTILA
+}
+
+enum UsedQuestionReason {
+  NEW
+  REPEAT_EXHAUSTED
 }
 
 // ============================================================
