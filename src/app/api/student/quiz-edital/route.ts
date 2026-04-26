@@ -7,6 +7,12 @@ export const runtime = "nodejs";
 type GeminiOk = { ok: true; answer: string; model: string };
 type GeminiErr = { ok: false; retryable: boolean; status?: number; message: string; raw?: string };
 
+function trimText(s: string, maxChars: number) {
+  const t = (s ?? "").trim();
+  if (t.length <= maxChars) return t;
+  return `${t.slice(0, maxChars)}\n\n[Contexto truncado automaticamente para caber no limite do modelo]`;
+}
+
 async function callGemini(args: {
   apiKey: string;
   systemPrompt: string;
@@ -37,7 +43,14 @@ async function callGemini(args: {
         const retryable = res.status === 429 || res.status >= 500;
         // 404/NOT_FOUND: tenta próximo endpoint/modelo
         if (res.status === 404 || t.includes("NOT_FOUND")) continue;
-        return { ok: false, retryable, status: res.status, message: `Gemini ${model} (${res.status})`, raw: t.slice(0, 1200) };
+        // tenta extrair mensagem útil do JSON de erro do Gemini
+        let extracted = "";
+        try {
+          const j = JSON.parse(t) as any;
+          extracted = j?.error?.message ? String(j.error.message) : "";
+        } catch { /* ignore */ }
+        const msg = extracted ? `Gemini ${model} (${res.status}): ${extracted}` : `Gemini ${model} (${res.status})`;
+        return { ok: false, retryable, status: res.status, message: msg, raw: t.slice(0, 2400) };
       }
 
       const data = (await res.json()) as {
@@ -197,10 +210,10 @@ export async function POST(req: NextRequest) {
   const userPrompt = [
     "CONTEXTO DO EDITAL:",
     "---",
-    editalContext,
+    trimText(editalContext, 14000),
     "---",
     "",
-    `PERGUNTA DO ALUNO: ${question.trim()}`,
+    `PERGUNTA DO ALUNO: ${trimText(question.trim(), 1200)}`,
   ].join("\n");
 
   const models = [

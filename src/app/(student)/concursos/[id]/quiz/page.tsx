@@ -55,7 +55,8 @@ export default function QuizEditalPage() {
       if (!res.ok) {
         const extra = data?.code ? ` (${data.code})` : "";
         const det = data?.details?.status ? ` [${data.details.status}]` : "";
-        throw new Error((data.error ?? "Erro ao obter resposta") + extra + det);
+        const detMsg = data?.details?.message ? ` — ${data.details.message}` : "";
+        throw new Error((data.error ?? "Erro ao obter resposta") + extra + det + detMsg);
       }
       setMessages((p) => [...p, { role: "assistant", content: data.answer ?? "", model: data.model }]);
     } catch (e) {
