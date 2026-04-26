@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, XCircle, Eye, Bot, ShieldAlert, Edit3 } from "lucide-react";
+import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
 
 type ReportStatus =
   | "PENDING"
@@ -35,11 +36,19 @@ interface Report {
   createdAt: string;
   question: {
     id: string;
+    code?: string | null;
     content: string;
     correctAnswer: string;
     isMarkedSuspect: boolean;
     status?: string;
+    year?: number | null;
+    difficulty?: string | null;
     subject: { name: string } | null;
+    topic?: { name: string } | null;
+    competition?: { name: string } | null;
+    examBoard?: { acronym: string } | null;
+    city?: { name: string; state: string } | null;
+    jobRole?: { name: string; level: string | null } | null;
   };
   studentProfile: {
     user: { name: string; email: string };
@@ -266,11 +275,21 @@ export default function DenunciasAdminPage() {
                   <div style={{ padding: "18px 18px" }}>
                     {/* Question content */}
                     <div style={{ marginBottom: 14 }}>
-                      {report.question.subject && (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 12, marginBottom: 6, display: "inline-block" }}>
-                          {report.question.subject.name}
-                        </span>
-                      )}
+                      <QuestionMetaLine
+                        meta={{
+                          code: report.question.code ?? null,
+                          examBoard: report.question.examBoard?.acronym ?? null,
+                          year: report.question.year ?? null,
+                          subject: report.question.subject?.name ?? null,
+                          topic: report.question.topic?.name ?? null,
+                          competition: report.question.competition?.name ?? null,
+                          jobRole: report.question.jobRole?.name ?? null,
+                          level: report.question.jobRole?.level ?? null,
+                          city: report.question.city ? `${report.question.city.name}/${report.question.city.state}` : null,
+                          difficulty: report.question.difficulty ?? null,
+                        }}
+                        className="mb-2"
+                      />
                       <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, marginTop: 6 }}>
                         {report.question.content.length > 300
                           ? report.question.content.slice(0, 300) + "…"

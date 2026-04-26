@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Plus, Search, Edit2, Trash2, BookOpen, Filter, Eye, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
 
 interface Question {
   id: string;
+  code?: string | null;
   content: string;
   difficulty: string;
   status: string;
@@ -331,6 +333,11 @@ function AdminQuestoesContent() {
               <div className="flex gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap gap-2">
+                    {q.code && (
+                      <span className="rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] font-extrabold text-slate-800 ring-1 ring-slate-200/80">
+                        {q.code}
+                      </span>
+                    )}
                     {q.subject && (
                       <span className="rounded-lg border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-800">
                         {q.subject.name}
@@ -515,6 +522,7 @@ function QuestionModal({ id, reportId, onClose, onSaved }: ModalProps) {
   const [related, setRelated] = useState<{ id: string; content: string; competition: { name: string } | null }[]>([]);
   const [checkingRelated, setCheckingRelated] = useState(false);
   const [form, setForm] = useState({
+    code: "",
     content: "",
     supportText: "",
     competitionId: "",
@@ -539,6 +547,7 @@ function QuestionModal({ id, reportId, onClose, onSaved }: ModalProps) {
   useEffect(() => {
     if (!id) {
       setForm({
+        code: "",
         content: "",
         supportText: "",
         competitionId: "",
@@ -560,6 +569,7 @@ function QuestionModal({ id, reportId, onClose, onSaved }: ModalProps) {
         const letters = ["A", "B", "C", "D", "E"] as const;
         const rawAlts = question.alternatives ?? [];
         setForm({
+          code: (question as any).code ?? "",
           content: question.content,
           supportText: question.supportText ?? "",
           competitionId: question.competitionId ?? "",

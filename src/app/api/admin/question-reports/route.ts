@@ -31,11 +31,19 @@ export async function GET(req: NextRequest) {
         question: {
           select: {
             id: true,
+            code: true,
             content: true,
             correctAnswer: true,
             isMarkedSuspect: true,
             status: true,
+            year: true,
+            difficulty: true,
             subject: { select: { name: true } },
+            topic: { select: { name: true } },
+            competition: { select: { name: true } },
+            examBoard: { select: { acronym: true } },
+            city: { select: { name: true, state: true } },
+            jobRole: { select: { name: true, level: true } },
           },
         },
         studentProfile: {

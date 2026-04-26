@@ -742,13 +742,21 @@ export default function SimuladoPage() {
                 </div>
               ) : (
                 <div>
-                  <div style={{ marginBottom: 10 }}>
-                    {reviewQuestion.question?.subject?.name && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>
-                        {reviewQuestion.question.subject.name}
-                      </span>
-                    )}
-                  </div>
+                  <QuestionMetaLine
+                    meta={{
+                      code: (reviewQuestion.question as any)?.code ?? null,
+                      examBoard: (reviewQuestion.question as any)?.examBoard?.acronym ?? null,
+                      year: (reviewQuestion.question as any)?.year ?? null,
+                      subject: reviewQuestion.question?.subject?.name ?? null,
+                      topic: (reviewQuestion.question as any)?.topic?.name ?? null,
+                      competition: (reviewQuestion.question as any)?.competition?.name ?? null,
+                      jobRole: (reviewQuestion.question as any)?.jobRole?.name ?? null,
+                      level: (reviewQuestion.question as any)?.jobRole?.level ?? null,
+                      city: (reviewQuestion.question as any)?.city ? `${(reviewQuestion.question as any).city.name}/${(reviewQuestion.question as any).city.state}` : null,
+                      difficulty: (reviewQuestion.question as any)?.difficulty ?? null,
+                    }}
+                    className="mb-3"
+                  />
 
                   {reviewQuestion.question?.supportText ? (
                     <div style={{ marginBottom: 12, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
