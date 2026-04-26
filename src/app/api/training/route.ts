@@ -5,6 +5,25 @@ import { selectQuestionsForStudent } from "@/lib/questions/select-questions";
 import { Difficulty, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
+function normalizeImageUrl(u: unknown): string | null {
+  if (typeof u !== "string") return null;
+  const t = u.trim();
+  if (!t) return null;
+  if (t.startsWith("data:")) return t;
+  if (t.startsWith("https://")) return t;
+  if (t.startsWith("http://")) return `https://${t.slice("http://".length)}`;
+  if (t.startsWith("//")) return `https:${t}`;
+  if (t.startsWith("gcs://")) {
+    const rest = t.slice("gcs://".length);
+    const idx = rest.indexOf("/");
+    const bucket = idx === -1 ? rest : rest.slice(0, idx);
+    const object = idx === -1 ? "" : rest.slice(idx + 1);
+    if (!bucket || !object) return null;
+    return `https://storage.googleapis.com/${bucket}/${object}`;
+  }
+  return t;
+}
+
 function parseDifficultyFilter(d: unknown): Difficulty | undefined {
   if (d !== "EASY" && d !== "MEDIUM" && d !== "HARD") return undefined;
   return d;
@@ -158,12 +177,12 @@ export async function POST(req: NextRequest) {
       subject: q.subject?.name,
       difficulty: q.difficulty,
       hasImage: q.hasImage,
-      imageUrl: q.imageUrl,
+      imageUrl: normalizeImageUrl(q.imageUrl),
       alternatives: q.alternatives.map((a) => ({
         id: a.id,
         letter: a.letter,
         content: a.content,
-        imageUrl: a.imageUrl ?? null,
+        imageUrl: normalizeImageUrl(a.imageUrl),
       })),
     })),
   });
