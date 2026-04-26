@@ -57,8 +57,13 @@ export default function QuestoesPage() {
       if (filters.status) sp.set("status", filters.status);
       if (filters.origin) sp.set("origin", filters.origin);
       const res = await fetch(`/api/student/questions?${sp.toString()}`);
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Falha ao carregar");
+      let j: any = null;
+      try {
+        j = await res.json();
+      } catch {
+        j = null;
+      }
+      if (!res.ok) throw new Error(j?.error ?? "Falha ao carregar");
       setData({ questions: j.questions ?? [], total: j.total ?? 0, limit: j.limit ?? 25 });
       setPage(j.page ?? p);
     } catch (e) {

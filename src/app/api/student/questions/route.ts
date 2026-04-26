@@ -10,35 +10,36 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
-  if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
+    const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
+    if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
 
-  const { searchParams } = new URL(req.url);
-  const page = clamp(parseInt(searchParams.get("page") ?? "1", 10) || 1, 1, 9999);
-  const limit = clamp(parseInt(searchParams.get("limit") ?? "25", 10) || 25, 5, 50);
+    const { searchParams } = new URL(req.url);
+    const page = clamp(parseInt(searchParams.get("page") ?? "1", 10) || 1, 1, 9999);
+    const limit = clamp(parseInt(searchParams.get("limit") ?? "25", 10) || 25, 5, 50);
 
-  const search = (searchParams.get("search") ?? "").trim();
-  const subjectId = (searchParams.get("subjectId") ?? "").trim() || null;
-  const topicId = (searchParams.get("topicId") ?? "").trim() || null;
-  const examBoardId = (searchParams.get("examBoardId") ?? "").trim() || null;
-  const year = (searchParams.get("year") ?? "").trim() || null;
-  const status = ((searchParams.get("status") ?? "ALL").toUpperCase() as StatusFilter) ?? "ALL";
-  const origin = ((searchParams.get("origin") ?? "ALL").toUpperCase() as OriginFilter) ?? "ALL";
+    const search = (searchParams.get("search") ?? "").trim();
+    const subjectId = (searchParams.get("subjectId") ?? "").trim() || null;
+    const topicId = (searchParams.get("topicId") ?? "").trim() || null;
+    const examBoardId = (searchParams.get("examBoardId") ?? "").trim() || null;
+    const year = (searchParams.get("year") ?? "").trim() || null;
+    const status = ((searchParams.get("status") ?? "ALL").toUpperCase() as StatusFilter) ?? "ALL";
+    const origin = ((searchParams.get("origin") ?? "ALL").toUpperCase() as OriginFilter) ?? "ALL";
 
-  const yearNum = year ? parseInt(year, 10) : null;
+    const yearNum = year ? parseInt(year, 10) : null;
 
-  // Busca por número da questão (id "Q123" ou "123") não existe no modelo, então tratamos como conteúdo.
-  const qSearch = search;
+    // Busca por número da questão (id "Q123" ou "123") não existe no modelo, então tratamos como conteúdo.
+    const qSearch = search;
 
-  // Listagem compacta baseada em:
-  // - últimas respostas por questão (StudentAnswer)
-  // - + questões entregues e não respondidas (UsedQuestion sem StudentAnswer)
-  //
-  // Observação: usamos queryRaw para manter leve e paginável sem N+1.
-  const rows = await prisma.$queryRaw<
+    // Listagem compacta baseada em:
+    // - últimas respostas por questão (StudentAnswer)
+    // - + questões entregues e não respondidas (UsedQuestion sem StudentAnswer)
+    //
+    // Observação: usamos queryRaw para manter leve e paginável sem N+1.
+    const rows = await prisma.$queryRaw<
     Array<{
       questionId: string;
       lastAnsweredAt: Date | null;
@@ -151,8 +152,8 @@ ORDER BY "lastAnsweredAt" DESC NULLS LAST, "questionId" DESC
 LIMIT ${limit} OFFSET ${(page - 1) * limit};
 `;
 
-  // total (para paginação) — calculado separado, mas barato com as mesmas CTEs.
-  const totalRow = await prisma.$queryRaw<Array<{ total: bigint }>>`
+    // total (para paginação) — calculado separado, mas barato com as mesmas CTEs.
+    const totalRow = await prisma.$queryRaw<Array<{ total: bigint }>>`
 WITH last_answers AS (
   SELECT DISTINCT ON (sa."questionId")
     sa."questionId",
@@ -213,25 +214,32 @@ SELECT COUNT(*)::bigint AS total FROM (
 ) x;
 `;
 
-  const totalRaw = totalRow?.[0]?.total;
-  const total = typeof totalRaw === "bigint" ? Number(totalRaw) : Number(totalRaw ?? 0);
+    const totalRaw = totalRow?.[0]?.total;
+    const total = typeof totalRaw === "bigint" ? Number(totalRaw) : Number(totalRaw ?? 0);
 
-  return NextResponse.json({
-    page,
-    limit,
-    total,
-    questions: rows.map((r) => ({
-      questionId: r.questionId,
-      snippet: r.content.length > 180 ? `${r.content.slice(0, 180)}…` : r.content,
-      subjectName: r.subjectName,
-      topicName: r.topicName,
-      examBoardAcronym: r.examBoardAcronym,
-      year: r.year,
-      status: r.lastAnsweredAt == null ? "UNANSWERED" : (r.lastIsCorrect ? "CORRECT" : "WRONG"),
-      lastAnsweredAt: r.lastAnsweredAt,
-      wrongCount: r.wrongCount,
-      origin: r.lastSessionType,
-    })),
-  });
+    return NextResponse.json({
+      page,
+      limit,
+      total,
+      questions: rows.map((r) => ({
+        questionId: r.questionId,
+        snippet: r.content.length > 180 ? `${r.content.slice(0, 180)}…` : r.content,
+        subjectName: r.subjectName,
+        topicName: r.topicName,
+        examBoardAcronym: r.examBoardAcronym,
+        year: r.year,
+        status: r.lastAnsweredAt == null ? "UNANSWERED" : (r.lastIsCorrect ? "CORRECT" : "WRONG"),
+        lastAnsweredAt: r.lastAnsweredAt,
+        wrongCount: r.wrongCount,
+        origin: r.lastSessionType,
+      })),
+    });
+  } catch (e) {
+    console.error("[api/student/questions]", e);
+    return NextResponse.json(
+      { error: "Erro ao carregar questões. Tente novamente." },
+      { status: 500 },
+    );
+  }
 }
 
