@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
 
   const poolWhere: any = {
     status: "ACTIVE",
+    isMarkedSuspect: false,
     alternatives: { some: {} },
     AND: andClauses,
     ...(difficulty ? { difficulty } : {}),

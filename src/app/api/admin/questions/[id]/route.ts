@@ -23,6 +23,7 @@ type QuestionUpdateBody = {
   alternatives: { letter: string; content: string }[];
   hasImage?: boolean;
   imageUrl?: string | null;
+  reportId?: string | null;
 };
 
 function parseYear(y: unknown): number | null {
@@ -80,6 +81,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     alternatives,
     hasImage,
     imageUrl,
+    reportId,
   } = body;
 
   const altLetters = new Set(alternatives.map((a) => a.letter));
@@ -93,8 +95,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const linkCols = await getQuestionOptionalLinkColumns(prisma);
     const question = await prisma.$transaction(async (tx) => {
+      const before = await tx.question.findUnique({
+        where: { id },
+        include: { alternatives: { orderBy: { order: "asc" } } },
+      });
+
       await tx.alternative.deleteMany({ where: { questionId: id } });
-      return tx.question.update({
+      const updated = await tx.question.update({
         where: { id },
         data: {
           content,
@@ -121,6 +128,37 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         },
         include: { alternatives: { orderBy: { order: "asc" } } },
       });
+
+      // Auditoria (opcional): registra revisão vinculada à denúncia, se fornecida
+      if (before) {
+        await tx.questionRevision.create({
+          data: {
+            questionId: id,
+            reportId: typeof reportId === "string" && reportId.trim() ? reportId.trim() : null,
+            editedBy: session.user.id,
+            before: {
+              content: before.content,
+              supportText: before.supportText,
+              correctAnswer: before.correctAnswer,
+              status: before.status,
+              hasImage: before.hasImage,
+              imageUrl: before.imageUrl,
+              alternatives: (before.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
+            },
+            after: {
+              content: updated.content,
+              supportText: updated.supportText,
+              correctAnswer: updated.correctAnswer,
+              status: updated.status,
+              hasImage: updated.hasImage,
+              imageUrl: updated.imageUrl,
+              alternatives: (updated.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
+            },
+          },
+        });
+      }
+
+      return updated;
     });
 
     return NextResponse.json({ question });

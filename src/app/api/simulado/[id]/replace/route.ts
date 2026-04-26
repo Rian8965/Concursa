@@ -45,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const baseWhere = {
     status: "ACTIVE" as const,
+    isMarkedSuspect: false as const,
     alternatives: { some: {} as const },
     AND: [
       {

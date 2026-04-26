@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
 
   const poolBase: Prisma.QuestionWhereInput = {
     status: "ACTIVE",
+    isMarkedSuspect: false,
     alternatives: { some: {} },
     AND: [
       {

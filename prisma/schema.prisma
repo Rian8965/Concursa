@@ -416,6 +416,7 @@ model Question {
   apostilaQuestions ApostilaQuestion[]
   usedBy            UsedQuestion[]
   questionReports   QuestionReport[]
+  revisions        QuestionRevision[]
 
   @@map("questions")
 }
@@ -828,6 +829,9 @@ enum QuestionReportStatus {
   PENDING
   AI_REVIEWED
   UNDER_REVIEW
+  IN_ANALYSIS
+  PROCEDENTE
+  IMPROCEDENTE
   RESOLVED
   DISMISSED
 }
@@ -852,6 +856,8 @@ model QuestionReport {
   studentProfile StudentProfile          @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   question       Question                @relation(fields: [questionId], references: [id], onDelete: Cascade)
   aiReview       QuestionReportAiReview?
+  events         QuestionReportEvent[]
+  revisions      QuestionRevision[]
 
   @@map("question_reports")
 }
@@ -868,6 +874,41 @@ model QuestionReportAiReview {
   report QuestionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@map("question_report_ai_reviews")
+}
+
+/// Auditoria de mudanças de status/ações em denúncias (admin)
+model QuestionReportEvent {
+  id          String   @id @default(cuid())
+  reportId    String
+  actorUserId String
+  action      String   // ex: "STATUS_CHANGE", "NOTE_UPDATE", "MARK_SUSPECT"
+  fromStatus  QuestionReportStatus?
+  toStatus    QuestionReportStatus?
+  note        String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  report QuestionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+  @@map("question_report_events")
+}
+
+/// Auditoria de revisões/edições de uma questão (admin)
+model QuestionRevision {
+  id          String   @id @default(cuid())
+  questionId  String
+  reportId    String?
+  editedBy    String
+  editedAt    DateTime @default(now())
+  before      Json
+  after       Json
+
+  question Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  report   QuestionReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([questionId, editedAt])
+  @@index([reportId])
+  @@map("question_revisions")
 }
 
 // ============================================================

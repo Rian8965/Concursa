@@ -68,6 +68,16 @@ function AdminQuestoesContent() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
+  // Deep-link: abrir modal de edição via querystring (usado pelo fluxo de denúncias)
+  useEffect(() => {
+    const edit = searchParams.get("edit");
+    if (edit && typeof edit === "string" && edit.trim()) {
+      setEditingId(edit.trim());
+      setShowForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const load = useCallback(async (q = "", f?: typeof filters) => {
     const eff = f ?? filtersRef.current;
     setLoading(true);
@@ -454,6 +464,7 @@ function AdminQuestoesContent() {
       {showForm && (
         <QuestionModal
           id={editingId}
+          reportId={searchParams.get("fromReport")}
           onClose={() => {
             setShowForm(false);
             setEditingId(null);
@@ -462,6 +473,12 @@ function AdminQuestoesContent() {
             setShowForm(false);
             setEditingId(null);
             load(search);
+
+            // Se veio de uma denúncia, volta automaticamente para a denúncia
+            const fromReport = searchParams.get("fromReport");
+            if (fromReport) {
+              window.location.href = `/admin/denuncias?focus=${encodeURIComponent(fromReport)}`;
+            }
           }}
         />
       )}
@@ -477,6 +494,7 @@ function AdminQuestoesContent() {
 
 interface ModalProps {
   id: string | null;
+  reportId?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -489,7 +507,7 @@ const emptyAlternatives = () => [
   { letter: "E", content: "" },
 ];
 
-function QuestionModal({ id, onClose, onSaved }: ModalProps) {
+function QuestionModal({ id, reportId, onClose, onSaved }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
@@ -624,6 +642,7 @@ function QuestionModal({ id, onClose, onSaved }: ModalProps) {
       supportText: form.supportText.trim() || null,
       hasImage: Boolean(form.imageUrl),
       imageUrl: form.imageUrl || null,
+      reportId: reportId || null,
     };
     const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (res.ok) {

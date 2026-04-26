@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Clock, XCircle, Eye, Bot, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Clock, XCircle, Eye, Bot, ShieldAlert, Edit3 } from "lucide-react";
 
-type ReportStatus = "PENDING" | "AI_REVIEWED" | "UNDER_REVIEW" | "RESOLVED" | "DISMISSED";
+type ReportStatus =
+  | "PENDING"
+  | "AI_REVIEWED"
+  | "UNDER_REVIEW"
+  | "IN_ANALYSIS"
+  | "PROCEDENTE"
+  | "IMPROCEDENTE"
+  | "RESOLVED"
+  | "DISMISSED";
 type ReportCategory =
   | "INCOMPLETE_STATEMENT" | "MISSING_TEXT" | "MISSING_IMAGE" | "MISSING_ALTERNATIVE"
   | "FORMAT_ERROR" | "WRONG_ANSWER" | "AMBIGUOUS_ANSWER" | "INCONSISTENT_CONTENT" | "OTHER";
@@ -20,6 +29,7 @@ interface Report {
   category: ReportCategory;
   description: string | null;
   phase: string;
+  sessionType?: string | null;
   status: ReportStatus;
   adminNote: string | null;
   createdAt: string;
@@ -28,6 +38,7 @@ interface Report {
     content: string;
     correctAnswer: string;
     isMarkedSuspect: boolean;
+    status?: string;
     subject: { name: string } | null;
   };
   studentProfile: {
@@ -52,6 +63,9 @@ const STATUS_CONFIG: Record<ReportStatus, { label: string; color: string; bg: st
   PENDING: { label: "Pendente", color: "#D97706", bg: "#FFFBEB", icon: <Clock style={{ width: 12, height: 12 }} /> },
   AI_REVIEWED: { label: "Revisado por IA", color: "#7C3AED", bg: "#EDE9FE", icon: <Bot style={{ width: 12, height: 12 }} /> },
   UNDER_REVIEW: { label: "Em revisão", color: "#2563EB", bg: "#EFF6FF", icon: <Eye style={{ width: 12, height: 12 }} /> },
+  IN_ANALYSIS: { label: "Em análise", color: "#1D4ED8", bg: "#DBEAFE", icon: <Eye style={{ width: 12, height: 12 }} /> },
+  PROCEDENTE: { label: "Procedente", color: "#059669", bg: "#ECFDF5", icon: <CheckCircle2 style={{ width: 12, height: 12 }} /> },
+  IMPROCEDENTE: { label: "Improcedente", color: "#6B7280", bg: "#F3F4F6", icon: <XCircle style={{ width: 12, height: 12 }} /> },
   RESOLVED: { label: "Resolvido", color: "#059669", bg: "#ECFDF5", icon: <CheckCircle2 style={{ width: 12, height: 12 }} /> },
   DISMISSED: { label: "Descartado", color: "#6B7280", bg: "#F9FAFB", icon: <XCircle style={{ width: 12, height: 12 }} /> },
 };
@@ -68,9 +82,21 @@ const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: "PENDING", label: "Pendentes" },
   { value: "AI_REVIEWED", label: "Revisados por IA" },
   { value: "UNDER_REVIEW", label: "Em revisão" },
+  { value: "IN_ANALYSIS", label: "Em análise" },
+  { value: "PROCEDENTE", label: "Procedentes" },
+  { value: "IMPROCEDENTE", label: "Improcedentes" },
   { value: "RESOLVED", label: "Resolvidos" },
   { value: "DISMISSED", label: "Descartados" },
 ];
+
+function sessionTypeLabel(t?: string | null) {
+  if (!t) return "—";
+  if (t === "TRAINING") return "Treino";
+  if (t === "EXAM") return "Simulado";
+  if (t === "APOSTILA") return "Apostila";
+  if (t === "REVIEW") return "Revisão";
+  return t;
+}
 
 export default function DenunciasAdminPage() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -254,6 +280,10 @@ export default function DenunciasAdminPage() {
                         Gabarito oficial: <strong>{report.question.correctAnswer.toUpperCase()}</strong>
                         {" · "}
                         Reportado {report.phase === "during" ? "durante a prova" : "após a prova"}
+                        {" · "}
+                        Origem: <strong>{sessionTypeLabel(report.sessionType)}</strong>
+                        {" · "}
+                        Status da questão: <strong>{String(report.question.status ?? "—")}</strong>
                       </p>
                     </div>
 
@@ -298,6 +328,20 @@ export default function DenunciasAdminPage() {
 
                     {/* Admin actions */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Link
+                          href={`/admin/questoes?edit=${encodeURIComponent(report.question.id)}&fromReport=${encodeURIComponent(report.id)}`}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            border: "1.5px solid #DDD6FE", background: "#EDE9FE", color: "#5B21B6",
+                            display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
+                          }}
+                        >
+                          <Edit3 style={{ width: 12, height: 12 }} />
+                          Editar questão
+                        </Link>
+                      </div>
+
                       <textarea
                         placeholder="Nota interna do admin (opcional)..."
                         value={adminNotes[report.id] ?? (report.adminNote ?? "")}
@@ -321,6 +365,45 @@ export default function DenunciasAdminPage() {
                             }}
                           >
                             Marcar em revisão
+                          </button>
+                        )}
+
+                        {report.status !== "IN_ANALYSIS" && (
+                          <button
+                            onClick={() => updateReport(report.id, { status: "IN_ANALYSIS", adminNote: adminNotes[report.id] })}
+                            disabled={saving[report.id]}
+                            style={{
+                              padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                              border: "1.5px solid #BFDBFE", background: "#DBEAFE", color: "#1D4ED8", cursor: "pointer",
+                            }}
+                          >
+                            Marcar em análise
+                          </button>
+                        )}
+
+                        {report.status !== "PROCEDENTE" && (
+                          <button
+                            onClick={() => updateReport(report.id, { status: "PROCEDENTE", adminNote: adminNotes[report.id] })}
+                            disabled={saving[report.id]}
+                            style={{
+                              padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                              border: "1.5px solid #A7F3D0", background: "#ECFDF5", color: "#059669", cursor: "pointer",
+                            }}
+                          >
+                            Marcar procedente
+                          </button>
+                        )}
+
+                        {report.status !== "IMPROCEDENTE" && (
+                          <button
+                            onClick={() => updateReport(report.id, { status: "IMPROCEDENTE", adminNote: adminNotes[report.id] })}
+                            disabled={saving[report.id]}
+                            style={{
+                              padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                              border: "1.5px solid #E5E7EB", background: "#F3F4F6", color: "#6B7280", cursor: "pointer",
+                            }}
+                          >
+                            Marcar improcedente
                           </button>
                         )}
 

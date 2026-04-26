@@ -40,6 +40,7 @@ export async function selectQuestionsForStudent(input: SelectQuestionsInput) {
 
   const baseWhere: Prisma.QuestionWhereInput = {
     status: "ACTIVE",
+    isMarkedSuspect: false,
     alternatives: { some: {} },
     ...(andClauses.length ? { AND: andClauses } : {}),
     ...(input.difficulty ? { difficulty: input.difficulty } : {}),

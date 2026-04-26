@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
             content: true,
             correctAnswer: true,
             isMarkedSuspect: true,
+            status: true,
             subject: { select: { name: true } },
           },
         },
