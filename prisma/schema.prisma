@@ -897,3 +897,18 @@ model BrandTheme {
 
   @@map("brand_themes")
 }
+
+/// Assets de marca armazenados no banco (persistente entre instâncias/deploys)
+model BrandAsset {
+  id        String   @id @default(cuid())
+  /// Nome do arquivo gerado (ex: "a1b2...c3.webp") usado na URL pública
+  key       String   @unique
+  mimeType  String
+  bytes     Bytes
+  /// Metadados opcionais (útil para debug/triagem)
+  kind      String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("brand_assets")
+}

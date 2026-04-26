@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { makeBrandAssetKey, saveBrandAssetBuffer } from "@/lib/brand-storage";
+import { prisma } from "@/lib/db/prisma";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,7 +53,17 @@ export async function POST(req: Request) {
   }
 
   const key = makeBrandAssetKey(extFromMime(mime));
-  await saveBrandAssetBuffer(key, bytes);
+  // Persistência global: salva no banco (funciona em múltiplas instâncias/devices).
+  // Mantemos também o storage em arquivo como fallback/compatibilidade local.
+  await prisma.brandAsset.create({
+    data: {
+      key,
+      mimeType: mime,
+      bytes,
+      kind: kind || null,
+    },
+  });
+  await saveBrandAssetBuffer(key, bytes).catch(() => {});
   const url = `/api/public/brand-assets/${key}`;
 
   return NextResponse.json({ key, url });

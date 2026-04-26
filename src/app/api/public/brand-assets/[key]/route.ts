@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readBrandAssetBuffer } from "@/lib/brand-storage";
+import { prisma } from "@/lib/db/prisma";
 
 export const runtime = "nodejs";
 
@@ -15,14 +16,22 @@ function contentTypeFromKey(key: string) {
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
-  const storedPath = `private/brand-assets/${key}`;
-  const buf = await readBrandAssetBuffer(storedPath);
+  // Fonte primária: banco (persistente entre instâncias).
+  const db = await prisma.brandAsset.findUnique({
+    where: { key },
+    select: { bytes: true, mimeType: true },
+  });
+
+  const buf = db?.bytes
+    ? Buffer.from(db.bytes)
+    : await readBrandAssetBuffer(`private/brand-assets/${key}`);
+
   if (!buf) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
 
   return new NextResponse(new Uint8Array(buf), {
     status: 200,
     headers: {
-      "Content-Type": contentTypeFromKey(key),
+      "Content-Type": db?.mimeType ?? contentTypeFromKey(key),
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });
