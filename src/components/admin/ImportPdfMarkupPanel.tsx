@@ -53,9 +53,15 @@ type Props = {
     role: "SUPPORT_TEXT" | "FIGURE";
     page: number;
     alternativeLetter?: string | null;
+    targetQuestionId?: string | null;
   }) => void;
   /** Quando setado (A–E), o próximo desenho vincula imagem àquela alternativa. Força recorte de imagem. */
   targetAlternativeLetter?: string | null;
+  /**
+   * Quando true e uiMode="linker", cria o ImportAsset mas NÃO cria o vínculo imediatamente.
+   * Útil para abrir um modal perguntando se o vínculo vale para outras questões.
+   */
+  deferLinkCreation?: boolean;
 };
 
 function normRect(ax: number, ay: number, bx: number, by: number) {
@@ -81,6 +87,7 @@ export function ImportPdfMarkupPanel({
   layout = "workspace",
   onLinkCreated,
   targetAlternativeLetter = null,
+  deferLinkCreation = false,
 }: Props) {
   const [page, setPage] = useState(() => {
     const p = initialPage;
@@ -456,22 +463,30 @@ export function ImportPdfMarkupPanel({
         const assetId = data.asset?.id as string;
         const role = uiMode === "linker" ? computedRole : (effectiveMode === "TEXT_BLOCK" ? "SUPPORT_TEXT" : "FIGURE");
         const altL = targetAlternativeLetter?.trim().toUpperCase().slice(0, 1) ?? null;
-        const lr = await fetch(`/api/admin/imports/${importId}/links`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            importedQuestionId: effectiveTargetQ,
-            importAssetId: assetId,
-            role,
-            ...(altL && /^[A-E]$/i.test(altL) ? { alternativeLetter: altL } : {}),
-          }),
-        });
-        if (!lr.ok) {
-          const err = await lr.json().catch(() => ({}));
-          throw new Error(err.error ?? "Erro ao vincular");
+        if (!(deferLinkCreation && uiMode === "linker")) {
+          const lr = await fetch(`/api/admin/imports/${importId}/links`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              importedQuestionId: effectiveTargetQ,
+              importAssetId: assetId,
+              role,
+              ...(altL && /^[A-E]$/i.test(altL) ? { alternativeLetter: altL } : {}),
+            }),
+          });
+          if (!lr.ok) {
+            const err = await lr.json().catch(() => ({}));
+            throw new Error(err.error ?? "Erro ao vincular");
+          }
         }
         await onChanged();
-        onLinkCreated?.({ assetId, role, page, alternativeLetter: altL && /^[A-E]$/i.test(altL) ? altL : null });
+        onLinkCreated?.({
+          assetId,
+          role,
+          page,
+          alternativeLetter: altL && /^[A-E]$/i.test(altL) ? altL : null,
+          targetQuestionId: effectiveTargetQ ?? null,
+        });
       } catch (err) {
         console.error(err);
         alert(err instanceof Error ? err.message : "Erro");
@@ -498,6 +513,7 @@ export function ImportPdfMarkupPanel({
       onLinkCreated,
       targetAlternativeLetter,
       extractPdfTextFromRegion,
+      deferLinkCreation,
     ],
   );
 
