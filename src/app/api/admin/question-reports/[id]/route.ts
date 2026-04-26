@@ -83,16 +83,24 @@ export async function PATCH(
       });
     }
     if (events.length) {
-      await tx.questionReportEvent.createMany({
-        data: events.map((e) => ({
-          reportId: report.id,
-          actorUserId: session.user.id,
-          action: e.action,
-          fromStatus: e.fromStatus as any,
-          toStatus: e.toStatus as any,
-          note: e.note ?? null,
-        })),
-      });
+      try {
+        await tx.questionReportEvent.createMany({
+          data: events.map((e) => ({
+            reportId: report.id,
+            actorUserId: session.user.id,
+            action: e.action,
+            fromStatus: e.fromStatus as any,
+            toStatus: e.toStatus as any,
+            note: e.note ?? null,
+          })),
+        });
+      } catch (e) {
+        // Não quebra a atualização da denúncia se a auditoria ainda não estiver migrada.
+        if (e instanceof Error) {
+          // eslint-disable-next-line no-console
+          console.warn("[question-reports] audit event insert failed", e.message);
+        }
+      }
     }
 
     return [upd] as const;

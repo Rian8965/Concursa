@@ -131,31 +131,40 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Auditoria (opcional): registra revisão vinculada à denúncia, se fornecida
       if (before) {
-        await tx.questionRevision.create({
-          data: {
-            questionId: id,
-            reportId: typeof reportId === "string" && reportId.trim() ? reportId.trim() : null,
-            editedBy: session.user.id,
-            before: {
-              content: before.content,
-              supportText: before.supportText,
-              correctAnswer: before.correctAnswer,
-              status: before.status,
-              hasImage: before.hasImage,
-              imageUrl: before.imageUrl,
-              alternatives: (before.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
+        try {
+          await tx.questionRevision.create({
+            data: {
+              questionId: id,
+              reportId: typeof reportId === "string" && reportId.trim() ? reportId.trim() : null,
+              editedBy: session.user.id,
+              before: {
+                content: before.content,
+                supportText: before.supportText,
+                correctAnswer: before.correctAnswer,
+                status: before.status,
+                hasImage: before.hasImage,
+                imageUrl: before.imageUrl,
+                alternatives: (before.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
+              },
+              after: {
+                content: updated.content,
+                supportText: updated.supportText,
+                correctAnswer: updated.correctAnswer,
+                status: updated.status,
+                hasImage: updated.hasImage,
+                imageUrl: updated.imageUrl,
+                alternatives: (updated.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
+              },
             },
-            after: {
-              content: updated.content,
-              supportText: updated.supportText,
-              correctAnswer: updated.correctAnswer,
-              status: updated.status,
-              hasImage: updated.hasImage,
-              imageUrl: updated.imageUrl,
-              alternatives: (updated.alternatives ?? []).map((a) => ({ letter: a.letter, content: a.content, order: a.order })),
-            },
-          },
-        });
+          });
+        } catch (e) {
+          // Não quebra o salvamento principal se a auditoria ainda não estiver migrada no banco.
+          // Ex: "The table `public.question_revisions` does not exist"
+          if (e instanceof Prisma.PrismaClientKnownRequestError) {
+            // P2021 = table does not exist (em geral). Se for outra coisa, propaga.
+            if (e.code !== "P2021") throw e;
+          }
+        }
       }
 
       return updated;
