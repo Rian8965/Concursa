@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Target, CheckCircle2, XCircle, Clock, ArrowLeft, ArrowRight,
@@ -285,7 +285,6 @@ function ReportModal({
 export default function SimuladoPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const competitionId = params.id as string;
 
   const [phase, setPhase] = useState<Phase>("config");
@@ -361,13 +360,16 @@ export default function SimuladoPage() {
       .then((r) => r.json())
       .then((d: { subjects?: { id: string; name: string }[] }) => {
         setSubjects(d.subjects ?? []);
-        const pre = searchParams.get("subject")?.trim();
+        // Evita `useSearchParams()` (pode causar comportamento estranho em alguns builds/ambientes).
+        const pre = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("subject")?.trim()
+          : null;
         if (pre && (d.subjects ?? []).some((s) => s.id === pre)) {
           setSelectedSubjects([pre]);
         }
       })
       .catch(() => setSubjects([]));
-  }, [competitionId, searchParams]);
+  }, [competitionId]);
 
   const submitExam = useCallback(async (spent: number) => {
     const currentExamId = examIdRef.current;

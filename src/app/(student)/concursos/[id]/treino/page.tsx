@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Play, CheckCircle2, ArrowRight, ArrowLeft,
@@ -218,7 +218,6 @@ const DIFFICULTIES = [
 export default function TreinoPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const competitionId = params.id as string;
 
   const [phase, setPhase] = useState<Phase>("config");
@@ -283,13 +282,15 @@ export default function TreinoPage() {
       .then((r) => r.json())
       .then((d: { subjects?: { id: string; name: string }[] }) => {
         setSubjects(d.subjects ?? []);
-        const pre = searchParams.get("subject")?.trim();
+        const pre = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("subject")?.trim()
+          : null;
         if (pre && (d.subjects ?? []).some((s) => s.id === pre)) {
           setSelectedSubjects([pre]);
         }
       })
       .catch(() => setSubjects([]));
-  }, [competitionId, searchParams]);
+  }, [competitionId]);
 
   async function startTraining() {
     setPhase("loading");
