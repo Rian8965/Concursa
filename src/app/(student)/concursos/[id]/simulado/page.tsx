@@ -945,7 +945,22 @@ export default function SimuladoPage() {
 
   // ── EXAM ─────────────────────────────────────────────────────────────────
   const q = questions[currentIdx];
-  if (!q) return null;
+  // Se por algum motivo o índice ficar fora do range, voltamos para a config em um effect
+  useEffect(() => {
+    if (phase !== "exam") return;
+    if (questions.length > 0 && questions[currentIdx]) return;
+    console.error("[simulado] currentIdx fora do range", { currentIdx, qLen: questions.length });
+    toast.error("Ocorreu um erro ao carregar a questão. Tente iniciar o simulado novamente.");
+    setPhase("config");
+  }, [phase, questions, currentIdx]);
+
+  if (!q) {
+    return (
+      <div className="orbit-stack max-w-xl animate-fade-in">
+        <p className="text-sm text-[var(--text-muted)]">Carregando…</p>
+      </div>
+    );
+  }
 
   return (
     <div>
