@@ -477,11 +477,25 @@ export default function SimuladoPage() {
       const data = await res.json() as {
         examId?: string; questions?: Question[]; timeLimitSeconds?: number; error?: string;
       };
-      if (!res.ok) { toast.error(data.error ?? "Erro ao criar simulado"); setPhase("config"); return; }
+      if (!res.ok) {
+        toast.error(data.error ?? "Erro ao criar simulado");
+        setPhase("config");
+        return;
+      }
+
+      // Validação defensiva: evita crash de render por payload inesperado
+      const qs = Array.isArray(data.questions) ? data.questions : [];
+      const eidRaw = typeof data.examId === "string" ? data.examId : "";
+      if (!eidRaw || qs.length === 0) {
+        console.error("[simulado] payload inválido", { examId: data.examId, qLen: qs.length });
+        toast.error("Não foi possível iniciar o simulado: nenhuma questão retornada.");
+        setPhase("config");
+        return;
+      }
       const eid = data.examId ?? "";
       setExamId(eid);
       examIdRef.current = eid;
-      setQuestions(data.questions ?? []);
+      setQuestions(qs);
       setIsFreeModeActive(isFreeMode || !data.timeLimitSeconds);
       setTimeLeft(data.timeLimitSeconds ?? 0);
       setStartTime(Date.now());
@@ -1039,7 +1053,7 @@ export default function SimuladoPage() {
 
           {/* Alternatives */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-            {q.alternatives.map((alt) => {
+            {(q.alternatives ?? []).map((alt) => {
               const isSelected = selectedAnswers[q.id] === alt.letter;
               return (
                 <button
