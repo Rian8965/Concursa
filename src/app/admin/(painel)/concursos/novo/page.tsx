@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, Upload, FileText, Sparkles, X, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const schema = z.object({
@@ -28,6 +28,19 @@ type JobRoleEntry = {
   name: string;
   subjectIds: string[];
   expanded: boolean;
+};
+
+type EditalDraft = {
+  name: string;
+  organization?: string | null;
+  examBoard?: { acronym: string; name?: string | null } | null;
+  cities?: Array<{ name: string; state: string }> | null;
+  jobRoles?: Array<{ name: string; subjects?: Array<{ name: string }> | null }> | null;
+  stages?: Array<{ name: string; dateStart?: string | null; dateEnd?: string | null }> | null;
+  examDate?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  confidence?: number | null;
 };
 
 const COMMON_STAGES = [
@@ -52,6 +65,7 @@ export default function CompetitionFormPage({ params }: Props) {
   const [examBoards, setExamBoards] = useState<{ id: string; acronym: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [currentCompetition, setCurrentCompetition] = useState<any | null>(null);
 
   // Cargos + matérias
   const [jobRoles, setJobRoles] = useState<JobRoleEntry[]>([]);
@@ -63,6 +77,15 @@ export default function CompetitionFormPage({ params }: Props) {
     resolver: zodResolver(schema),
     defaultValues: { examBoardDefined: false, status: "UPCOMING" },
   });
+
+  // Atualizar com edital (IA)
+  const [showEditalUpload, setShowEditalUpload] = useState(false);
+  const [editalFile, setEditalFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [draft, setDraft] = useState<EditalDraft | null>(null);
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [confirmingEdital, setConfirmingEdital] = useState(false);
+  const [studentsJobRoles, setStudentsJobRoles] = useState<Array<{ studentProfileId: string; jobRole: string | null }>>([]);
 
   useEffect(() => {
     async function init() {
@@ -82,6 +105,7 @@ export default function CompetitionFormPage({ params }: Props) {
           const res = await fetch(`/api/admin/competitions/${id}`);
           const data = await res.json();
           const c = data.competition;
+          setCurrentCompetition(c);
           reset({
             name: c.name,
             cityId: c.cityId,
@@ -108,12 +132,123 @@ export default function CompetitionFormPage({ params }: Props) {
           if (Array.isArray(c.stages)) {
             setStages(c.stages.map((s: { name: string }) => s.name));
           }
+
+          // Carrega cargos dos alunos (para checar incompatibilidades no update via edital)
+          const studentsRes = await fetch(`/api/admin/competitions/${id}/students`);
+          const studentsData = await studentsRes.json();
+          setStudentsJobRoles((studentsData.students ?? []).map((s: any) => ({
+            studentProfileId: s.studentProfileId,
+            jobRole: s.jobRole ?? null,
+          })));
         }
       }
       setLoadingData(false);
     }
     init();
   }, [params, reset]);
+
+  async function parseEditalForUpdate() {
+    if (!editalFile) return;
+    setParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", editalFile);
+      const res = await fetch("/api/admin/competitions/edital/parse", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Falha ao analisar edital");
+
+      // Converte em base64 em chunks para não explodir a call stack
+      const ab = await editalFile.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+      const CHUNK = 0x8000;
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      setPdfBase64(btoa(binary));
+
+      const d: EditalDraft = data.draft ?? null;
+      if (!d?.name) throw new Error("IA não retornou nome do concurso. Ajuste no rascunho e tente novamente.");
+      setDraft(d);
+      setShowEditalUpload(false);
+      toast.success("Edital analisado — revise os conflitos antes de aplicar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao analisar edital");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function resetEditalFlow() {
+    setShowEditalUpload(false);
+    setEditalFile(null);
+    setDraft(null);
+    setPdfBase64(null);
+    setConfirmingEdital(false);
+  }
+
+  function computeEditalDiff() {
+    if (!draft || !currentCompetition) return { changes: [] as string[], adds: [] as string[], warnings: [] as string[] };
+
+    const changes: string[] = [];
+    const adds: string[] = [];
+    const warnings: string[] = [];
+
+    const curName = (currentCompetition.name ?? "").trim();
+    const newName = (draft.name ?? "").trim();
+    if (newName && curName && newName !== curName) changes.push(`Nome: "${curName}" → "${newName}"`);
+
+    const curBoard = currentCompetition.examBoard?.acronym ?? "";
+    const newBoard = draft.examBoard?.acronym ?? "";
+    if (newBoard && newBoard !== curBoard) changes.push(`Banca: "${curBoard || "—"}" → "${newBoard}"`);
+
+    const curOrg = (currentCompetition.organization ?? "").trim();
+    const newOrg = (draft.organization ?? "").trim();
+    if (newOrg && newOrg !== curOrg) changes.push(`Organização: "${curOrg || "—"}" → "${newOrg}"`);
+
+    const curExamDate = currentCompetition.examDate ? new Date(currentCompetition.examDate).toISOString().slice(0, 10) : "";
+    const newExamDate = draft.examDate ?? "";
+    if (newExamDate && newExamDate !== curExamDate) changes.push(`Data da prova: "${curExamDate || "—"}" → "${newExamDate}"`);
+
+    const curCity = `${currentCompetition.city?.name ?? ""}|${currentCompetition.city?.state ?? ""}`;
+    const newCity = `${draft.cities?.[0]?.name ?? ""}|${draft.cities?.[0]?.state ?? ""}`;
+    if (draft.cities?.[0]?.name && draft.cities?.[0]?.state && newCity !== curCity) {
+      changes.push(`Cidade/UF: "${(currentCompetition.city?.name ?? "—")} — ${(currentCompetition.city?.state ?? "")}" → "${draft.cities?.[0]?.name} — ${draft.cities?.[0]?.state}"`);
+    }
+
+    const curJobRoles = new Set<string>((currentCompetition.jobRolesWithSubjects ?? []).map((jr: any) => String(jr.name ?? "").trim()).filter(Boolean));
+    const newJobRoles = new Set<string>((draft.jobRoles ?? []).map((jr) => String(jr.name ?? "").trim()).filter(Boolean));
+
+    for (const jr of newJobRoles) if (!curJobRoles.has(jr)) adds.push(`Cargo adicionado: ${jr}`);
+    for (const jr of curJobRoles) if (!newJobRoles.has(jr)) warnings.push(`Cargo removido: ${jr} (pode impactar alunos vinculados)`);
+
+    const incompatibleStudents = studentsJobRoles.filter((s) => s.jobRole && !newJobRoles.has(s.jobRole));
+    if (incompatibleStudents.length > 0) {
+      warnings.push(`${incompatibleStudents.length} aluno(s) ficarão com cargo incompatível (cargo atual não existe no edital).`);
+    }
+
+    return { changes, adds, warnings };
+  }
+
+  async function confirmUpdateWithEdital() {
+    if (!competitionId || !draft || !pdfBase64) return;
+    setConfirmingEdital(true);
+    try {
+      const payload = { draft, pdfBase64 };
+      const res = await fetch(`/api/admin/competitions/${competitionId}/edital/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Falha ao atualizar concurso com edital");
+      toast.success("Concurso atualizado com o edital (sem perder alunos).");
+      resetEditalFlow();
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao aplicar edital");
+    } finally {
+      setConfirmingEdital(false);
+    }
+  }
 
   // Cargo helpers
   function addJobRole() {
@@ -205,6 +340,21 @@ export default function CompetitionFormPage({ params }: Props) {
         <h1 className="text-[26px] font-extrabold tracking-tight text-[var(--text-primary)]">
           {competitionId ? "Editar Concurso" : "Novo Concurso"}
         </h1>
+        {competitionId && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowEditalUpload(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition-colors"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Atualizar com edital (IA)
+            </button>
+            <span className="text-[12px] text-[var(--text-muted)] self-center">
+              Aplica os dados oficiais sem criar concurso duplicado.
+            </span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -474,6 +624,175 @@ export default function CompetitionFormPage({ params }: Props) {
           </button>
         </div>
       </form>
+
+      {/* ── Modal: upload do edital para atualizar este concurso ── */}
+      {competitionId && showEditalUpload && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={(e) => e.target === e.currentTarget && setShowEditalUpload(false)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="h-1 rounded-t-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500" />
+            <div className="p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100">
+                    <Sparkles className="h-4.5 w-4.5 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-violet-600">IA • Atualizar concurso existente</p>
+                    <h2 className="text-[16px] font-extrabold text-[#111827]">Analisar edital (PDF)</h2>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setShowEditalUpload(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              <label className={cn(
+                "flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+                editalFile ? "border-violet-400 bg-violet-50" : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/40",
+              )}>
+                <FileText className={cn("h-10 w-10", editalFile ? "text-violet-500" : "text-gray-300")} strokeWidth={1.5} />
+                {editalFile ? (
+                  <>
+                    <p className="text-[13px] font-semibold text-violet-800">{editalFile.name}</p>
+                    <p className="text-[12px] text-violet-500">{(editalFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] font-semibold text-gray-700">Clique para selecionar o PDF</p>
+                    <p className="text-[12px] text-gray-400">O concurso atual será atualizado após revisão</p>
+                  </>
+                )}
+                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setEditalFile(e.target.files?.[0] ?? null)} />
+              </label>
+
+              <div className="mt-4 flex gap-3">
+                <button type="button" className="btn btn-ghost flex-1 rounded-xl" onClick={() => setShowEditalUpload(false)}>Cancelar</button>
+                <button
+                  type="button"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                  disabled={!editalFile || parsing}
+                  onClick={parseEditalForUpdate}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {parsing ? "Analisando…" : "Analisar com IA"}
+                </button>
+              </div>
+              {parsing && (
+                <p className="mt-3 text-center text-[11.5px] text-gray-500">
+                  Lendo todas as páginas do edital… pode demorar alguns segundos.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Revisão antes de aplicar o edital (conflitos) ── */}
+      {competitionId && draft && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="h-1 rounded-t-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500" />
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-violet-600">Revisão • Atualizar com edital</p>
+                  <h2 className="mt-1 text-[18px] font-extrabold text-[#111827]">Confirmar atualização do concurso</h2>
+                  <p className="mt-1 text-[13px] text-gray-500">
+                    O sistema vai atualizar este concurso (sem duplicar) e preservar alunos, histórico, simulados e desempenho.
+                  </p>
+                </div>
+                <button type="button" onClick={resetEditalFlow} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Campo principal (editável) */}
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="orbit-form-label">Nome oficial</label>
+                  <input className="input" value={draft.name ?? ""} onChange={(e) => setDraft((d) => d ? { ...d, name: e.target.value } : d)} />
+                </div>
+                <div>
+                  <label className="orbit-form-label">Banca (sigla)</label>
+                  <input
+                    className="input"
+                    value={draft.examBoard?.acronym ?? ""}
+                    onChange={(e) => setDraft((d) => d ? { ...d, examBoard: { ...(d.examBoard ?? { acronym: "" }), acronym: e.target.value } } : d)}
+                    placeholder="Ex: CEBRASPE"
+                  />
+                </div>
+                <div>
+                  <label className="orbit-form-label">Organização</label>
+                  <input
+                    className="input"
+                    value={draft.organization ?? ""}
+                    onChange={(e) => setDraft((d) => d ? { ...d, organization: e.target.value } : d)}
+                  />
+                </div>
+              </div>
+
+              {/* Diferenças / conflitos */}
+              <div className="mt-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <p className="text-[12px] font-extrabold uppercase tracking-widest text-gray-600">Revisão de impacto</p>
+                </div>
+                {(() => {
+                  const { changes, adds, warnings } = computeEditalDiff();
+                  const hasAny = changes.length + adds.length + warnings.length > 0;
+                  if (!hasAny) return <p className="mt-2 text-[13px] text-gray-500">Nenhuma diferença relevante detectada.</p>;
+                  return (
+                    <div className="mt-3 space-y-3 text-[13px]">
+                      {adds.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-emerald-700">Será adicionado</p>
+                          <ul className="mt-1 list-disc pl-5 text-gray-700">
+                            {adds.map((x) => <li key={x}>{x}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {changes.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-violet-700">Será alterado</p>
+                          <ul className="mt-1 list-disc pl-5 text-gray-700">
+                            {changes.map((x) => <li key={x}>{x}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {warnings.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-amber-700">Atenção</p>
+                          <ul className="mt-1 list-disc pl-5 text-gray-700">
+                            {warnings.map((x) => <li key={x}>{x}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={resetEditalFlow} className="btn btn-ghost rounded-xl">
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmUpdateWithEdital}
+                  disabled={confirmingEdital || !draft.name?.trim()}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {confirmingEdital ? "Aplicando…" : "Aplicar edital neste concurso"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
