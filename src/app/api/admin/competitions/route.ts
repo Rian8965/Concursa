@@ -111,18 +111,18 @@ export async function POST(req: NextRequest) {
 
     // Etapas
     if (Array.isArray(stages)) {
-      let order = 0;
-      for (const s of stages as string[]) {
-        if (s?.trim()) {
-          await tx.competitionStage.create({
-            data: { competitionId: comp.id, name: s.trim(), order: order++ },
-          });
-        }
+      const clean = (stages as string[])
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean);
+      if (clean.length > 0) {
+        await tx.competitionStage.createMany({
+          data: clean.map((name, order) => ({ competitionId: comp.id, name, order })),
+        });
       }
     }
 
     return comp;
-  });
+  }, { timeout: 20000 });
 
   return NextResponse.json({ competition }, { status: 201 });
 }

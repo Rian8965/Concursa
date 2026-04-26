@@ -183,24 +183,27 @@ export async function POST(req: Request) {
       }
 
       // CompetitionStage
-      let stageOrder = 0;
-      for (const stage of draft.stages ?? []) {
-        const stageName = norm(stage.name);
-        if (!stageName) continue;
-        // Inclui datas no campo description enquanto as colunas date_start/date_end
-        // ainda não existem no banco (migração pendente).
-        const dateNote = stage.dateStart
-          ? stage.dateEnd
-            ? `${stage.dateStart} a ${stage.dateEnd}`
-            : stage.dateStart
-          : null;
-        await tx.competitionStage.create({
-          data: {
+      const cleanStages = (draft.stages ?? [])
+        .map((stage) => {
+          const stageName = norm(stage.name);
+          if (!stageName) return null;
+          const dateNote = stage.dateStart
+            ? stage.dateEnd
+              ? `${stage.dateStart} a ${stage.dateEnd}`
+              : stage.dateStart
+            : null;
+          return { name: stageName, description: dateNote };
+        })
+        .filter(Boolean) as Array<{ name: string; description: string | null }>;
+
+      if (cleanStages.length > 0) {
+        await tx.competitionStage.createMany({
+          data: cleanStages.map((s, order) => ({
             competitionId: competition.id,
-            name: stageName,
-            order: stageOrder++,
-            description: dateNote,
-          },
+            name: s.name,
+            order,
+            description: s.description,
+          })),
         });
       }
 
@@ -214,7 +217,7 @@ export async function POST(req: Request) {
       });
 
       return { id: competition.id, editalUrl, storedPath };
-    });
+    }, { timeout: 20000 });
 
     return NextResponse.json({ competitionId: created.id, editalUrl: created.editalUrl }, { status: 201 });
   } catch (e) {

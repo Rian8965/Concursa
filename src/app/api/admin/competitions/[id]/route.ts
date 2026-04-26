@@ -142,18 +142,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Replace stages
     if (Array.isArray(stages)) {
       await tx.competitionStage.deleteMany({ where: { competitionId: id } });
-      let order = 0;
-      for (const s of stages as string[]) {
-        if (s?.trim()) {
-          await tx.competitionStage.create({
-            data: { competitionId: id, name: s.trim(), order: order++ },
-          });
-        }
+      const clean = (stages as string[])
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean);
+      if (clean.length > 0) {
+        await tx.competitionStage.createMany({
+          data: clean.map((name, order) => ({ competitionId: id, name, order })),
+        });
       }
     }
 
     return comp;
-  });
+  }, { timeout: 20000 });
 
   return NextResponse.json({ competition });
 }
