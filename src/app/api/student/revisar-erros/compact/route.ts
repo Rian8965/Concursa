@@ -45,28 +45,65 @@ export async function GET(req: NextRequest) {
       examBoardAcronym: string | null;
     }>
   >`
-WITH wrong AS (
+WITH answer_events AS (
   SELECT
     sa."questionId",
-    COUNT(*)::int AS "wrongCount",
-    MAX(sa."answeredAt") AS "lastAttemptAt"
+    sa."answeredAt" AS "answeredAt",
+    sa."isCorrect" AS "isCorrect",
+    sa."sessionType"::text AS "sessionType",
+    1::int AS "sourcePrio"
   FROM "student_answers" sa
   WHERE sa."studentProfileId" = ${profile.id}
-    AND sa."isCorrect" = false
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-    AND (${startDt}::timestamp IS NULL OR sa."answeredAt" >= ${startDt}::timestamp)
-    AND (${endDt}::timestamp IS NULL OR sa."answeredAt" <= ${endDt}::timestamp)
-  GROUP BY sa."questionId"
+
+  UNION ALL
+
+  SELECT
+    tsq."questionId",
+    ts."completedAt" AS "answeredAt",
+    tsq."isCorrect" AS "isCorrect",
+    'TRAINING'::text AS "sessionType",
+    2::int AS "sourcePrio"
+  FROM "training_session_questions" tsq
+  JOIN "training_sessions" ts ON ts."id" = tsq."trainingSessionId"
+  WHERE ts."studentProfileId" = ${profile.id}
+    AND ts."completedAt" IS NOT NULL
+    AND tsq."isCorrect" IS NOT NULL
+
+  UNION ALL
+
+  SELECT
+    seq."questionId",
+    se."completedAt" AS "answeredAt",
+    seq."isCorrect" AS "isCorrect",
+    'EXAM'::text AS "sessionType",
+    2::int AS "sourcePrio"
+  FROM "simulated_exam_questions" seq
+  JOIN "simulated_exams" se ON se."id" = seq."examId"
+  WHERE se."studentProfileId" = ${profile.id}
+    AND se."status" = 'COMPLETED'
+    AND se."completedAt" IS NOT NULL
+    AND seq."isCorrect" IS NOT NULL
+),
+wrong AS (
+  SELECT
+    ae."questionId",
+    COUNT(*)::int AS "wrongCount",
+    MAX(ae."answeredAt") AS "lastAttemptAt"
+  FROM answer_events ae
+  WHERE ae."isCorrect" = false
+    AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+    AND (${startDt}::timestamp IS NULL OR ae."answeredAt" >= ${startDt}::timestamp)
+    AND (${endDt}::timestamp IS NULL OR ae."answeredAt" <= ${endDt}::timestamp)
+  GROUP BY ae."questionId"
 ),
 last_origin AS (
-  SELECT DISTINCT ON (sa."questionId")
-    sa."questionId",
-    sa."sessionType" AS "lastOrigin"
-  FROM "student_answers" sa
-  WHERE sa."studentProfileId" = ${profile.id}
-    AND sa."isCorrect" = false
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-  ORDER BY sa."questionId", sa."answeredAt" DESC
+  SELECT DISTINCT ON (ae."questionId")
+    ae."questionId",
+    ae."sessionType" AS "lastOrigin"
+  FROM answer_events ae
+  WHERE ae."isCorrect" = false
+    AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+  ORDER BY ae."questionId", ae."answeredAt" DESC, ae."sourcePrio" ASC
 )
 SELECT
   q."id" AS "questionId",
@@ -98,15 +135,50 @@ LIMIT ${limit} OFFSET ${(page - 1) * limit};
 `;
 
   const totalRow = await prisma.$queryRaw<Array<{ total: bigint }>>`
-WITH wrong AS (
-  SELECT sa."questionId"
+WITH answer_events AS (
+  SELECT
+    sa."questionId",
+    sa."answeredAt" AS "answeredAt",
+    sa."isCorrect" AS "isCorrect",
+    sa."sessionType"::text AS "sessionType"
   FROM "student_answers" sa
   WHERE sa."studentProfileId" = ${profile.id}
-    AND sa."isCorrect" = false
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-    AND (${startDt}::timestamp IS NULL OR sa."answeredAt" >= ${startDt}::timestamp)
-    AND (${endDt}::timestamp IS NULL OR sa."answeredAt" <= ${endDt}::timestamp)
-  GROUP BY sa."questionId"
+
+  UNION ALL
+
+  SELECT
+    tsq."questionId",
+    ts."completedAt" AS "answeredAt",
+    tsq."isCorrect" AS "isCorrect",
+    'TRAINING'::text AS "sessionType"
+  FROM "training_session_questions" tsq
+  JOIN "training_sessions" ts ON ts."id" = tsq."trainingSessionId"
+  WHERE ts."studentProfileId" = ${profile.id}
+    AND ts."completedAt" IS NOT NULL
+    AND tsq."isCorrect" IS NOT NULL
+
+  UNION ALL
+
+  SELECT
+    seq."questionId",
+    se."completedAt" AS "answeredAt",
+    seq."isCorrect" AS "isCorrect",
+    'EXAM'::text AS "sessionType"
+  FROM "simulated_exam_questions" seq
+  JOIN "simulated_exams" se ON se."id" = seq."examId"
+  WHERE se."studentProfileId" = ${profile.id}
+    AND se."status" = 'COMPLETED'
+    AND se."completedAt" IS NOT NULL
+    AND seq."isCorrect" IS NOT NULL
+),
+wrong AS (
+  SELECT ae."questionId"
+  FROM answer_events ae
+  WHERE ae."isCorrect" = false
+    AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+    AND (${startDt}::timestamp IS NULL OR ae."answeredAt" >= ${startDt}::timestamp)
+    AND (${endDt}::timestamp IS NULL OR ae."answeredAt" <= ${endDt}::timestamp)
+  GROUP BY ae."questionId"
 )
 SELECT COUNT(*)::bigint AS total FROM wrong;
 `;

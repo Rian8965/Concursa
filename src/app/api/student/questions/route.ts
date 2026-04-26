@@ -54,25 +54,71 @@ export async function GET(req: NextRequest) {
       examBoardAcronym: string | null;
     }>
   >`
-WITH last_answers AS (
-  SELECT DISTINCT ON (sa."questionId")
+WITH answer_events AS (
+  -- Fonte primária: histórico consolidado (student_answers)
+  SELECT
     sa."questionId",
-    sa."answeredAt" AS "lastAnsweredAt",
-    sa."isCorrect" AS "lastIsCorrect",
-    sa."selectedAnswer" AS "lastSelectedAnswer",
-    sa."sessionType" AS "lastSessionType"
+    sa."answeredAt" AS "answeredAt",
+    sa."isCorrect" AS "isCorrect",
+    sa."selectedAnswer" AS "selectedAnswer",
+    sa."sessionType"::text AS "sessionType",
+    sa."sessionId" AS "sessionId",
+    1::int AS "sourcePrio"
   FROM "student_answers" sa
   WHERE sa."studentProfileId" = ${profile.id}
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-  ORDER BY sa."questionId", sa."answeredAt" DESC
+
+  UNION ALL
+
+  -- Fallback: treinos finalizados que (por algum motivo) não geraram StudentAnswer
+  SELECT
+    tsq."questionId",
+    ts."completedAt" AS "answeredAt",
+    tsq."isCorrect" AS "isCorrect",
+    COALESCE(tsq."selectedAnswer", '-') AS "selectedAnswer",
+    'TRAINING'::text AS "sessionType",
+    ts."id" AS "sessionId",
+    2::int AS "sourcePrio"
+  FROM "training_session_questions" tsq
+  JOIN "training_sessions" ts ON ts."id" = tsq."trainingSessionId"
+  WHERE ts."studentProfileId" = ${profile.id}
+    AND ts."completedAt" IS NOT NULL
+    AND tsq."isCorrect" IS NOT NULL
+
+  UNION ALL
+
+  -- Fallback: simulados finalizados que (por algum motivo) não geraram StudentAnswer
+  SELECT
+    seq."questionId",
+    se."completedAt" AS "answeredAt",
+    seq."isCorrect" AS "isCorrect",
+    COALESCE(seq."selectedAnswer", '-') AS "selectedAnswer",
+    'EXAM'::text AS "sessionType",
+    se."id" AS "sessionId",
+    2::int AS "sourcePrio"
+  FROM "simulated_exam_questions" seq
+  JOIN "simulated_exams" se ON se."id" = seq."examId"
+  WHERE se."studentProfileId" = ${profile.id}
+    AND se."status" = 'COMPLETED'
+    AND se."completedAt" IS NOT NULL
+    AND seq."isCorrect" IS NOT NULL
+),
+last_answers AS (
+  SELECT DISTINCT ON (ae."questionId")
+    ae."questionId",
+    ae."answeredAt" AS "lastAnsweredAt",
+    ae."isCorrect" AS "lastIsCorrect",
+    ae."selectedAnswer" AS "lastSelectedAnswer",
+    ae."sessionType" AS "lastSessionType"
+  FROM answer_events ae
+  WHERE (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+  ORDER BY ae."questionId", ae."answeredAt" DESC, ae."sourcePrio" ASC
 ),
 wrong_counts AS (
-  SELECT sa."questionId", COUNT(*)::int AS "wrongCount"
-  FROM "student_answers" sa
-  WHERE sa."studentProfileId" = ${profile.id}
-    AND sa."isCorrect" = false
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-  GROUP BY sa."questionId"
+  SELECT ae."questionId", COUNT(*)::int AS "wrongCount"
+  FROM answer_events ae
+  WHERE ae."isCorrect" = false
+    AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+  GROUP BY ae."questionId"
 ),
 answered AS (
   SELECT
@@ -129,10 +175,9 @@ unanswered AS (
   LEFT JOIN "exam_boards" eb ON eb."id" = q."examBoardId"
   WHERE uq."studentProfileId" = ${profile.id}
     AND NOT EXISTS (
-      SELECT 1 FROM "student_answers" sa
-      WHERE sa."studentProfileId" = ${profile.id}
-        AND sa."questionId" = uq."questionId"
-        AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
+      SELECT 1 FROM answer_events ae
+      WHERE ae."questionId" = uq."questionId"
+        AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
     )
     AND (${subjectId}::text IS NULL OR q."subjectId" = ${subjectId}::text)
     AND (${topicId}::text IS NULL OR q."topicId" = ${topicId}::text)
@@ -154,16 +199,54 @@ LIMIT ${limit} OFFSET ${(page - 1) * limit};
 
     // total (para paginação) — calculado separado, mas barato com as mesmas CTEs.
     const totalRow = await prisma.$queryRaw<Array<{ total: bigint }>>`
-WITH last_answers AS (
-  SELECT DISTINCT ON (sa."questionId")
+WITH answer_events AS (
+  SELECT
     sa."questionId",
-    sa."answeredAt" AS "lastAnsweredAt",
-    sa."isCorrect" AS "lastIsCorrect",
-    sa."sessionType" AS "lastSessionType"
+    sa."answeredAt" AS "answeredAt",
+    sa."isCorrect" AS "isCorrect",
+    sa."sessionType"::text AS "sessionType",
+    1::int AS "sourcePrio"
   FROM "student_answers" sa
   WHERE sa."studentProfileId" = ${profile.id}
-    AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
-  ORDER BY sa."questionId", sa."answeredAt" DESC
+
+  UNION ALL
+
+  SELECT
+    tsq."questionId",
+    ts."completedAt" AS "answeredAt",
+    tsq."isCorrect" AS "isCorrect",
+    'TRAINING'::text AS "sessionType",
+    2::int AS "sourcePrio"
+  FROM "training_session_questions" tsq
+  JOIN "training_sessions" ts ON ts."id" = tsq."trainingSessionId"
+  WHERE ts."studentProfileId" = ${profile.id}
+    AND ts."completedAt" IS NOT NULL
+    AND tsq."isCorrect" IS NOT NULL
+
+  UNION ALL
+
+  SELECT
+    seq."questionId",
+    se."completedAt" AS "answeredAt",
+    seq."isCorrect" AS "isCorrect",
+    'EXAM'::text AS "sessionType",
+    2::int AS "sourcePrio"
+  FROM "simulated_exam_questions" seq
+  JOIN "simulated_exams" se ON se."id" = seq."examId"
+  WHERE se."studentProfileId" = ${profile.id}
+    AND se."status" = 'COMPLETED'
+    AND se."completedAt" IS NOT NULL
+    AND seq."isCorrect" IS NOT NULL
+),
+last_answers AS (
+  SELECT DISTINCT ON (ae."questionId")
+    ae."questionId",
+    ae."answeredAt" AS "lastAnsweredAt",
+    ae."isCorrect" AS "lastIsCorrect",
+    ae."sessionType" AS "lastSessionType"
+  FROM answer_events ae
+  WHERE (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
+  ORDER BY ae."questionId", ae."answeredAt" DESC, ae."sourcePrio" ASC
 ),
 answered AS (
   SELECT q."id"
@@ -191,10 +274,9 @@ unanswered AS (
   JOIN "questions" q ON q."id" = uq."questionId"
   WHERE uq."studentProfileId" = ${profile.id}
     AND NOT EXISTS (
-      SELECT 1 FROM "student_answers" sa
-      WHERE sa."studentProfileId" = ${profile.id}
-        AND sa."questionId" = uq."questionId"
-        AND (${origin}::text = 'ALL' OR sa."sessionType" = ${origin}::text)
+      SELECT 1 FROM answer_events ae
+      WHERE ae."questionId" = uq."questionId"
+        AND (${origin}::text = 'ALL' OR ae."sessionType" = ${origin}::text)
     )
     AND (${subjectId}::text IS NULL OR q."subjectId" = ${subjectId}::text)
     AND (${topicId}::text IS NULL OR q."topicId" = ${topicId}::text)
