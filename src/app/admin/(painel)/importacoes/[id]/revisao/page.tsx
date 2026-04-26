@@ -1236,13 +1236,14 @@ export default function RevisaoImportacaoPage() {
                         {visOn && altsPend && (
                           <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
                             <span>Alternativas em imagem: faltam {missAlts.join(", ")}</span>
-                            {reviewFromDraft.alternativasVisuais?.aiSugeriu && !visExempted && (
+                            {!visExempted && (
                               <button
                                 type="button"
                                 className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-extrabold text-slate-700 ring-1 ring-black/[0.08] hover:bg-white"
                                 title="Use quando a IA marcou falso positivo e as alternativas em texto já estão corretas."
                                 onClick={async () => {
                                   await patchImportedReview(q.id, { alternativasVisuais: { dispensarExigencia: { at: new Date().toISOString() } } });
+                                  setDecisions((prev) => (prev[q.id] === "reject" ? { ...prev, [q.id]: "pending" } : prev));
                                   toast.success("Exigência de alternativas em imagem dispensada nesta questão");
                                 }}
                               >
@@ -1401,14 +1402,17 @@ export default function RevisaoImportacaoPage() {
                           <p className="mt-1.5 leading-relaxed">
                             Falta(m) recorte(s) de imagem para: {missAlts.join(", ")}. Use “Aplicar alternativas” ou o vínculo por letra no painel do PDF.
                           </p>
-                          {reviewFromDraft.alternativasVisuais?.aiSugeriu && !visExempted && (
+                          {!visExempted && (
                             <div className="mt-2">
                               <button
                                 type="button"
                                 className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-1.5 text-[11px] font-extrabold text-slate-700 shadow-sm hover:bg-white"
                                 title="Use quando a IA marcou falso positivo e as alternativas em texto já estão corretas."
                                 onClick={() =>
-                                  void patchImportedReview(q.id, { alternativasVisuais: { dispensarExigencia: { at: new Date().toISOString() } } })
+                                  void (async () => {
+                                    await patchImportedReview(q.id, { alternativasVisuais: { dispensarExigencia: { at: new Date().toISOString() } } });
+                                    setDecisions((prev) => (prev[q.id] === "reject" ? { ...prev, [q.id]: "pending" } : prev));
+                                  })()
                                 }
                               >
                                 Não é necessário aplicar alternativas
