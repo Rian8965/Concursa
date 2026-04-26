@@ -24,17 +24,36 @@ export default async function CompetitionsPage() {
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) redirect("/dashboard");
 
+  // Importante: evitar `include: { competition: ... }` aqui pois, se existir algum registro órfão
+  // (student_competitions apontando para competitionId inexistente), o Prisma pode lançar
+  // "Inconsistent query result" e quebrar a tela inteira.
   const studentCompetitions = await prisma.studentCompetition.findMany({
     where: { studentProfileId: profile.id, isActive: true },
-    include: {
-      competition: { include: { city: true, examBoard: true } },
+    select: {
+      id: true,
+      competitionId: true,
+      jobRoleId: true,
+      enrolledAt: true,
       jobRole: { select: { id: true, name: true } },
     },
     orderBy: { enrolledAt: "desc" },
   });
 
+  const competitionIds = Array.from(new Set(studentCompetitions.map((s) => s.competitionId).filter(Boolean)));
+  const competitions = competitionIds.length
+    ? await prisma.competition.findMany({
+        where: { id: { in: competitionIds } },
+        include: { city: true, examBoard: true },
+      })
+    : [];
+  const compMap = new Map(competitions.map((c) => [c.id, c]));
+
+  const validEnrollments = studentCompetitions
+    .map((sc) => ({ ...sc, competition: compMap.get(sc.competitionId) ?? null }))
+    .filter((sc) => Boolean(sc.competition));
+
   const enriched = await Promise.all(
-    studentCompetitions.map(async (sc) => {
+    validEnrollments.map(async (sc) => {
       let subjects: { id: string; name: string }[] = [];
       if (sc.jobRoleId) {
         const links = await prisma.competitionJobRoleSubject.findMany({
@@ -71,13 +90,13 @@ export default async function CompetitionsPage() {
           </div>
           <p className="text-[16px] font-bold text-[#0F172A]">Nenhum concurso vinculado</p>
           <p className="mt-2 max-w-md text-[13.5px] text-[#64748B]">
-            O administrador precisa vincular você a um concurso e cargo para liberar o acesso ao conteúdo.
+            Você ainda não foi vinculado a um concurso. Fale com o administrador.
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-5">
           {enriched.map((sc) => {
-            const comp = sc.competition;
+            const comp = sc.competition!;
             let daysLeft: number | null = null;
             if (comp.examDate) {
               try {
