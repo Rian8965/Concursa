@@ -51,8 +51,12 @@ export default function QuizEditalPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitionId: id, question: q }),
       });
-      const data = (await res.json()) as { answer?: string; model?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Erro ao obter resposta");
+      const data = (await res.json()) as { answer?: string; model?: string; error?: string; code?: string; details?: { status?: number; message?: string } };
+      if (!res.ok) {
+        const extra = data?.code ? ` (${data.code})` : "";
+        const det = data?.details?.status ? ` [${data.details.status}]` : "";
+        throw new Error((data.error ?? "Erro ao obter resposta") + extra + det);
+      }
       setMessages((p) => [...p, { role: "assistant", content: data.answer ?? "", model: data.model }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao obter resposta";

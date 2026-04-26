@@ -219,11 +219,19 @@ export async function POST(req: NextRequest) {
     // se for retryable (429/5xx), ainda tenta modelos menores
   }
 
+  console.error("[quiz-edital] gemini failed", {
+    competitionId,
+    studentProfileId: profile.id,
+    status: lastErr?.status,
+    message: lastErr?.message,
+    raw: lastErr?.raw,
+  });
+
   return NextResponse.json(
     {
       code: "GEMINI_FAILED",
       error: "Não foi possível obter resposta da IA no momento. Tente novamente em instantes.",
-      details: lastErr ? { status: lastErr.status, message: lastErr.message } : undefined,
+      details: lastErr ? { status: lastErr.status, message: lastErr.message, raw: lastErr.raw } : undefined,
     },
     { status: lastErr?.status === 429 ? 429 : 502 },
   );
