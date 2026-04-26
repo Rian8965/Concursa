@@ -28,12 +28,15 @@ async function callGemini(args: {
 
   for (const url of urls) {
     try {
+      // Alguns endpoints/modelos não suportam `systemInstruction`.
+      // Para compatibilidade, incorporamos o system prompt no texto do usuário.
+      const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`.trim();
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          contents: [{ role: "user", parts: [{ text: combinedPrompt }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
         }),
       });
