@@ -355,6 +355,18 @@ export default function SimuladoPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const examIdRef = useRef<string>("");
 
+  // Proteção: se o índice da questão sair do range (race de estado, replace, etc.),
+  // corrige sem derrubar a tela (e sem violar regras de hooks).
+  useEffect(() => {
+    if (phase !== "exam") return;
+    if (questions.length === 0) return;
+    if (currentIdx >= 0 && currentIdx < questions.length) return;
+    console.error("[simulado] currentIdx fora do range", { currentIdx, qLen: questions.length });
+    toast.error("Ocorreu um erro ao carregar a questão. Tente iniciar o simulado novamente.");
+    setCurrentIdx(0);
+    setPhase("config");
+  }, [phase, questions.length, currentIdx]);
+
   useEffect(() => {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
       .then((r) => r.json())
@@ -945,15 +957,6 @@ export default function SimuladoPage() {
 
   // ── EXAM ─────────────────────────────────────────────────────────────────
   const q = questions[currentIdx];
-  // Se por algum motivo o índice ficar fora do range, voltamos para a config em um effect
-  useEffect(() => {
-    if (phase !== "exam") return;
-    if (questions.length > 0 && questions[currentIdx]) return;
-    console.error("[simulado] currentIdx fora do range", { currentIdx, qLen: questions.length });
-    toast.error("Ocorreu um erro ao carregar a questão. Tente iniciar o simulado novamente.");
-    setPhase("config");
-  }, [phase, questions, currentIdx]);
-
   if (!q) {
     return (
       <div className="orbit-stack max-w-xl animate-fade-in">
