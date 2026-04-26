@@ -219,11 +219,18 @@ export async function POST(req: NextRequest) {
     `PERGUNTA DO ALUNO: ${trimText(question.trim(), 1200)}`,
   ].join("\n");
 
+  // Nomes aqui precisam existir no endpoint do Gemini API.
+  // Aliases "1.5-*-latest" podem não existir mais dependendo do projeto/conta.
   const models = [
-    "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    // fallback para projetos que ainda têm 2.0 liberado
     "gemini-2.0-flash-lite",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro-latest",
+    "gemini-2.0-flash",
+    // fallback para contas antigas (sem alias -latest)
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
   ];
 
   let lastErr: GeminiErr | null = null;
