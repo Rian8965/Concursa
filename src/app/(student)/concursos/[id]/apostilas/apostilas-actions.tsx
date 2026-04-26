@@ -44,6 +44,13 @@ export function ApostilasActions({ competitionId, competitionName }: { competiti
         toast.error((j as { error?: string }).error ?? "Não foi possível gerar a apostila");
         return;
       }
+
+      const requested = Number(res.headers.get("X-Apostila-Requested") ?? "");
+      const available = Number(res.headers.get("X-Apostila-Available") ?? "");
+      if (Number.isFinite(requested) && Number.isFinite(available) && available > 0 && available < requested) {
+        toast.warning(`Foram encontradas apenas ${available} questões disponíveis para esse filtro.`);
+      }
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

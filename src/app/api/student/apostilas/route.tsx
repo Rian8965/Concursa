@@ -79,9 +79,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Conta o total disponível no pool (para respeitar quantidade e avisar quando faltar)
+  const subjectOr = [
+    { subjectId: { in: eligibleSubjectIds } },
+    { aiMeta: { suggestedSubjectId: { in: eligibleSubjectIds } } },
+  ];
+  const andClauses: any[] = [{ OR: subjectOr }];
+  if (examBoardId) {
+    andClauses.push({
+      OR: [{ examBoardId }, { aiMeta: { suggestedExamBoardId: examBoardId } }],
+    });
+  }
+
+  const poolWhere: any = {
+    status: "ACTIVE",
+    alternatives: { some: {} },
+    AND: andClauses,
+    ...(difficulty ? { difficulty } : {}),
+  };
+
+  const available = await prisma.question.count({ where: poolWhere });
+  const effectiveCount = Math.min(count, available);
+
   // Distribuição equilibrada por matéria
-  const per = Math.floor(count / eligibleSubjectIds.length);
-  let remainder = count - (per * eligibleSubjectIds.length);
+  const per = Math.floor(effectiveCount / eligibleSubjectIds.length);
+  let remainder = effectiveCount - (per * eligibleSubjectIds.length);
 
   const picked: { id: string; order: number }[] = [];
   const pickedQuestions: Awaited<ReturnType<typeof selectQuestionsForStudent>>["questions"] = [];
@@ -104,10 +126,33 @@ export async function POST(req: NextRequest) {
     pickedQuestions.push(...questions);
   }
 
+  // Completa o que faltou (se houver pool no conjunto) para respeitar exatamente a quantidade escolhida
+  if (pickedQuestions.length < effectiveCount) {
+    const remaining = effectiveCount - pickedQuestions.length;
+    const { questions: extra } = await selectQuestionsForStudent({
+      studentProfileId: profile.id,
+      competitionId,
+      jobRoleId,
+      subjectIds: eligibleSubjectIds,
+      examBoardId,
+      difficulty,
+      quantity: remaining,
+      deliveryType: "APOSTILA",
+    });
+
+    const already = new Set(pickedQuestions.map((q) => q.question.id));
+    for (const q of extra) {
+      if (already.has(q.question.id)) continue;
+      pickedQuestions.push(q);
+      already.add(q.question.id);
+      if (pickedQuestions.length >= effectiveCount) break;
+    }
+  }
+
   // Ordenação final embaralhada (mantém balanceamento, mas ainda aleatório)
   const shuffled = [...pickedQuestions]
     .sort(() => Math.random() - 0.5)
-    .slice(0, count)
+    .slice(0, effectiveCount)
     .map((x) => x.question);
 
   const rows: ApostilaQuestionRow[] = shuffled.map((q, i) => ({
@@ -164,6 +209,8 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
+      "X-Apostila-Requested": String(count),
+      "X-Apostila-Available": String(available),
     },
   });
 }
