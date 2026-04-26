@@ -11,7 +11,6 @@ import {
 interface Message {
   role: "user" | "assistant";
   content: string;
-  model?: string;
 }
 
 const SUGGESTED = [
@@ -58,7 +57,7 @@ export default function QuizEditalPage() {
         const detMsg = data?.details?.message ? ` — ${data.details.message}` : "";
         throw new Error((data.error ?? "Erro ao obter resposta") + extra + det + detMsg);
       }
-      setMessages((p) => [...p, { role: "assistant", content: data.answer ?? "", model: data.model }]);
+      setMessages((p) => [...p, { role: "assistant", content: data.answer ?? "" }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao obter resposta";
       setError(msg);
@@ -147,9 +146,6 @@ export default function QuizEditalPage() {
                     : "rounded-tl-md bg-white text-[#111827] border border-black/[0.06]"
                 }`}>
                   <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">{msg.content}</p>
-                  {msg.role === "assistant" && msg.model && (
-                    <p className="mt-1.5 text-[10px] opacity-40">Modelo: {msg.model}</p>
-                  )}
                 </div>
               </div>
             ))}
