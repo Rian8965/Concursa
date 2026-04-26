@@ -237,6 +237,10 @@ export default function TreinoPage() {
   const [subjectPerf, setSubjectPerf] = useState<Array<{ subject: string; total: number; correct: number; accuracy: number }>>([]);
   const [onlyWrong, setOnlyWrong] = useState(false);
   const [finishPhraseIdx, setFinishPhraseIdx] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState<{ questionId: string } | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewQuestion, setReviewQuestion] = useState<any | null>(null);
+  const [reviewExplanationLoading, setReviewExplanationLoading] = useState(false);
 
   const FINISH_PHRASES = [
     "Calculando sua nota...",
@@ -247,6 +251,32 @@ export default function TreinoPage() {
     "Quase lá...",
     "Nós acreditamos em você. Acredite também.",
   ];
+
+  async function openReview(questionId: string) {
+    setReviewOpen({ questionId });
+    setReviewLoading(true);
+    setReviewQuestion(null);
+    try {
+      const res = await fetch(`/api/student/questions/${questionId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Erro ao carregar questão");
+      setReviewQuestion(data);
+      const last = data.lastAnswer;
+      if (last && last.isCorrect === false && !last.aiExplanation) {
+        setReviewExplanationLoading(true);
+        const gen = await fetch(`/api/student/questions/${questionId}/explain`, { method: "POST" });
+        const gdata = await gen.json().catch(() => ({}));
+        if (gen.ok) {
+          setReviewQuestion((prev: any) => ({ ...prev, lastAnswer: { ...prev.lastAnswer, aiExplanation: gdata.aiExplanation } }));
+        }
+        setReviewExplanationLoading(false);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao abrir questão");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
@@ -506,6 +536,134 @@ export default function TreinoPage() {
     const color = pct >= 70 ? "#059669" : pct >= 50 ? "#D97706" : "#DC2626";
     return (
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
+        {reviewOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 820, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>Revisar questão</p>
+                  <p style={{ fontSize: 12, color: "#6B7280" }}>Você não perde o estado do resultado ao abrir.</p>
+                </div>
+                <button onClick={() => setReviewOpen(null)} className="btn btn-ghost" style={{ height: 36 }}>Fechar</button>
+              </div>
+
+              {reviewLoading || !reviewQuestion ? (
+                <div className="flex items-center justify-center" style={{ minHeight: 220 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
+                    <p style={{ fontSize: 13, color: "#6B7280" }}>Carregando questão…</p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ marginBottom: 12 }}>
+                    {reviewQuestion.question?.subject?.name && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>
+                        {reviewQuestion.question.subject.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {reviewQuestion.question?.supportText ? (
+                    <div style={{ marginBottom: 12, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
+                      <p style={{ fontSize: 11, fontWeight: 800, color: "#7C3AED", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Texto de apoio</p>
+                      <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{reviewQuestion.question.supportText}</p>
+                    </div>
+                  ) : null}
+
+                  <p style={{ fontSize: 15, color: "#111827", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{reviewQuestion.question?.content}</p>
+
+                  {reviewQuestion.question?.imageUrl ? (
+                    <div style={{ marginTop: 10 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={reviewQuestion.question.imageUrl} alt="" style={{ maxWidth: "100%", height: "auto", borderRadius: 12, border: "1px solid #E5E7EB" }} />
+                    </div>
+                  ) : null}
+
+                  <div style={{ marginTop: 14, padding: 14, border: "1px solid #E5E7EB", borderRadius: 12 }}>
+                    <p style={{ fontSize: 12, fontWeight: 800, color: "#374151", marginBottom: 8 }}>Alternativas</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {(reviewQuestion.question?.alternatives ?? []).map((a: any) => {
+                        const chosen = String(answers[reviewQuestion.question.id] ?? "-").toUpperCase();
+                        const correct = String(reviewQuestion.question.correctAnswer ?? "").toUpperCase();
+                        const isChosen = chosen === a.letter;
+                        const isCorrect = correct === a.letter;
+                        const bg = isCorrect ? "#ECFDF5" : isChosen ? "#FEF2F2" : "#FFFFFF";
+                        const border = isCorrect ? "#6EE7B7" : isChosen ? "#FCA5A5" : "#E5E7EB";
+                        return (
+                          <div key={a.letter} style={{ padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${border}`, background: bg }}>
+                            <div style={{ display: "flex", gap: 10 }}>
+                              <span style={{ fontWeight: 900, color: "#374151" }}>{a.letter}</span>
+                              <div style={{ flex: 1 }}>
+                                {a.imageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={a.imageUrl} alt="" style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }} />
+                                ) : (
+                                  <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{a.content}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p style={{ marginTop: 10, fontSize: 12, color: "#6B7280" }}>
+                      Sua resposta: <strong>{answers[reviewQuestion.question.id] ?? "-"}</strong> · Correta: <strong>{reviewQuestion.question.correctAnswer}</strong>
+                    </p>
+                  </div>
+
+                  <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: "1px solid #FDE68A", background: "#FFFBEB" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <p style={{ fontSize: 11, fontWeight: 900, color: "#B45309", letterSpacing: "0.04em", textTransform: "uppercase" }}>Explicação da IA</p>
+                      {!reviewQuestion.lastAnswer?.aiExplanation && (
+                        <button
+                          className="btn btn-ghost"
+                          style={{ height: 30, fontSize: 12 }}
+                          disabled={reviewExplanationLoading}
+                          onClick={async () => {
+                            setReviewExplanationLoading(true);
+                            const gen = await fetch(`/api/student/questions/${reviewQuestion.question.id}/explain`, { method: "POST" });
+                            const gdata = await gen.json().catch(() => ({}));
+                            if (gen.ok) {
+                              setReviewQuestion((prev: any) => ({ ...prev, lastAnswer: { ...prev.lastAnswer, aiExplanation: gdata.aiExplanation } }));
+                            } else {
+                              toast.error(gdata.error ?? "Falha ao gerar explicação");
+                            }
+                            setReviewExplanationLoading(false);
+                          }}
+                        >
+                          {reviewExplanationLoading ? "Gerando..." : "Gerar explicação da IA"}
+                        </button>
+                      )}
+                    </div>
+                    {reviewQuestion.lastAnswer?.aiExplanation ? (
+                      <p style={{ marginTop: 8, fontSize: 14, color: "#78350F", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                        {reviewQuestion.lastAnswer.aiExplanation}
+                      </p>
+                    ) : (
+                      <p style={{ marginTop: 8, fontSize: 13, color: "#92400E" }}>
+                        {reviewExplanationLoading ? "Gerando explicação..." : "A explicação ainda não foi gerada. Clique para gerar agora."}
+                      </p>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setReportModal({ questionId: reviewQuestion.question.id, phase: "after" })}
+                    >
+                      <AlertTriangle style={{ width: 14, height: 14 }} /> Denunciar / Discordar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          </div>
+        )}
+
         <div className="card" style={{ padding: 36, textAlign: "center" }}>
           <div
             style={{
@@ -618,7 +776,7 @@ export default function TreinoPage() {
                       <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>Questão {idx + 1}</span>
                       {q.subject && <span style={{ fontSize: 11, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 12 }}>{q.subject}</span>}
                       <button
-                        onClick={() => router.push(`/questoes/${q.id}`)}
+                        onClick={() => void openReview(q.id)}
                         style={{ marginLeft: "auto" }}
                         className="btn btn-ghost"
                       >
@@ -636,7 +794,7 @@ export default function TreinoPage() {
                     )}
                     {!isCorrect && (
                       <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>
-                        A explicação da IA pode levar alguns instantes para aparecer ao abrir a questão (gerada no pós-prova).
+                        A explicação da IA será exibida aqui (gerada automaticamente, se necessário).
                       </p>
                     )}
                   </div>
