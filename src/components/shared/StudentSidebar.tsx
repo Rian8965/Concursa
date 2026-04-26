@@ -19,7 +19,8 @@ import {
   Lightbulb,
 } from "lucide-react";
 
-const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
+const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
+const DEFAULT_LOGO = "/brand-logo.png";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -38,6 +39,7 @@ interface StudentSidebarProps {
 export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [brand, setBrand] = useState<{ name: string; logoUrl: string }>({ name: DEFAULT_BRAND_NAME, logoUrl: DEFAULT_LOGO });
 
   useEffect(() => {
     setMobileOpen(false);
@@ -50,6 +52,20 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
       document.body.style.overflow = "";
     };
   }, [mobileOpen]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/public/brand-theme")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const name = String(d?.theme?.platformName ?? DEFAULT_BRAND_NAME);
+        const logoUrl = String(d?.theme?.logoUrl ?? DEFAULT_LOGO);
+        setBrand({ name, logoUrl });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const initials =
     studentName
@@ -71,7 +87,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
           <Menu className="h-5 w-5" strokeWidth={2} />
         </button>
         <span className="student-mobile-bar__title max-w-[min(220px,52vw)] text-[11px] font-extrabold leading-tight text-[var(--text-primary)]">
-          {BRAND_NAME}
+          {brand.name.toUpperCase()}
         </span>
         <span className="student-mobile-bar__badge">Aluno</span>
       </div>
@@ -99,8 +115,8 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
             >
               <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
                 <Image
-                  src="/brand-logo.png"
-                  alt={BRAND_NAME}
+                  src={brand.logoUrl}
+                  alt={brand.name}
                   width={48}
                   height={48}
                   className="h-full w-full object-cover"
@@ -108,7 +124,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-extrabold leading-[1.25] tracking-tight text-white sm:text-[13px]">{BRAND_NAME}</p>
+                <p className="text-[12px] font-extrabold leading-[1.25] tracking-tight text-white sm:text-[13px]">{brand.name.toUpperCase()}</p>
                 <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">Área do aluno</p>
               </div>
             </Link>

@@ -218,14 +218,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-primary {
-  background: linear-gradient(165deg, #8B5CF6 0%, #7C3AED 48%, #6D28D9 100%);
+  background: linear-gradient(165deg, var(--secondary, #8B5CF6) 0%, var(--primary, #7C3AED) 55%, var(--primary-hover, #6D28D9) 100%);
   color: #fff;
   box-shadow:
     0 1px 0 rgba(255,255,255,0.22) inset,
     var(--shadow-purple);
 }
 .btn-primary:hover {
-  background: linear-gradient(165deg, #9333EA 0%, #7C3AED 50%, #5B21B6 100%);
+  background: linear-gradient(165deg, var(--secondary, #9333EA) 0%, var(--primary, #7C3AED) 50%, var(--primary-hover, #5B21B6) 100%);
   box-shadow:
     0 1px 0 rgba(255,255,255,0.25) inset,
     0 10px 36px rgba(124,58,237,0.32);

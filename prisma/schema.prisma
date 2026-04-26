@@ -886,6 +886,10 @@ model BrandTheme {
   platformName    String
   loginBannerUrl  String?
   footerText      String?
+  /// Configurações específicas da tela de login (background, frases, card, etc.)
+  loginConfig     Json?
+  /// Configurações gerais de UI (botões, raios/bordas, etc.)
+  uiConfig        Json?
   isDefault       Boolean  @default(false)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

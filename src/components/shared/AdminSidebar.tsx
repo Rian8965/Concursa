@@ -24,7 +24,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-const BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
+const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
+const DEFAULT_LOGO = "/brand-logo.png";
 
 const navGroups = [
   {
@@ -69,6 +70,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ adminName }: AdminSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [brand, setBrand] = useState<{ name: string; logoUrl: string }>({ name: DEFAULT_BRAND_NAME, logoUrl: DEFAULT_LOGO });
 
   useEffect(() => {
     setMobileOpen(false);
@@ -81,6 +83,20 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
       document.body.style.overflow = "";
     };
   }, [mobileOpen]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/public/brand-theme")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const name = String(d?.theme?.platformName ?? DEFAULT_BRAND_NAME);
+        const logoUrl = String(d?.theme?.logoUrl ?? DEFAULT_LOGO);
+        setBrand({ name, logoUrl });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const initials =
     adminName
@@ -102,7 +118,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
           <Menu className="h-5 w-5" strokeWidth={2} />
         </button>
         <span className="orbit-mobile-bar__title max-w-[min(220px,52vw)] text-[11px] font-extrabold leading-tight text-[var(--text-primary)]">
-          {BRAND_NAME}
+          {brand.name.toUpperCase()}
         </span>
         <span className="orbit-mobile-bar__badge">Admin</span>
       </div>
@@ -130,8 +146,8 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
             >
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
                 <Image
-                  src="/brand-logo.png"
-                  alt={BRAND_NAME}
+                  src={brand.logoUrl}
+                  alt={brand.name}
                   width={44}
                   height={44}
                   className="h-full w-full object-cover"
@@ -139,7 +155,7 @@ export function AdminSidebar({ adminName }: AdminSidebarProps) {
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-extrabold leading-snug tracking-tight text-white sm:text-[13px]">{BRAND_NAME}</p>
+                <p className="text-[12px] font-extrabold leading-snug tracking-tight text-white sm:text-[13px]">{brand.name.toUpperCase()}</p>
                 <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Painel admin</p>
               </div>
             </Link>

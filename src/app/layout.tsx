@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { prisma } from "@/lib/db/prisma";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -28,10 +29,43 @@ export const viewport: Viewport = {
   themeColor: "#3B0764",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const theme = await prisma.brandTheme.findFirst({
+    where: { isDefault: true, isActive: true },
+    select: { primaryColor: true, secondaryColor: true, accentColor: true, uiConfig: true },
+  });
+
+  function darken(hex: string, amount = 0.12) {
+    const h = (hex || "").replace("#", "").trim();
+    if (h.length !== 6) return hex;
+    const r = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(0, 2), 16) * (1 - amount))));
+    const g = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(2, 4), 16) * (1 - amount))));
+    const b = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(4, 6), 16) * (1 - amount))));
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }
+
+  const radiusScale =
+    typeof (theme?.uiConfig as any)?.radiusScale === "number"
+      ? (theme?.uiConfig as any).radiusScale
+      : 1;
+
+  const rXl = Math.round(16 * radiusScale);
+  const rPanel = Math.round(24 * radiusScale);
+  const primaryHover = theme?.primaryColor ? darken(theme.primaryColor, 0.14) : undefined;
+
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${font.variable} antialiased`}>
+      <body
+        className={`${font.variable} antialiased`}
+        style={{
+          ...(theme?.primaryColor ? { ["--primary" as any]: theme.primaryColor } : {}),
+          ...(primaryHover ? { ["--primary-hover" as any]: primaryHover } : {}),
+          ...(theme?.secondaryColor ? { ["--secondary" as any]: theme.secondaryColor } : {}),
+          ...(theme?.accentColor ? { ["--accent" as any]: theme.accentColor } : {}),
+          ...(Number.isFinite(rXl) ? { ["--r-xl" as any]: `${rXl}px` } : {}),
+          ...(Number.isFinite(rPanel) ? { ["--r-panel" as any]: `${rPanel}px` } : {}),
+        }}
+      >
         <AuthSessionProvider>{children}</AuthSessionProvider>
         <Toaster
           position="top-right"
