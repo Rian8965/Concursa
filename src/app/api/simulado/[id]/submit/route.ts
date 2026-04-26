@@ -3,6 +3,18 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+function limitConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>) {
+  const q = [...items];
+  const workers = Array.from({ length: Math.max(1, concurrency) }).map(async () => {
+    while (q.length) {
+      const it = q.shift();
+      if (it === undefined) return;
+      await fn(it);
+    }
+  });
+  return Promise.allSettled(workers);
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -68,25 +80,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : [];
   const qMap = new Map(questionsById.map((q) => [q.id, q]));
 
+  const wrongToExplain: Array<{
+    questionId: string;
+    selectedAnswer: string;
+    correctAnswer: string;
+    content: string;
+    supportText: string | null;
+    alternatives: { letter: string; content: string }[];
+  }> = [];
+
   for (const a of answers) {
     const r = results.find((x) => x.questionId === a.questionId);
     if (!r) continue;
 
-    let aiExplanation: string | null = null;
     if (!r.isCorrect) {
       const q = qMap.get(a.questionId);
       if (q) {
-        try {
-          aiExplanation = await generateWrongAnswerExplanation({
-            content: q.content,
-            supportText: q.supportText,
-            alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
-            selectedAnswer: a.selectedAnswer ?? "-",
-            correctAnswer: q.correctAnswer,
-          });
-        } catch (e) {
-          console.error("[simulado/submit] explain", e);
-        }
+        wrongToExplain.push({
+          questionId: q.id,
+          selectedAnswer: a.selectedAnswer ?? "-",
+          correctAnswer: q.correctAnswer,
+          content: q.content,
+          supportText: q.supportText ?? null,
+          alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
+        });
       }
     }
 
@@ -98,8 +115,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         isCorrect: r.isCorrect,
         sessionType: "EXAM",
         sessionId: id,
-        aiExplanation: r.isCorrect ? null : aiExplanation,
+        aiExplanation: null,
       },
+    });
+  }
+
+  // Explicações em background para não travar o aluno no "Finalizar"
+  if (wrongToExplain.length) {
+    setImmediate(async () => {
+      await limitConcurrency(wrongToExplain, 3, async (w) => {
+        try {
+          const expl = await generateWrongAnswerExplanation({
+            content: w.content,
+            supportText: w.supportText,
+            alternatives: w.alternatives,
+            selectedAnswer: w.selectedAnswer,
+            correctAnswer: w.correctAnswer,
+          });
+          if (!expl) return;
+          await prisma.studentAnswer.updateMany({
+            where: {
+              studentProfileId: profile.id,
+              questionId: w.questionId,
+              sessionType: "EXAM",
+              sessionId: id,
+              aiExplanation: null,
+            },
+            data: { aiExplanation: expl },
+          });
+        } catch (e) {
+          console.error("[simulado/submit] async explain", e);
+        }
+      });
     });
   }
 

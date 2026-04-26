@@ -307,6 +307,18 @@ export default function SimuladoPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
+  const [onlyWrong, setOnlyWrong] = useState(false);
+  const [finishPhraseIdx, setFinishPhraseIdx] = useState(0);
+
+  const FINISH_PHRASES = [
+    "Calculando sua nota...",
+    "Analisando seu desempenho...",
+    "Organizando seus resultados...",
+    "Preparando sua revisão de erros...",
+    "Gerando gráficos de desempenho...",
+    "Quase lá...",
+    "Nós acreditamos em você. Acredite também.",
+  ];
 
   const [reportModal, setReportModal] = useState<ReportModalState | null>(null);
   const [nowMs, setNowMs] = useState(() => new Date().getTime());
@@ -594,11 +606,18 @@ export default function SimuladoPage() {
 
   // ── LOADING ──────────────────────────────────────────────────────────────
   if (phase === "loading") {
+    // alterna frases quando está finalizando
+    useEffect(() => {
+      setFinishPhraseIdx(0);
+      const t = setInterval(() => setFinishPhraseIdx((i) => (i + 1) % 7), 1400);
+      return () => clearInterval(t);
+    }, []);
     return (
       <div className="flex items-center justify-center" style={{ minHeight: 320 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #EDE9FE", borderTopColor: "#7C3AED", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-          <p style={{ color: "#6B7280", fontSize: 14 }}>Preparando seu simulado...</p>
+          <p style={{ color: "#374151", fontSize: 14, fontWeight: 700 }}>{FINISH_PHRASES[finishPhraseIdx] ?? "Processando..."}</p>
+          <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 6 }}>Estamos finalizando e montando sua tela de resultados.</p>
         </div>
       </div>
     );
@@ -647,12 +666,57 @@ export default function SimuladoPage() {
           </div>
         </div>
 
+        {/* Desempenho por matéria (derivado do que já está na tela) */}
+        <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: "#374151", marginBottom: 10 }}>Desempenho por matéria</p>
+          {(() => {
+            const agg = new Map<string, { subject: string; total: number; correct: number }>();
+            for (const q of questions) {
+              const subj = q.subject ?? "Sem matéria";
+              const r = results.find((x) => x.questionId === q.id);
+              const cur = agg.get(subj) ?? { subject: subj, total: 0, correct: 0 };
+              cur.total += 1;
+              if (r?.isCorrect) cur.correct += 1;
+              agg.set(subj, cur);
+            }
+            const rows = Array.from(agg.values())
+              .map((s) => ({ ...s, accuracy: s.total ? Math.round((s.correct / s.total) * 100) : 0 }))
+              .sort((a, b) => b.total - a.total);
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {rows.map((s) => (
+                  <div key={s.subject}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700, color: "#374151" }}>{s.subject}</span>
+                      <span>{s.correct}/{s.total} · {s.accuracy}%</span>
+                    </div>
+                    <div style={{ height: 8, background: "#F3F4F6", borderRadius: 6, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${s.accuracy}%`, background: "linear-gradient(90deg, #7C3AED, #A855F7)" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Revisão de questões */}
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 10 }}>
           Revisão das questões
         </h3>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <button className="btn btn-ghost" style={{ height: 34, fontSize: 12 }} onClick={() => setOnlyWrong((v) => !v)}>
+            {onlyWrong ? "Mostrar todas" : "Revisar erros"}
+          </button>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {questions.map((q, idx) => {
+          {questions
+            .filter((q) => {
+              if (!onlyWrong) return true;
+              const r = results.find((x) => x.questionId === q.id);
+              return r && !r.isCorrect;
+            })
+            .map((q, idx) => {
             const r = results.find((r) => r.questionId === q.id);
             return (
               <div key={q.id} className="card" style={{ padding: "14px 18px" }}>
@@ -689,6 +753,13 @@ export default function SimuladoPage() {
                     </span>
                   )}
                 </div>
+                {!r?.isCorrect && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                    <button className="btn btn-ghost" style={{ height: 34, fontSize: 12 }} onClick={() => router.push(`/questoes/${q.id}`)}>
+                      Abrir questão (explicação IA)
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

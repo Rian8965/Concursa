@@ -3,6 +3,18 @@ import { generateWrongAnswerExplanation } from "@/lib/ai/explain-wrong-answer";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+function limitConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>) {
+  const q = [...items];
+  const workers = Array.from({ length: Math.max(1, concurrency) }).map(async () => {
+    while (q.length) {
+      const it = q.shift();
+      if (it === undefined) return;
+      await fn(it);
+    }
+  });
+  return Promise.allSettled(workers);
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -64,13 +76,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const timeSpentSeconds = Math.max(0, Math.floor(body.timeSpentSeconds ?? 0));
 
   let correctCount = 0;
+  const subjectAgg = new Map<string, { subject: string; total: number; correct: number }>();
   const results: Array<{
     questionId: string;
     selectedAnswer: string | null;
     correctAnswer: string;
     isCorrect: boolean;
-    aiExplanation?: string | null;
     subject?: string | null;
+  }> = [];
+
+  const wrongToExplain: Array<{
+    questionId: string;
+    selectedAnswer: string;
+    correctAnswer: string;
+    content: string;
+    supportText: string | null;
+    alternatives: { letter: string; content: string }[];
   }> = [];
 
   for (const row of sess.questions) {
@@ -79,19 +100,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isCorrect = Boolean(selected) && selected === q.correctAnswer;
     if (isCorrect) correctCount += 1;
 
-    let aiExplanation: string | null = null;
+    const subj = q.subject?.name ?? "Sem matéria";
+    const cur = subjectAgg.get(subj) ?? { subject: subj, total: 0, correct: 0 };
+    cur.total += 1;
+    if (isCorrect) cur.correct += 1;
+    subjectAgg.set(subj, cur);
+
     if (!isCorrect) {
-      try {
-        aiExplanation = await generateWrongAnswerExplanation({
-          content: q.content,
-          supportText: q.supportText,
-          alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
-          selectedAnswer: selected ?? "-",
-          correctAnswer: q.correctAnswer,
-        });
-      } catch (e) {
-        console.error("[training/submit] explain", e);
-      }
+      wrongToExplain.push({
+        questionId: q.id,
+        selectedAnswer: selected ?? "-",
+        correctAnswer: q.correctAnswer,
+        content: q.content,
+        supportText: q.supportText ?? null,
+        alternatives: q.alternatives.map((al) => ({ letter: al.letter, content: al.content })),
+      });
     }
 
     results.push({
@@ -99,7 +122,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       selectedAnswer: selected,
       correctAnswer: q.correctAnswer,
       isCorrect,
-      aiExplanation,
       subject: q.subject?.name ?? null,
     });
 
@@ -116,7 +138,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         isCorrect,
         sessionType: "TRAINING",
         sessionId: id,
-        aiExplanation: isCorrect ? null : aiExplanation,
+        aiExplanation: null,
       },
     });
   }
@@ -126,11 +148,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { correctAnswers: correctCount, timeSpentSeconds, completedAt: new Date() },
   });
 
+  // Gera explicações de forma assíncrona (não bloquear o resultado).
+  if (wrongToExplain.length) {
+    setImmediate(async () => {
+      await limitConcurrency(wrongToExplain, 3, async (w) => {
+        try {
+          const expl = await generateWrongAnswerExplanation({
+            content: w.content,
+            supportText: w.supportText,
+            alternatives: w.alternatives,
+            selectedAnswer: w.selectedAnswer,
+            correctAnswer: w.correctAnswer,
+          });
+          if (!expl) return;
+          await prisma.studentAnswer.updateMany({
+            where: {
+              studentProfileId: profile.id,
+              questionId: w.questionId,
+              sessionType: "TRAINING",
+              sessionId: id,
+              aiExplanation: null,
+            },
+            data: { aiExplanation: expl },
+          });
+        } catch (e) {
+          console.error("[training/submit] async explain", e);
+        }
+      });
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     correctAnswers: correctCount,
     totalQuestions: sess.totalQuestions,
     score: sess.totalQuestions > 0 ? Math.round((correctCount / sess.totalQuestions) * 100) : 0,
     results,
+    subjectPerformance: Array.from(subjectAgg.values())
+      .map((s) => ({ ...s, accuracy: s.total ? Math.round((s.correct / s.total) * 100) : 0 }))
+      .sort((a, b) => b.total - a.total),
   });
 }

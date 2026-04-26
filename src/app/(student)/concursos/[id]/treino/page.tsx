@@ -194,7 +194,7 @@ function ReportModal({ questionId, sessionId, phase, onClose, onStructuralReplac
   );
 }
 
-type Phase = "config" | "loading" | "training" | "summary";
+type Phase = "config" | "loading" | "training" | "finishing" | "summary";
 
 interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
@@ -234,6 +234,19 @@ export default function TreinoPage() {
   const [reportModal, setReportModal] = useState<{ questionId: string; phase: "during" | "after" } | null>(null);
   const [nowMs, setNowMs] = useState(() => new Date().getTime());
   const [results, setResults] = useState<Record<string, { isCorrect: boolean; correctAnswer: string; aiExplanation?: string | null }>>({});
+  const [subjectPerf, setSubjectPerf] = useState<Array<{ subject: string; total: number; correct: number; accuracy: number }>>([]);
+  const [onlyWrong, setOnlyWrong] = useState(false);
+  const [finishPhraseIdx, setFinishPhraseIdx] = useState(0);
+
+  const FINISH_PHRASES = [
+    "Calculando sua nota...",
+    "Analisando seu desempenho...",
+    "Organizando seus resultados...",
+    "Preparando sua revisão de erros...",
+    "Gerando gráficos de desempenho...",
+    "Quase lá...",
+    "Nós acreditamos em você. Acredite também.",
+  ];
 
   useEffect(() => {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
@@ -284,6 +297,7 @@ export default function TreinoPage() {
 
   const finishSession = useCallback(async () => {
     if (!sessionId) return;
+    setPhase("finishing");
     const elapsed = Math.round((new Date().getTime() - startTime) / 1000);
     const payloadAnswers = questions.map((q) => ({ questionId: q.id, selectedAnswer: answers[q.id] ?? null }));
     const res = await fetch(`/api/training/${sessionId}`, {
@@ -294,16 +308,25 @@ export default function TreinoPage() {
     const data = await res.json() as {
       ok?: boolean;
       results?: { questionId: string; selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; aiExplanation?: string | null }[];
+      subjectPerformance?: { subject: string; total: number; correct: number; accuracy: number }[];
       error?: string;
     };
-    if (!res.ok) { toast.error(data.error ?? "Erro ao finalizar treino"); return; }
+    if (!res.ok) { toast.error(data.error ?? "Erro ao finalizar treino"); setPhase("training"); return; }
     const map: Record<string, { isCorrect: boolean; correctAnswer: string; aiExplanation?: string | null }> = {};
     for (const r of data.results ?? []) {
       map[r.questionId] = { isCorrect: r.isCorrect, correctAnswer: r.correctAnswer, aiExplanation: r.aiExplanation ?? null };
     }
     setResults(map);
+    setSubjectPerf(data.subjectPerformance ?? []);
     setPhase("summary");
   }, [answers, sessionId, startTime, questions]);
+
+  useEffect(() => {
+    if (phase !== "finishing") return;
+    setFinishPhraseIdx(0);
+    const t = setInterval(() => setFinishPhraseIdx((i) => (i + 1) % 7), 1400);
+    return () => clearInterval(t);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "training") return;
@@ -459,6 +482,24 @@ export default function TreinoPage() {
     );
   }
 
+  // ── FINISHING ───────────────────────────────────────────────────────────────
+  if (phase === "finishing") {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 360 }}>
+        <div style={{ textAlign: "center", maxWidth: 520, padding: 16 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: "50%",
+            border: "3px solid #EDE9FE", borderTopColor: "#7C3AED",
+            animation: "spin 0.8s linear infinite", margin: "0 auto 16px",
+          }} />
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{FINISH_PHRASES[finishPhraseIdx] ?? "Processando..."}</p>
+          <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>Estamos finalizando seu treino e preparando a tela de resultados.</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
   // ── SUMMARY ─────────────────────────────────────────────────────────────────
   if (phase === "summary") {
     const pct = score;
@@ -527,6 +568,80 @@ export default function TreinoPage() {
               Voltar ao concurso
               <ArrowRight style={{ width: 14, height: 14 }} />
             </button>
+          </div>
+        </div>
+
+        {/* Desempenho por matéria */}
+        {subjectPerf.length > 0 && (
+          <div className="card" style={{ padding: 18, marginTop: 14 }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: "#374151", marginBottom: 10 }}>Desempenho por matéria</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {subjectPerf.map((s) => (
+                <div key={s.subject}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, color: "#374151" }}>{s.subject}</span>
+                    <span>{s.correct}/{s.total} · {s.accuracy}%</span>
+                  </div>
+                  <div style={{ height: 8, background: "#F3F4F6", borderRadius: 6, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${s.accuracy}%`, background: "linear-gradient(90deg, #7C3AED, #A855F7)" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Revisar erros */}
+        <div className="card" style={{ padding: 18, marginTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: "#374151" }}>Revisão</p>
+            <button
+              className="btn btn-ghost"
+              style={{ height: 34, fontSize: 12 }}
+              onClick={() => setOnlyWrong((v) => !v)}
+            >
+              {onlyWrong ? "Mostrar todas" : "Revisar erros"}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {questions
+              .filter((q) => (onlyWrong ? (results[q.id]?.isCorrect === false) : true))
+              .map((q, idx) => {
+                const r = results[q.id];
+                const isCorrect = r?.isCorrect === true;
+                return (
+                  <div key={q.id} style={{ padding: "12px 14px", border: "1px solid #E5E7EB", borderRadius: 12, background: "#fff" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      {isCorrect
+                        ? <CheckCircle2 style={{ width: 16, height: 16, color: "#059669" }} />
+                        : <AlertTriangle style={{ width: 16, height: 16, color: "#DC2626" }} />}
+                      <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>Questão {idx + 1}</span>
+                      {q.subject && <span style={{ fontSize: 11, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 12 }}>{q.subject}</span>}
+                      <button
+                        onClick={() => router.push(`/questoes/${q.id}`)}
+                        style={{ marginLeft: "auto" }}
+                        className="btn btn-ghost"
+                      >
+                        Abrir
+                      </button>
+                    </div>
+                    <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6 }}>
+                      {q.content.length > 140 ? q.content.slice(0, 140) + "…" : q.content}
+                    </p>
+                    {r && (
+                      <p style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+                        Sua resposta: <strong>{answers[q.id] ?? "-"}</strong>{" "}
+                        {!isCorrect && r.correctAnswer ? <>· Correta: <strong>{r.correctAnswer}</strong></> : null}
+                      </p>
+                    )}
+                    {!isCorrect && (
+                      <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>
+                        A explicação da IA pode levar alguns instantes para aparecer ao abrir a questão (gerada no pós-prova).
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       </div>
