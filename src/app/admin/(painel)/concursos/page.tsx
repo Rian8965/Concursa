@@ -254,58 +254,114 @@ export default function AdminConcursosPage() {
             </Link>
           </div>
         ) : (
-          <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
-            <div className="orbit-table-wrap">
-              <table className="orbit-admin-table">
-                <colgroup>
-                  <col className="min-w-[220px] w-[32%]" /><col className="min-w-[160px] w-[26%]" />
-                  <col className="min-w-[120px] w-[14%]" /><col className="w-[9%]" /><col className="w-[9%]" />
-                  <col className="min-w-[96px] w-[10%]" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    {["Concurso", "Localidade / Banca", "Status", "Questões", "Alunos", "Ações"].map((h) => (
-                      <th key={h} className={h === "Questões" || h === "Alunos" || h === "Ações" ? "text-right" : "text-left"}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {competitions.map((c) => {
-                    const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
-                    return (
-                      <tr key={c.id}>
-                        <td className="min-w-0">
-                          <p className="line-clamp-2 font-semibold leading-snug text-[var(--text-primary)]">{c.name}</p>
-                          {c.examDate && <p className="mt-1 text-xs text-[var(--text-muted)]">{new Date(c.examDate).toLocaleDateString("pt-BR")}</p>}
-                        </td>
-                        <td className="min-w-0">
-                          <p className="leading-snug text-[var(--text-secondary)]">{c.city.name} — {c.city.state}</p>
-                          {c.examBoard && <p className="mt-1 text-xs font-semibold text-violet-700">{c.examBoard.acronym}</p>}
-                        </td>
-                        <td><Badge variant={s.variant}>{s.label}</Badge></td>
-                        <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">{c._count.questions}</td>
-                        <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
-                          <Link
-                            href={`/admin/concursos/${c.id}/alunos`}
-                            className="inline-flex items-center justify-end gap-1 rounded-md px-1 py-0.5 text-violet-700 hover:bg-violet-50 hover:text-violet-900"
-                            title="Ver alunos e desempenho deste concurso"
-                          >
-                            {c._count.students} aluno{c._count.students === 1 ? "" : "s"}
-                          </Link>
-                        </td>
-                        <td className="text-right">
-                          <div className="inline-flex items-center justify-end gap-2">
-                            <Link href={`/admin/concursos/${c.id}`} className="orbit-icon-btn" title="Editar"><Edit2 className="h-3.5 w-3.5" /></Link>
-                            <button type="button" onClick={() => handleDelete(c.id, c.name)} disabled={deleting === c.id} className="orbit-icon-btn orbit-icon-btn--danger" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <>
+            {/* Mobile: cards */}
+            <div className="grid gap-3 sm:hidden">
+              {competitions.map((c) => {
+                const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
+                return (
+                  <div key={c.id} className="orbit-card-premium p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-[14px] font-extrabold text-[var(--text-primary)]">{c.name}</p>
+                        <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                          {c.city.name} — {c.city.state}{c.examBoard?.acronym ? ` · ${c.examBoard.acronym}` : ""}
+                        </p>
+                        {c.examDate && (
+                          <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                            Prova: {fmtDate(c.examDate)}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant={s.variant}>{s.label}</Badge>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
+                      <span className="rounded-lg border border-black/[0.08] bg-white px-2.5 py-1">
+                        {c._count.questions} questões
+                      </span>
+                      <Link
+                        href={`/admin/concursos/${c.id}/alunos`}
+                        className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700"
+                      >
+                        {c._count.students} aluno{c._count.students === 1 ? "" : "s"}
+                      </Link>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <Link href={`/admin/concursos/${c.id}`} className="btn btn-ghost flex-1 rounded-xl py-2 text-[13px]">
+                        Editar
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c.id, c.name)}
+                        disabled={deleting === c.id}
+                        className="btn btn-ghost flex-1 rounded-xl py-2 text-[13px] text-red-600 hover:bg-red-50"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+
+            {/* Desktop/tablet: tabela */}
+            <div className="hidden sm:block">
+              <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
+                <div className="orbit-table-wrap">
+                  <table className="orbit-admin-table">
+                    <colgroup>
+                      <col className="min-w-[220px] w-[32%]" /><col className="min-w-[160px] w-[26%]" />
+                      <col className="min-w-[120px] w-[14%]" /><col className="w-[9%]" /><col className="w-[9%]" />
+                      <col className="min-w-[96px] w-[10%]" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        {["Concurso", "Localidade / Banca", "Status", "Questões", "Alunos", "Ações"].map((h) => (
+                          <th key={h} className={h === "Questões" || h === "Alunos" || h === "Ações" ? "text-right" : "text-left"}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {competitions.map((c) => {
+                        const s = STATUS_MAP[c.status] ?? { label: c.status, variant: "secondary" as const };
+                        return (
+                          <tr key={c.id}>
+                            <td className="min-w-0">
+                              <p className="line-clamp-2 font-semibold leading-snug text-[var(--text-primary)]">{c.name}</p>
+                              {c.examDate && <p className="mt-1 text-xs text-[var(--text-muted)]">{new Date(c.examDate).toLocaleDateString("pt-BR")}</p>}
+                            </td>
+                            <td className="min-w-0">
+                              <p className="leading-snug text-[var(--text-secondary)]">{c.city.name} — {c.city.state}</p>
+                              {c.examBoard && <p className="mt-1 text-xs font-semibold text-violet-700">{c.examBoard.acronym}</p>}
+                            </td>
+                            <td><Badge variant={s.variant}>{s.label}</Badge></td>
+                            <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">{c._count.questions}</td>
+                            <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
+                              <Link
+                                href={`/admin/concursos/${c.id}/alunos`}
+                                className="inline-flex items-center justify-end gap-1 rounded-md px-1 py-0.5 text-violet-700 hover:bg-violet-50 hover:text-violet-900"
+                                title="Ver alunos e desempenho deste concurso"
+                              >
+                                {c._count.students} aluno{c._count.students === 1 ? "" : "s"}
+                              </Link>
+                            </td>
+                            <td className="text-right">
+                              <div className="inline-flex items-center justify-end gap-2">
+                                <Link href={`/admin/concursos/${c.id}`} className="orbit-icon-btn" title="Editar"><Edit2 className="h-3.5 w-3.5" /></Link>
+                                <button type="button" onClick={() => handleDelete(c.id, c.name)} disabled={deleting === c.id} className="orbit-icon-btn orbit-icon-btn--danger" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
 

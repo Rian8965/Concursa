@@ -107,82 +107,135 @@ export default function AdminAlunosPage() {
           <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhum aluno encontrado</p>
         </div>
       ) : (
-        <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
-          <div className="orbit-table-wrap">
-            <table className="orbit-admin-table">
-              <colgroup>
-                <col className="min-w-[200px] w-[30%]" />
-                <col className="min-w-[140px] w-[22%]" />
-                <col className="min-w-[88px] w-[10%]" />
-                <col className="min-w-[120px] w-[14%]" />
-                <col className="min-w-[100px] w-[10%]" />
-                <col className="min-w-[140px] w-[14%]" />
-              </colgroup>
-              <thead>
-                <tr>
-                  {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
-                    <th
-                      key={h}
-                      className={h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((s) => (
-                  <tr key={s.id}>
-                    <td className="min-w-0">
-                      <p className="truncate font-semibold text-[var(--text-primary)]">{s.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{s.email}</p>
-                    </td>
-                    <td className="min-w-0">
-                      <p className="truncate text-[var(--text-secondary)]">
-                        {s.studentProfile?.plan?.name ?? <span className="text-[var(--text-muted)]">—</span>}
-                      </p>
-                    </td>
-                    <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
-                      {s.studentProfile?._count?.studentAnswers ?? 0}
-                    </td>
-                    <td className="text-right text-sm tabular-nums text-[var(--text-secondary)]">
-                      {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
-                    </td>
-                    <td>
-                      <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
-                        {s.isActive ? "Ativo" : "Inativo"}
-                      </span>
-                    </td>
-                    <td className="text-right">
-                      <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelected(s)}
-                          className="btn btn-ghost inline-flex min-h-[38px] min-w-[6rem] items-center justify-center rounded-lg px-3 text-xs font-semibold"
-                        >
-                          Gerenciar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleActive(s.id, s.isActive)}
-                          className={cn(
-                            "orbit-icon-btn",
-                            s.isActive
-                              ? "orbit-icon-btn--danger"
-                              : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-                          )}
-                          title={s.isActive ? "Desativar" : "Ativar"}
-                        >
-                          {s.isActive ? <ShieldX className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {/* Mobile: cards */}
+          <div className="grid gap-3 sm:hidden">
+            {students.map((s) => (
+              <div key={s.id} className="orbit-card-premium p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-extrabold text-[var(--text-primary)]">{s.name}</p>
+                    <p className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">{s.email}</p>
+                    <p className="mt-2 text-[12px] font-semibold text-[var(--text-secondary)]">
+                      Plano: {s.studentProfile?.plan?.name ?? "—"}
+                    </p>
+                    <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                      Questões: <span className="font-extrabold">{s.studentProfile?._count?.studentAnswers ?? 0}</span>
+                    </p>
+                    <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                      Cadastro: {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
+                    </p>
+                  </div>
+                  <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
+                    {s.isActive ? "Ativo" : "Inativo"}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelected(s)}
+                    className="btn btn-ghost rounded-xl py-2 text-[13px]"
+                  >
+                    Gerenciar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleActive(s.id, s.isActive)}
+                    className={cn(
+                      "btn rounded-xl py-2 text-[13px]",
+                      s.isActive
+                        ? "bg-red-50 text-red-700 hover:bg-red-100"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                    )}
+                  >
+                    {s.isActive ? "Desativar" : "Ativar"}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          {/* Desktop/tablet: tabela */}
+          <div className="hidden sm:block">
+            <div className="orbit-data-table-scroll orbit-data-table-scroll--lg">
+              <div className="orbit-table-wrap">
+                <table className="orbit-admin-table">
+                  <colgroup>
+                    <col className="min-w-[200px] w-[30%]" />
+                    <col className="min-w-[140px] w-[22%]" />
+                    <col className="min-w-[88px] w-[10%]" />
+                    <col className="min-w-[120px] w-[14%]" />
+                    <col className="min-w-[100px] w-[10%]" />
+                    <col className="min-w-[140px] w-[14%]" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
+                        <th
+                          key={h}
+                          className={h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((s) => (
+                      <tr key={s.id}>
+                        <td className="min-w-0">
+                          <p className="truncate font-semibold text-[var(--text-primary)]">{s.name}</p>
+                          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{s.email}</p>
+                        </td>
+                        <td className="min-w-0">
+                          <p className="truncate text-[var(--text-secondary)]">
+                            {s.studentProfile?.plan?.name ?? <span className="text-[var(--text-muted)]">—</span>}
+                          </p>
+                        </td>
+                        <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
+                          {s.studentProfile?._count?.studentAnswers ?? 0}
+                        </td>
+                        <td className="text-right text-sm tabular-nums text-[var(--text-secondary)]">
+                          {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
+                        </td>
+                        <td>
+                          <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
+                            {s.isActive ? "Ativo" : "Inativo"}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelected(s)}
+                              className="btn btn-ghost inline-flex min-h-[38px] min-w-[6rem] items-center justify-center rounded-lg px-3 text-xs font-semibold"
+                            >
+                              Gerenciar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleActive(s.id, s.isActive)}
+                              className={cn(
+                                "orbit-icon-btn",
+                                s.isActive
+                                  ? "orbit-icon-btn--danger"
+                                  : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                              )}
+                              title={s.isActive ? "Desativar" : "Ativar"}
+                            >
+                              {s.isActive ? <ShieldX className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {selected && (

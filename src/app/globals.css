@@ -1170,6 +1170,14 @@ h1, h2, h3, h4, h5, h6 {
     padding-left: 0;
   }
 
+  /* No mobile, o conteúdo não deve subtrair a largura da sidebar
+     (senão fica “minúsculo” e parece layout de desktop com zoom). */
+  .orbit-main-inner,
+  .student-main-inner {
+    max-width: 100% !important;
+    width: 100%;
+  }
+
   .sidebar-app {
     transform: translate3d(-100%, 0, 0);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1211,6 +1219,26 @@ h1, h2, h3, h4, h5, h6 {
   .orbit-main-inner,
   .student-main-inner {
     padding-top: calc(56px + clamp(16px, 3vw, 28px));
+  }
+}
+
+/* Ajustes finos para telas pequenas (toque + legibilidade) */
+@media (max-width: 640px) {
+  /* Evita zoom automático do iOS ao focar inputs (font < 16px) */
+  .input,
+  .field-input {
+    font-size: 16px;
+  }
+
+  /* Botões principais da listagem de concursos ficam empilhados */
+  .dash-btn-primary,
+  .dash-btn-secondary {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    padding-left: 18px;
+    padding-right: 18px;
   }
 }
 
