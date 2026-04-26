@@ -284,7 +284,15 @@ export default function AdminConcursosPage() {
                         </td>
                         <td><Badge variant={s.variant}>{s.label}</Badge></td>
                         <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">{c._count.questions}</td>
-                        <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">{c._count.students}</td>
+                        <td className="text-right tabular-nums font-semibold text-[var(--text-secondary)]">
+                          <Link
+                            href={`/admin/concursos/${c.id}/alunos`}
+                            className="inline-flex items-center justify-end gap-1 rounded-md px-1 py-0.5 text-violet-700 hover:bg-violet-50 hover:text-violet-900"
+                            title="Ver alunos e desempenho deste concurso"
+                          >
+                            {c._count.students} aluno{c._count.students === 1 ? "" : "s"}
+                          </Link>
+                        </td>
                         <td className="text-right">
                           <div className="inline-flex items-center justify-end gap-2">
                             <Link href={`/admin/concursos/${c.id}`} className="orbit-icon-btn" title="Editar"><Edit2 className="h-3.5 w-3.5" /></Link>
