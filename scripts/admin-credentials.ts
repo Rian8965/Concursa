@@ -51,13 +51,13 @@ async function askPassword(prompt: string): Promise<string> {
         process.exit(130);
       }
       // hide output
-      rl.output.write("\x1B[2K\x1B[200D" + prompt + "*".repeat((rl as any).line?.length ?? 0));
+      process.stdout.write("\x1B[2K\x1B[200D" + prompt + "*".repeat((rl as any).line?.length ?? 0));
     };
 
     (process.stdin as any).on("data", onData);
     rl.question(prompt, (value) => {
       (process.stdin as any).off("data", onData);
-      rl.output.write("\n");
+      process.stdout.write("\n");
       rl.close();
       resolve(String(value ?? "").trim());
     });

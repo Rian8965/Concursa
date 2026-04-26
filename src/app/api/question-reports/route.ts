@@ -9,7 +9,7 @@ const STRUCTURAL_CATEGORIES = [
   "MISSING_IMAGE",
   "MISSING_ALTERNATIVE",
   "FORMAT_ERROR",
-];
+] as const;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -30,13 +30,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 });
   }
 
-  // Validate category vs phase
-  if (phase === "during" && !STRUCTURAL_CATEGORIES.includes(category)) {
-    return NextResponse.json(
-      { error: "Durante a prova apenas problemas estruturais podem ser denunciados" },
-      { status: 400 },
-    );
-  }
+  // Durante treino/simulado, permitimos qualquer categoria.
+  // Quando for estrutural, a UI pode tentar substituir automaticamente a questão.
+  // Quando for gabarito (WRONG_ANSWER), a IA pode analisar (se houver descrição).
 
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
@@ -59,8 +55,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Se o aluno denunciou gabarito errado: rodar análise da IA imediatamente
-  if (category === "WRONG_ANSWER" && description?.trim()) {
+  // Se o aluno denunciou gabarito errado (ou ambiguidade) com detalhes: rodar análise da IA imediatamente
+  if ((category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER") && description?.trim()) {
     setImmediate(async () => {
       try {
         const result = await analyzeQuestionReport({
@@ -89,7 +85,7 @@ export async function POST(req: NextRequest) {
         });
 
         // Se IA apontou problema real: marcar questão como suspeita
-        if (result.verdict === "ANSWER_IS_WRONG" || result.verdict === "AMBIGUOUS") {
+        if (result.verdict === "ANSWER_IS_WRONG" || result.verdict === "AMBIGUOUS" || result.verdict === "ANSWER_MAY_BE_WRONG") {
           await prisma.question.update({
             where: { id: questionId },
             data: { isMarkedSuspect: true },

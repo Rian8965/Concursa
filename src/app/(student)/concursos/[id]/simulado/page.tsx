@@ -35,20 +35,16 @@ type ReportCategory =
   | "MISSING_ALTERNATIVE" | "FORMAT_ERROR"
   | "WRONG_ANSWER" | "AMBIGUOUS_ANSWER" | "INCONSISTENT_CONTENT" | "OTHER";
 
-const STRUCTURAL_CATEGORIES: { value: ReportCategory; label: string }[] = [
+const REPORT_CATEGORIES: { value: ReportCategory; label: string }[] = [
+  { value: "WRONG_ANSWER", label: "Questão com gabarito errado" },
   { value: "INCOMPLETE_STATEMENT", label: "Enunciado incompleto" },
-  { value: "MISSING_TEXT", label: "Texto faltando" },
+  { value: "MISSING_TEXT", label: "Texto de apoio faltando" },
   { value: "MISSING_IMAGE", label: "Imagem faltando" },
-  { value: "MISSING_ALTERNATIVE", label: "Alternativa faltando" },
-  { value: "FORMAT_ERROR", label: "Erro de formatação" },
-];
-
-const ALL_CATEGORIES: { value: ReportCategory; label: string }[] = [
-  ...STRUCTURAL_CATEGORIES,
-  { value: "WRONG_ANSWER", label: "Resposta possivelmente errada" },
-  { value: "AMBIGUOUS_ANSWER", label: "Resposta ambígua/dupla" },
-  { value: "INCONSISTENT_CONTENT", label: "Conteúdo inconsistente" },
-  { value: "OTHER", label: "Outro problema" },
+  { value: "MISSING_ALTERNATIVE", label: "Alternativas incompletas" },
+  { value: "INCONSISTENT_CONTENT", label: "Alternativas incorretas / conteúdo confuso" },
+  { value: "AMBIGUOUS_ANSWER", label: "Não há alternativa correta / questão ambígua" },
+  { value: "FORMAT_ERROR", label: "Questão mal formatada" },
+  { value: "OTHER", label: "Outro motivo" },
 ];
 
 interface ReportModalState {
@@ -70,7 +66,7 @@ function ReportModal({
   const [aiResult, setAiResult] = useState<{ verdict: string; analysis: string } | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const categories = state.phase === "during" ? STRUCTURAL_CATEGORIES : ALL_CATEGORIES;
+  const categories = REPORT_CATEGORIES;
 
   const VERDICT_LABELS: Record<string, { label: string; color: string }> = {
     ANSWER_IS_CORRECT: { label: "Gabarito está correto", color: "#059669" },
@@ -99,7 +95,7 @@ function ReportModal({
       if (!res.ok) throw new Error();
 
       setSubmitted(true);
-      toast.success("Denúncia registrada com sucesso");
+      toast.success("Sua questão foi denunciada com sucesso.");
 
       // Denúncia estrutural durante o simulado: substituir automaticamente
       if (state.phase === "during") {
@@ -125,8 +121,8 @@ function ReportModal({
         }
       }
 
-      // Se for WRONG_ANSWER, espera análise da IA
-      if (category === "WRONG_ANSWER" && data.reportId) {
+      // Se for gabarito/ambiguidade, espera análise da IA
+      if ((category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER") && data.reportId) {
         await new Promise((r) => setTimeout(r, 3000));
         const reviewRes = await fetch(`/api/question-reports?questionId=${state.questionId}`);
         const reviewData = await reviewRes.json() as { reports: { aiReview?: { verdict: string; analysis: string } }[] };
@@ -163,8 +159,7 @@ function ReportModal({
 
         {state.phase === "during" && (
           <div style={{ marginBottom: 12, padding: 10, background: "#FFFBEB", borderRadius: 8, fontSize: 12, color: "#92400E" }}>
-            <strong>Durante a prova:</strong> apenas problemas estruturais (conteúdo incompleto, imagem faltando, etc.).<br />
-            Para contestar o gabarito, faça ao finalizar.
+            <strong>Durante o simulado:</strong> sua denúncia será registrada. Se for problema estrutural, tentaremos substituir a questão automaticamente.
           </div>
         )}
 
@@ -191,11 +186,30 @@ function ReportModal({
               ))}
             </div>
 
-            {(category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER" || category === "OTHER") && (
+            {category === "OTHER" && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                  Explique o motivo:
+                </p>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Descreva o problema..."
+                  rows={3}
+                  style={{
+                    width: "100%", padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                    border: "1.5px solid #E5E7EB", resize: "vertical",
+                    fontFamily: "var(--font-sans)", outline: "none",
+                  }}
+                />
+              </div>
+            )}
+
+            {(category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER" || category === "INCONSISTENT_CONTENT") && (
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
                   {category === "WRONG_ANSWER"
-                    ? "Descreva por que você acha que a resposta está errada:"
+                    ? "Explique por que você acha que o gabarito está errado (opcional, mas ajuda a IA):"
                     : "Descreva o problema (opcional):"}
                 </p>
                 <textarea
@@ -240,13 +254,13 @@ function ReportModal({
           <div style={{ textAlign: "center" }}>
             <CheckCircle2 style={{ width: 36, height: 36, color: "#059669", margin: "0 auto 12px" }} />
             <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
-              Denúncia registrada!
+              Sua questão foi denunciada com sucesso.
             </p>
             <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
               Obrigado pelo feedback. Nossa equipe irá analisar.
             </p>
 
-            {category === "WRONG_ANSWER" && !aiResult && (
+            {(category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER") && !aiResult && (
               <div style={{ marginBottom: 16, padding: 12, background: "#EDE9FE", borderRadius: 10 }}>
                 <Bot style={{ width: 16, height: 16, color: "#7C3AED", margin: "0 auto 6px" }} />
                 <p style={{ fontSize: 13, color: "#5B21B6" }}>IA analisando o argumento...</p>
@@ -776,40 +790,53 @@ export default function SimuladoPage() {
                     </p>
                   </div>
 
-                  <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: "1px solid #FDE68A", background: "#FFFBEB" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <p style={{ fontSize: 11, fontWeight: 900, color: "#B45309", letterSpacing: "0.04em", textTransform: "uppercase" }}>Explicação da IA</p>
-                      {!reviewQuestion.lastAnswer?.aiExplanation && (
-                        <button
-                          className="btn btn-ghost"
-                          style={{ height: 30, fontSize: 12 }}
-                          disabled={reviewExplanationLoading}
-                          onClick={async () => {
-                            setReviewExplanationLoading(true);
-                            const gen = await fetch(`/api/student/questions/${reviewQuestion.question.id}/explain`, { method: "POST" });
-                            const gdata = await gen.json().catch(() => ({}));
-                            if (gen.ok) {
-                              setReviewQuestion((prev: any) => ({ ...prev, lastAnswer: { ...prev.lastAnswer, aiExplanation: gdata.aiExplanation } }));
-                            } else {
-                              toast.error(gdata.error ?? "Falha ao gerar explicação");
-                            }
-                            setReviewExplanationLoading(false);
-                          }}
-                        >
-                          {reviewExplanationLoading ? "Gerando..." : "Gerar explicação da IA"}
-                        </button>
+                  {reviewQuestion.lastAnswer?.isCorrect === false && (
+                    <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: "1px solid #FDE68A", background: "#FFFBEB" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                        <p style={{ fontSize: 11, fontWeight: 900, color: "#B45309", letterSpacing: "0.04em", textTransform: "uppercase" }}>Explicação da IA</p>
+                        {!reviewQuestion.lastAnswer?.aiExplanation && (
+                          <button
+                            className="btn btn-ghost"
+                            style={{ height: 30, fontSize: 12 }}
+                            disabled={reviewExplanationLoading}
+                            onClick={async () => {
+                              setReviewExplanationLoading(true);
+                              const gen = await fetch(`/api/student/questions/${reviewQuestion.question.id}/explain`, { method: "POST" });
+                              const gdata = await gen.json().catch(() => ({}));
+                              if (gen.ok) {
+                                setReviewQuestion((prev: any) => ({ ...prev, lastAnswer: { ...prev.lastAnswer, aiExplanation: gdata.aiExplanation } }));
+                              } else {
+                                toast.error(gdata.error ?? "Falha ao gerar explicação");
+                              }
+                              setReviewExplanationLoading(false);
+                            }}
+                          >
+                            {reviewExplanationLoading ? "Gerando..." : "Gerar explicação da IA"}
+                          </button>
+                        )}
+                      </div>
+                      {reviewQuestion.lastAnswer?.aiExplanation ? (
+                        <p style={{ marginTop: 8, fontSize: 14, color: "#78350F", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                          {reviewQuestion.lastAnswer.aiExplanation}
+                        </p>
+                      ) : (
+                        <p style={{ marginTop: 8, fontSize: 13, color: "#92400E" }}>
+                          {reviewExplanationLoading ? "Gerando explicação..." : "A explicação ainda não foi gerada. Clique para gerar agora."}
+                        </p>
                       )}
                     </div>
-                    {reviewQuestion.lastAnswer?.aiExplanation ? (
-                      <p style={{ marginTop: 8, fontSize: 14, color: "#78350F", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                        {reviewQuestion.lastAnswer.aiExplanation}
+                  )}
+
+                  {reviewQuestion.question?.isMarkedSuspect && (
+                    <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid #FCD34D", background: "#FFFBEB" }}>
+                      <p style={{ fontSize: 12, fontWeight: 800, color: "#92400E" }}>
+                        Revisão de gabarito recomendada.
                       </p>
-                    ) : (
-                      <p style={{ marginTop: 8, fontSize: 13, color: "#92400E" }}>
-                        {reviewExplanationLoading ? "Gerando explicação..." : "A explicação ainda não foi gerada. Clique para gerar agora."}
+                      <p style={{ marginTop: 4, fontSize: 12, color: "#92400E" }}>
+                        Detectamos sinais de possível inconsistência no gabarito. A equipe administrativa foi notificada para revisão.
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   <div style={{ marginTop: 14 }}>
                     <button
@@ -946,6 +973,13 @@ export default function SimuladoPage() {
                   <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                     <button className="btn btn-ghost" style={{ height: 34, fontSize: 12 }} onClick={() => void openReview(q.id)}>
                       Ver por que errei
+                    </button>
+                  </div>
+                )}
+                {r?.isCorrect && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                    <button className="btn btn-ghost" style={{ height: 34, fontSize: 12 }} onClick={() => void openReview(q.id)}>
+                      Abrir questão
                     </button>
                   </div>
                 )}

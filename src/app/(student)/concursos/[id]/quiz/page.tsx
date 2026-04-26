@@ -67,7 +67,7 @@ export default function QuizEditalPage() {
     }
   }
 
-  const showSuggested = messages.length === 0;
+  const showWelcome = messages.length === 0;
 
   return (
     <div className="flex h-[calc(100vh-80px)] flex-col">
@@ -90,7 +90,7 @@ export default function QuizEditalPage() {
 
       {/* Área de mensagens */}
       <div className="flex-1 overflow-y-auto bg-[#F9FAFB] px-4 py-4">
-        {showSuggested ? (
+        {showWelcome ? (
           <div className="mx-auto max-w-xl space-y-5 pt-4">
             <div className="rounded-2xl border border-violet-100 bg-white px-5 py-5 shadow-sm">
               <div className="flex items-center gap-2.5">
@@ -99,26 +99,6 @@ export default function QuizEditalPage() {
                   <p className="text-[14px] font-bold text-[#111827]">Olá! Sou o assistente do seu edital.</p>
                   <p className="text-[13px] text-[#6B7280]">Faça qualquer pergunta sobre o concurso ao qual você está inscrito.</p>
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]">Sugestões de perguntas</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {SUGGESTED.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => send(q)}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-black/[0.07] bg-white px-4 py-3 text-left text-[13px] font-medium text-[#374151] transition-colors hover:border-violet-200 hover:bg-violet-50"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileQuestion className="h-3.5 w-3.5 shrink-0 text-violet-400" />
-                      {q}
-                    </span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
-                  </button>
-                ))}
               </div>
             </div>
 
@@ -170,6 +150,46 @@ export default function QuizEditalPage() {
 
       {/* Área de input */}
       <div className="shrink-0 border-t border-black/[0.06] bg-white px-4 py-3">
+        {/* Sugestões sempre visíveis */}
+        <div className="mx-auto mb-2 max-w-2xl">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]">
+            Sugestões rápidas
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {SUGGESTED.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => send(q)}
+                disabled={loading}
+                className="shrink-0 inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white px-3.5 py-2 text-[12.5px] font-semibold text-[#374151] shadow-sm transition hover:border-violet-200 hover:bg-violet-50 disabled:opacity-50"
+                title={q}
+              >
+                <FileQuestion className="h-3.5 w-3.5 shrink-0 text-violet-500/70" />
+                <span className="whitespace-nowrap">{q}</span>
+              </button>
+            ))}
+          </div>
+          {/* Desktop: grid leve para reduzir scroll quando houver espaço */}
+          <div className="hidden gap-2 pt-1 sm:grid sm:grid-cols-2 lg:grid-cols-3">
+            {SUGGESTED.map((q) => (
+              <button
+                key={`${q}-grid`}
+                type="button"
+                onClick={() => send(q)}
+                disabled={loading}
+                className="inline-flex items-center justify-between gap-2 rounded-xl border border-black/[0.07] bg-white px-3.5 py-2.5 text-left text-[12.5px] font-semibold text-[#374151] transition hover:border-violet-200 hover:bg-violet-50 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <FileQuestion className="h-3.5 w-3.5 shrink-0 text-violet-500/70" />
+                  <span className="truncate">{q}</span>
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#D1D5DB]" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error && (
           <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>
         )}

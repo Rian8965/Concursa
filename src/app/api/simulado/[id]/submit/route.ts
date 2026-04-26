@@ -1,4 +1,5 @@
 import { generateWrongAnswerExplanation } from "@/lib/ai/explain-wrong-answer";
+import { analyzeQuestionReport } from "@/lib/ai/analyze-question-report";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
@@ -13,6 +14,68 @@ function limitConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => P
     }
   });
   return Promise.allSettled(workers);
+}
+
+async function autoFlagSuspiciousAnswer(input: {
+  studentProfileId: string;
+  questionId: string;
+  sessionId: string;
+  content: string;
+  supportText: string | null;
+  alternatives: { letter: string; content: string }[];
+  correctAnswer: string;
+  selectedAnswer: string;
+}) {
+  if (!input.selectedAnswer || input.selectedAnswer === "-" || input.selectedAnswer === input.correctAnswer) return;
+
+  const ai = await analyzeQuestionReport({
+    content: input.content,
+    supportText: input.supportText,
+    alternatives: input.alternatives,
+    correctAnswer: input.correctAnswer,
+    studentReason:
+      `Durante a correção automática do simulado, o aluno marcou "${input.selectedAnswer}" e o gabarito do sistema é "${input.correctAnswer}". ` +
+      "O aluno não enviou justificativa. Avalie se o gabarito pode estar errado ou se a questão é ambígua.",
+  });
+  if (!ai) return;
+
+  const shouldEscalate =
+    (ai.verdict === "ANSWER_IS_WRONG" && ai.confidence >= 0.7) ||
+    (ai.verdict === "AMBIGUOUS" && ai.confidence >= 0.7) ||
+    (ai.verdict === "ANSWER_MAY_BE_WRONG" && ai.confidence >= 0.8);
+  if (!shouldEscalate) return;
+
+  await prisma.$transaction(async (tx) => {
+    const report = await tx.questionReport.create({
+      data: {
+        studentProfileId: input.studentProfileId,
+        questionId: input.questionId,
+        category: "WRONG_ANSWER",
+        description:
+          `[AUTO] IA detectou possível inconsistência de gabarito. ` +
+          `Aluno marcou ${input.selectedAnswer}, gabarito ${input.correctAnswer}.`,
+        phase: "after",
+        sessionType: "EXAM",
+        sessionId: input.sessionId,
+        status: "AI_REVIEWED",
+      },
+      select: { id: true },
+    });
+
+    await tx.questionReportAiReview.create({
+      data: {
+        reportId: report.id,
+        verdict: ai.verdict,
+        analysis: ai.analysis,
+        confidence: ai.confidence,
+      },
+    });
+
+    await tx.question.update({
+      where: { id: input.questionId },
+      data: { isMarkedSuspect: true },
+    });
+  });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -145,6 +208,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           });
         } catch (e) {
           console.error("[simulado/submit] async explain", e);
+        }
+      });
+    });
+  }
+
+  // IA: detectar possível gabarito errado e criar denúncia automática (não bloquear o aluno).
+  if (wrongToExplain.length) {
+    setImmediate(async () => {
+      await limitConcurrency(wrongToExplain, 2, async (w) => {
+        try {
+          await autoFlagSuspiciousAnswer({
+            studentProfileId: profile.id,
+            questionId: w.questionId,
+            sessionId: id,
+            content: w.content,
+            supportText: w.supportText,
+            alternatives: w.alternatives,
+            correctAnswer: w.correctAnswer,
+            selectedAnswer: w.selectedAnswer,
+          });
+        } catch (e) {
+          console.error("[simulado/submit] auto-flag", e);
         }
       });
     });
