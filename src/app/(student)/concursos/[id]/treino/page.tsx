@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Play, CheckCircle2, XCircle, ArrowRight, ArrowLeft,
+  Play, CheckCircle2, ArrowRight, ArrowLeft,
   Trophy, RotateCcw, AlertTriangle, Send, X, Bot,
 } from "lucide-react";
 
@@ -13,12 +13,16 @@ type ReportCategory =
   | "MISSING_ALTERNATIVE" | "FORMAT_ERROR"
   | "WRONG_ANSWER" | "AMBIGUOUS_ANSWER" | "INCONSISTENT_CONTENT" | "OTHER";
 
-const REPORT_CATEGORIES: { value: ReportCategory; label: string; structural?: boolean }[] = [
-  { value: "INCOMPLETE_STATEMENT", label: "Enunciado incompleto", structural: true },
-  { value: "MISSING_TEXT", label: "Texto faltando", structural: true },
-  { value: "MISSING_IMAGE", label: "Imagem faltando", structural: true },
-  { value: "MISSING_ALTERNATIVE", label: "Alternativa faltando", structural: true },
-  { value: "FORMAT_ERROR", label: "Erro de formatação", structural: true },
+const STRUCTURAL_CATEGORIES: { value: ReportCategory; label: string }[] = [
+  { value: "INCOMPLETE_STATEMENT", label: "Enunciado incompleto" },
+  { value: "MISSING_TEXT", label: "Texto faltando" },
+  { value: "MISSING_IMAGE", label: "Imagem faltando" },
+  { value: "MISSING_ALTERNATIVE", label: "Alternativa faltando" },
+  { value: "FORMAT_ERROR", label: "Erro de formatação" },
+];
+
+const ALL_CATEGORIES: { value: ReportCategory; label: string }[] = [
+  ...STRUCTURAL_CATEGORIES,
   { value: "WRONG_ANSWER", label: "Resposta possivelmente errada" },
   { value: "AMBIGUOUS_ANSWER", label: "Resposta ambígua/dupla" },
   { value: "INCONSISTENT_CONTENT", label: "Conteúdo inconsistente" },
@@ -28,10 +32,12 @@ const REPORT_CATEGORIES: { value: ReportCategory; label: string; structural?: bo
 interface ReportModalProps {
   questionId: string;
   sessionId: string;
+  phase: "during" | "after";
   onClose: () => void;
+  onStructuralReplaced?: (nextQuestion: Question) => void;
 }
 
-function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
+function ReportModal({ questionId, sessionId, phase, onClose, onStructuralReplaced }: ReportModalProps) {
   const [category, setCategory] = useState<ReportCategory | "">("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +50,7 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
     ANSWER_IS_WRONG: { label: "Gabarito possivelmente errado", color: "#DC2626" },
     AMBIGUOUS: { label: "Questão ambígua", color: "#7C3AED" },
   };
+  const categories = phase === "during" ? STRUCTURAL_CATEGORIES : ALL_CATEGORIES;
 
   async function submit() {
     if (!category) { toast.error("Selecione uma categoria"); return; }
@@ -55,7 +62,7 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
         body: JSON.stringify({
           questionId, category,
           description: description.trim() || undefined,
-          phase: "after",
+          phase,
           sessionId,
           sessionType: "TRAINING",
         }),
@@ -65,7 +72,24 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
       setSubmitted(true);
       toast.success("Denúncia registrada");
 
-      if (category === "WRONG_ANSWER" && data.reportId) {
+      if (phase === "during") {
+        if (onStructuralReplaced) {
+          const rep = await fetch(`/api/training/${sessionId}/replace`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questionId }),
+          });
+          const repData = await rep.json() as { question?: Question; error?: string };
+          if (rep.ok && repData.question) {
+            onStructuralReplaced(repData.question);
+            toast.success("Questão substituída automaticamente");
+          } else {
+            toast.info(repData.error ?? "Não foi possível substituir agora");
+          }
+        }
+      }
+
+      if (phase === "after" && category === "WRONG_ANSWER" && data.reportId) {
         await new Promise((r) => setTimeout(r, 3000));
         const reviewRes = await fetch(`/api/question-reports?questionId=${questionId}`);
         const reviewData = await reviewRes.json() as { reports: { aiReview?: { verdict: string; analysis: string } }[] };
@@ -101,7 +125,7 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
         {!submitted ? (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-              {REPORT_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <button
                   key={c.value}
                   onClick={() => setCategory(c.value)}
@@ -118,7 +142,7 @@ function ReportModal({ questionId, sessionId, onClose }: ReportModalProps) {
               ))}
             </div>
 
-            {(category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER" || category === "OTHER") && (
+            {phase === "after" && (category === "WRONG_ANSWER" || category === "AMBIGUOUS_ANSWER" || category === "OTHER") && (
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
                   {category === "WRONG_ANSWER" ? "Descreva por que a resposta pode estar errada:" : "Detalhes (opcional):"}
@@ -174,20 +198,14 @@ type Phase = "config" | "loading" | "training" | "summary";
 
 interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
-  id: string; content: string; correctAnswer: string;
+  id: string; content: string;
   supportText?: string | null;
   subject?: string; difficulty: string; alternatives: Alternative[];
   hasImage?: boolean;
   imageUrl?: string | null;
 }
 
-interface AnswerState {
-  selected: string | null;
-  isCorrect: boolean | null;
-  revealed: boolean;
-  /** explicação da IA (só em erro) */
-  aiExplanation?: string | null;
-}
+type AnswersMap = Record<string, string | null>;
 
 const QUANTITIES = [5, 10, 15, 20];
 const DIFFICULTIES = [
@@ -211,10 +229,11 @@ export default function TreinoPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
+  const [answers, setAnswers] = useState<AnswersMap>({});
   const [startTime, setStartTime] = useState(0);
-  const [reportModal, setReportModal] = useState<{ questionId: string } | null>(null);
+  const [reportModal, setReportModal] = useState<{ questionId: string; phase: "during" | "after" } | null>(null);
   const [nowMs, setNowMs] = useState(() => new Date().getTime());
+  const [results, setResults] = useState<Record<string, { isCorrect: boolean; correctAnswer: string; aiExplanation?: string | null }>>({});
 
   useEffect(() => {
     fetch(`/api/student/subjects-for-competition?competitionId=${competitionId}`)
@@ -243,6 +262,7 @@ export default function TreinoPage() {
       setQuestions(data.questions);
       setCurrentIdx(0);
       setAnswers({});
+      setResults({});
       setStartTime(Date.now());
       setPhase("training");
     } catch {
@@ -251,37 +271,39 @@ export default function TreinoPage() {
     }
   }
 
-  async function submitAnswer(letter: string) {
+  async function markAnswer(letter: string) {
     const q = questions[currentIdx];
-    if (answers[q.id]?.revealed) return;
-
-    const res = await fetch(`/api/training/${sessionId}`, {
+    if (!q || !sessionId) return;
+    setAnswers((prev) => ({ ...prev, [q.id]: letter }));
+    fetch(`/api/training/${sessionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ questionId: q.id, selectedAnswer: letter }),
-    });
-    const data = await res.json() as { isCorrect: boolean; aiExplanation?: string | null };
-    setAnswers((prev) => ({
-      ...prev,
-      [q.id]: {
-        selected: letter,
-        isCorrect: data.isCorrect,
-        revealed: true,
-        aiExplanation: data.isCorrect ? null : (data.aiExplanation ?? null),
-      },
-    }));
+    }).catch(() => {});
   }
 
   const finishSession = useCallback(async () => {
-    const correct = Object.values(answers).filter((a) => a.isCorrect).length;
+    if (!sessionId) return;
     const elapsed = Math.round((new Date().getTime() - startTime) / 1000);
-    await fetch(`/api/training/${sessionId}`, {
+    const payloadAnswers = questions.map((q) => ({ questionId: q.id, selectedAnswer: answers[q.id] ?? null }));
+    const res = await fetch(`/api/training/${sessionId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ correctAnswers: correct, timeSpentSeconds: elapsed }),
+      body: JSON.stringify({ answers: payloadAnswers, timeSpentSeconds: elapsed }),
     });
+    const data = await res.json() as {
+      ok?: boolean;
+      results?: { questionId: string; selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; aiExplanation?: string | null }[];
+      error?: string;
+    };
+    if (!res.ok) { toast.error(data.error ?? "Erro ao finalizar treino"); return; }
+    const map: Record<string, { isCorrect: boolean; correctAnswer: string; aiExplanation?: string | null }> = {};
+    for (const r of data.results ?? []) {
+      map[r.questionId] = { isCorrect: r.isCorrect, correctAnswer: r.correctAnswer, aiExplanation: r.aiExplanation ?? null };
+    }
+    setResults(map);
     setPhase("summary");
-  }, [answers, sessionId, startTime]);
+  }, [answers, sessionId, startTime, questions]);
 
   useEffect(() => {
     if (phase !== "training") return;
@@ -289,8 +311,8 @@ export default function TreinoPage() {
     return () => clearInterval(t);
   }, [phase]);
 
-  const correctCount = Object.values(answers).filter((a) => a.isCorrect).length;
-  const totalAnswered = Object.keys(answers).length;
+  const totalAnswered = Object.values(answers).filter((v) => v != null).length;
+  const correctCount = Object.values(results).filter((r) => r.isCorrect).length;
   const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
   const elapsed = Math.round((nowMs - startTime) / 1000);
   const minutes = Math.floor(elapsed / 60);
@@ -524,6 +546,22 @@ export default function TreinoPage() {
         <ReportModal
           questionId={reportModal.questionId}
           sessionId={sessionId}
+          phase={reportModal.phase}
+          onStructuralReplaced={(nextQuestion) => {
+            setQuestions((prev) => {
+              const idx = prev.findIndex((qq) => qq.id === reportModal.questionId);
+              if (idx < 0) return prev;
+              const copy = [...prev];
+              copy[idx] = nextQuestion;
+              return copy;
+            });
+            setAnswers((prev) => {
+              const copy = { ...prev };
+              delete copy[reportModal.questionId];
+              return copy;
+            });
+            setReportModal(null);
+          }}
           onClose={() => setReportModal(null)}
         />
       )}
@@ -587,37 +625,31 @@ export default function TreinoPage() {
       {/* Alternatives */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
         {q.alternatives.map((alt) => {
-          const isSelected = ans?.selected === alt.letter;
-          const isCorrect = alt.letter === q.correctAnswer;
-          const revealed = ans?.revealed;
-
+          const isSelected = (ans ?? null) === alt.letter;
           let bg = "#FFFFFF", border = "#E5E7EB", color = "#374151";
-          if (revealed) {
-            if (isCorrect) { bg = "#ECFDF5"; border = "#6EE7B7"; color = "#065F46"; }
-            else if (isSelected && !isCorrect) { bg = "#FEF2F2"; border = "#FCA5A5"; color = "#991B1B"; }
-          } else if (isSelected) {
+          if (isSelected) {
             bg = "#EDE9FE"; border = "#7C3AED"; color = "#5B21B6";
           }
 
           return (
             <button
               key={alt.letter}
-              onClick={() => !revealed && submitAnswer(alt.letter)}
+              onClick={() => markAnswer(alt.letter)}
               style={{
                 display: "flex", alignItems: "flex-start", gap: 14,
                 padding: "14px 18px", borderRadius: 12,
                 background: bg, border: `1.5px solid ${border}`, color,
-                cursor: revealed ? "default" : "pointer",
+                cursor: "pointer",
                 transition: "all 0.15s", textAlign: "left",
                 fontFamily: "var(--font-sans)",
               }}
             >
               <span style={{
                 width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                background: revealed ? (isCorrect ? "#059669" : isSelected ? "#DC2626" : "#E5E7EB") : (isSelected ? "#7C3AED" : "#F3F4F6"),
+                background: isSelected ? "#7C3AED" : "#F3F4F6",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 12, fontWeight: 700,
-                color: (revealed && (isCorrect || isSelected)) ? "#fff" : isSelected ? "#fff" : "#6B7280",
+                color: isSelected ? "#fff" : "#6B7280",
               }}>
                 {alt.letter}
               </span>
@@ -635,29 +667,10 @@ export default function TreinoPage() {
                   alt.content
                 )}
               </span>
-              {revealed && isCorrect && <CheckCircle2 style={{ width: 18, height: 18, color: "#059669", flexShrink: 0, marginLeft: "auto", marginTop: 3 }} />}
-              {revealed && isSelected && !isCorrect && <XCircle style={{ width: 18, height: 18, color: "#DC2626", flexShrink: 0, marginLeft: "auto", marginTop: 3 }} />}
             </button>
           );
         })}
       </div>
-
-        {ans?.revealed && ans.isCorrect === false && ans.aiExplanation ? (
-          <div
-            style={{
-              marginTop: 14,
-              marginBottom: 8,
-              padding: 14,
-              background: "#FFFBEB",
-              borderRadius: 12,
-              border: "1px solid #FDE68A",
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#B45309", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Por que errou</p>
-            <p style={{ fontSize: 14, color: "#78350F", lineHeight: 1.65 }}>{ans.aiExplanation}</p>
-
-          </div>
-        ) : null}
 
       {/* Actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -670,22 +683,28 @@ export default function TreinoPage() {
             <ArrowLeft style={{ width: 14, height: 14 }} /> Sair
           </button>
 
-          {ans?.revealed && (
-            <button
-              onClick={() => setReportModal({ questionId: q.id })}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                display: "flex", alignItems: "center", gap: 4,
-                fontSize: 12, color: "#9CA3AF", fontFamily: "var(--font-sans)", fontWeight: 600,
-              }}
-            >
-              <AlertTriangle style={{ width: 12, height: 12 }} />
-              Denunciar
-            </button>
-          )}
+          <button
+            onClick={() => setReportModal({ questionId: q.id, phase: "during" })}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 4,
+              fontSize: 12, color: "#9CA3AF", fontFamily: "var(--font-sans)", fontWeight: 600,
+            }}
+          >
+            <AlertTriangle style={{ width: 12, height: 12 }} />
+            Denunciar
+          </button>
         </div>
 
-        {ans?.revealed && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+            className="btn btn-ghost"
+            disabled={currentIdx === 0}
+          >
+            <ArrowLeft style={{ width: 14, height: 14 }} />
+            Voltar
+          </button>
           <button
             onClick={() => {
               if (currentIdx + 1 >= questions.length) finishSession();
@@ -693,10 +712,10 @@ export default function TreinoPage() {
             }}
             className="btn btn-primary"
           >
-            {currentIdx + 1 >= questions.length ? "Ver resultado" : "Próxima"}
+            {currentIdx + 1 >= questions.length ? "Finalizar" : ((ans ?? null) ? "Próxima" : "Pular")}
             <ArrowRight style={{ width: 14, height: 14 }} />
           </button>
-        )}
+        </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

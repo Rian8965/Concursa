@@ -411,6 +411,7 @@ model Question {
 
   alternatives      Alternative[]
   studentAnswers    StudentAnswer[]
+  trainingSessionQuestions TrainingSessionQuestion[]
   examQuestions     SimulatedExamQuestion[]
   apostilaQuestions ApostilaQuestion[]
   usedBy            UsedQuestion[]
@@ -519,8 +520,26 @@ model TrainingSession {
   createdAt        DateTime  @default(now())
 
   studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  questions       TrainingSessionQuestion[]
 
   @@map("training_sessions")
+}
+
+model TrainingSessionQuestion {
+  id               String   @id @default(cuid())
+  trainingSessionId String
+  questionId       String
+  order            Int
+  selectedAnswer   String?
+  isCorrect        Boolean?
+  replacedAt       DateTime?
+
+  trainingSession TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+  question        Question        @relation(fields: [questionId], references: [id])
+
+  @@unique([trainingSessionId, questionId])
+  @@index([trainingSessionId, order])
+  @@map("training_session_questions")
 }
 
 // ============================================================

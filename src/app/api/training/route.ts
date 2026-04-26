@@ -140,13 +140,21 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  await prisma.trainingSessionQuestion.createMany({
+    data: shuffled.map((q, i) => ({
+      trainingSessionId: trainingSession.id,
+      questionId: q.id,
+      order: i + 1,
+    })),
+    skipDuplicates: true,
+  });
+
   return NextResponse.json({
     sessionId: trainingSession.id,
     questions: shuffled.map((q) => ({
       id: q.id,
       content: q.content,
       supportText: q.supportText,
-      correctAnswer: q.correctAnswer,
       subject: q.subject?.name,
       difficulty: q.difficulty,
       hasImage: q.hasImage,

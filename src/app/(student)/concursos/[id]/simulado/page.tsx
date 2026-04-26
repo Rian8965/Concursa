@@ -100,6 +100,19 @@ function ReportModal({
       setSubmitted(true);
       toast.success("Denúncia registrada com sucesso");
 
+      // Denúncia estrutural durante o simulado: substituir automaticamente
+      if (state.phase === "during") {
+        const rep = await fetch(`/api/simulado/${state.sessionId}/replace`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questionId: state.questionId }),
+        }).catch(() => null);
+        // A UI do simulado não é re-hidratada aqui para evitar estados inconsistentes;
+        // a substituição é aplicada no backend e o aluno segue sem travar.
+        // (No próximo refresh/reload o simulado já virá com a nova questão na mesma ordem.)
+        void rep;
+      }
+
       // Se for WRONG_ANSWER, espera análise da IA
       if (category === "WRONG_ANSWER" && data.reportId) {
         await new Promise((r) => setTimeout(r, 3000));
