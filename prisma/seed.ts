@@ -29,32 +29,13 @@ async function main() {
   console.log("✅ Tema visual criado");
 
   // ============================================================
-  // Super Admin
-  // Credenciais definidas via variáveis de ambiente.
-  // Para criar/redefinir admin, use: npx tsx scripts/create-admin.ts
+  // Administrador (SEGURANÇA)
+  // Não criar admin via seed para evitar qualquer credencial “fixa” no fluxo público.
+  // Para criar/alterar admin de forma privada, use:
+  //   npm run admin:credentials
+  // (script interativo, senha nunca fica hardcoded em código/README)
   // ============================================================
-  const adminEmail    = process.env.SEED_ADMIN_EMAIL;
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
-
-  let superAdmin = null;
-  if (adminEmail && adminPassword) {
-    const hashedPassword = await bcrypt.hash(adminPassword, 12);
-    superAdmin = await prisma.user.upsert({
-      where: { email: adminEmail },
-      update: { password: hashedPassword, isActive: true },
-      create: {
-        name: process.env.SEED_ADMIN_NAME ?? "Administrador",
-        email: adminEmail,
-        password: hashedPassword,
-        role: "SUPER_ADMIN",
-        isActive: true,
-      },
-    });
-    console.log("✅ Admin criado/atualizado:", superAdmin.email);
-  } else {
-    console.log("ℹ️  SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não definidos — admin ignorado no seed.");
-    console.log("   Use: npx tsx scripts/create-admin.ts");
-  }
+  console.log("ℹ️  Admin não é criado via seed (segurança). Use: npm run admin:credentials");
 
   // ============================================================
   // Planos de Acesso
@@ -504,7 +485,7 @@ async function main() {
   }
 
   console.log("\n🎉 Seed concluído com sucesso!");
-  console.log("\n📋 Para criar/redefinir usuários, use: npx tsx scripts/create-admin.ts");
+  console.log("\n📋 Para criar/alterar admin de forma segura, use: npm run admin:credentials");
 }
 
 main()

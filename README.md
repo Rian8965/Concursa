@@ -105,12 +105,16 @@ python main.py
 
 ---
 
-## Credenciais Iniciais (Seed)
+## Credenciais (segurança)
 
-| Perfil | E-mail | Senha |
-|---|---|---|
-| Admin | admin@concursapro.com | Admin@123 |
-| Aluno demo | aluno@concursapro.com | Aluno@123 |
+- **Aluno demo**: pode ser criado localmente (opcional) via seed/script para testes.
+- **Administrador**: por segurança, **não existe credencial padrão** e **não é criado via seed**.
+
+Para criar/alterar admin de forma privada (senha nunca fica hardcoded nem em env):
+
+```bash
+npm run admin:credentials
+```
 
 ---
 
