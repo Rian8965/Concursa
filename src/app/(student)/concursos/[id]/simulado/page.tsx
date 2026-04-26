@@ -58,10 +58,11 @@ interface ReportModalState {
 }
 
 function ReportModal({
-  state, onClose,
+  state, onClose, onStructuralReplaced,
 }: {
   state: ReportModalState;
   onClose: () => void;
+  onStructuralReplaced?: (payload: { removedQuestionId: string; order: number; question: Question }) => void;
 }) {
   const [category, setCategory] = useState<ReportCategory | "">("");
   const [description, setDescription] = useState("");
@@ -107,10 +108,21 @@ function ReportModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ questionId: state.questionId }),
         }).catch(() => null);
-        // A UI do simulado não é re-hidratada aqui para evitar estados inconsistentes;
-        // a substituição é aplicada no backend e o aluno segue sem travar.
-        // (No próximo refresh/reload o simulado já virá com a nova questão na mesma ordem.)
-        void rep;
+        const repData = rep ? await rep.json().catch(() => null) as null | {
+          replaced?: { removedQuestionId: string; order: number };
+          question?: Question;
+          error?: string;
+        } : null;
+        if (rep && rep.ok && repData?.replaced && repData.question && onStructuralReplaced) {
+          onStructuralReplaced({
+            removedQuestionId: repData.replaced.removedQuestionId,
+            order: repData.replaced.order,
+            question: repData.question,
+          });
+          toast.success("Questão substituída automaticamente");
+        } else if (repData?.error) {
+          toast.info(repData.error);
+        }
       }
 
       // Se for WRONG_ANSWER, espera análise da IA
@@ -602,7 +614,11 @@ export default function SimuladoPage() {
     return (
       <div style={{ maxWidth: 680, margin: "0 auto" }}>
         {reportModal && (
-          <ReportModal state={reportModal} onClose={() => setReportModal(null)} />
+          <ReportModal
+            state={reportModal}
+            onClose={() => setReportModal(null)}
+            onStructuralReplaced={() => {}}
+          />
         )}
 
         <div className="card" style={{ padding: "32px 28px", textAlign: "center", marginBottom: 20 }}>
@@ -688,7 +704,32 @@ export default function SimuladoPage() {
   return (
     <div>
       {reportModal && (
-        <ReportModal state={reportModal} onClose={() => setReportModal(null)} />
+        <ReportModal
+          state={reportModal}
+          onClose={() => setReportModal(null)}
+          onStructuralReplaced={({ removedQuestionId, order, question }) => {
+            setQuestions((prev) => {
+              const idx = prev.findIndex((qq) => qq.order === order || qq.id === removedQuestionId);
+              if (idx < 0) return prev;
+              const copy = [...prev];
+              copy[idx] = { ...question, order };
+              return copy;
+            });
+            setSelectedAnswers((prev) => {
+              const copy = { ...prev };
+              delete copy[removedQuestionId];
+              delete copy[question.id];
+              return copy;
+            });
+            setFlagged((prev) => {
+              const next = new Set(prev);
+              next.delete(removedQuestionId);
+              next.delete(question.id);
+              return next;
+            });
+            setReportModal(null);
+          }}
+        />
       )}
 
       {/* Anti-exit warning banner */}
