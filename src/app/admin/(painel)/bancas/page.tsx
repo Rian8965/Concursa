@@ -46,7 +46,7 @@ export default async function AdminBancasPage() {
           {/* Mobile: cards */}
           <div className="grid gap-3 sm:hidden">
             {rows.map(({ board: b, questions }) => (
-              <div key={b.id} className="orbit-card-premium p-4">
+              <Link key={b.id} href={`/admin/bancas/${b.id}`} className="orbit-card-premium p-4 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[12px] font-extrabold tracking-[0.12em] text-violet-700">{b.acronym}</p>
@@ -63,6 +63,7 @@ export default async function AdminBancasPage() {
                         target="_blank"
                         rel="noopener"
                         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         Site
@@ -70,7 +71,7 @@ export default async function AdminBancasPage() {
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 
@@ -96,9 +97,15 @@ export default async function AdminBancasPage() {
                   <tbody>
                     {rows.map(({ board: b, questions }, i) => (
                       <tr key={b.id} style={{ borderBottom: i < rows.length - 1 ? "1px solid rgba(17,24,39,0.06)" : "none" }}>
-                        <td className="text-[13px] font-extrabold text-violet-700">{b.acronym}</td>
+                        <td className="text-[13px] font-extrabold text-violet-700">
+                          <Link href={`/admin/bancas/${b.id}`} className="hover:underline">
+                            {b.acronym}
+                          </Link>
+                        </td>
                         <td className="min-w-0">
-                          <p className="truncate font-semibold text-[var(--text-primary)]">{b.name}</p>
+                          <Link href={`/admin/bancas/${b.id}`} className="truncate font-semibold text-[var(--text-primary)] hover:underline">
+                            {b.name}
+                          </Link>
                         </td>
                         <td className="text-right">
                           <span className="inline-flex items-center rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1 text-[12px] font-extrabold tabular-nums text-violet-800">

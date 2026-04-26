@@ -77,6 +77,10 @@ function AdminQuestoesContent() {
       setEditingId(edit.trim());
       setShowForm(true);
     }
+    const preview = searchParams.get("preview");
+    if (preview && typeof preview === "string" && preview.trim()) {
+      setPreviewId(preview.trim());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
