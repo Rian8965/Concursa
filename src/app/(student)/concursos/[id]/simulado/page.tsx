@@ -355,6 +355,14 @@ export default function SimuladoPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const examIdRef = useRef<string>("");
 
+  // Loading phrases (sem hooks condicionais)
+  useEffect(() => {
+    if (phase !== "loading") return;
+    setFinishPhraseIdx(0);
+    const t = setInterval(() => setFinishPhraseIdx((i) => (i + 1) % FINISH_PHRASES.length), 1400);
+    return () => clearInterval(t);
+  }, [phase, FINISH_PHRASES.length]);
+
   // Proteção: se o índice da questão sair do range (race de estado, replace, etc.),
   // corrige sem derrubar a tela (e sem violar regras de hooks).
   useEffect(() => {
@@ -664,12 +672,6 @@ export default function SimuladoPage() {
 
   // ── LOADING ──────────────────────────────────────────────────────────────
   if (phase === "loading") {
-    // alterna frases quando está finalizando
-    useEffect(() => {
-      setFinishPhraseIdx(0);
-      const t = setInterval(() => setFinishPhraseIdx((i) => (i + 1) % 7), 1400);
-      return () => clearInterval(t);
-    }, []);
     return (
       <div className="flex items-center justify-center" style={{ minHeight: 320 }}>
         <div style={{ textAlign: "center" }}>
