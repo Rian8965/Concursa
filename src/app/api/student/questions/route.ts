@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       lastSelectedAnswer: string | null;
       lastSessionType: string | null;
       wrongCount: number;
+      code: string | null;
       content: string;
       year: number | null;
       subjectName: string | null;
@@ -128,6 +129,7 @@ answered AS (
     la."lastSelectedAnswer",
     la."lastSessionType",
     COALESCE(wc."wrongCount", 0) AS "wrongCount",
+    q."code" AS "code",
     q."content",
     q."year",
     s."name" AS "subjectName",
@@ -145,6 +147,7 @@ answered AS (
     AND (${yearNum}::int IS NULL OR q."year" = ${yearNum}::int)
     AND (
       ${qSearch}::text = '' OR
+      COALESCE(q."code",'') ILIKE ('%' || ${qSearch}::text || '%') OR
       q."content" ILIKE ('%' || ${qSearch}::text || '%') OR
       COALESCE(q."supportText",'') ILIKE ('%' || ${qSearch}::text || '%')
     )
@@ -163,6 +166,7 @@ unanswered AS (
     NULL::text AS "lastSelectedAnswer",
     NULL::text AS "lastSessionType",
     0::int AS "wrongCount",
+    q."code" AS "code",
     q."content",
     q."year",
     s."name" AS "subjectName",
@@ -185,6 +189,7 @@ unanswered AS (
     AND (${yearNum}::int IS NULL OR q."year" = ${yearNum}::int)
     AND (
       ${qSearch}::text = '' OR
+      COALESCE(q."code",'') ILIKE ('%' || ${qSearch}::text || '%') OR
       q."content" ILIKE ('%' || ${qSearch}::text || '%') OR
       COALESCE(q."supportText",'') ILIKE ('%' || ${qSearch}::text || '%')
     )
@@ -305,6 +310,7 @@ SELECT COUNT(*)::bigint AS total FROM (
       total,
       questions: rows.map((r) => ({
         questionId: r.questionId,
+        code: r.code,
         snippet: r.content.length > 180 ? `${r.content.slice(0, 180)}…` : r.content,
         subjectName: r.subjectName,
         topicName: r.topicName,

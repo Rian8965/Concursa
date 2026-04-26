@@ -8,12 +8,21 @@ import {
   Trophy, Flag, RotateCcw, ChevronLeft, ChevronRight,
   AlertTriangle, Send, X, Bot,
 } from "lucide-react";
+import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
 
 type Phase = "config" | "loading" | "exam" | "results";
 
 interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
   id: string; order: number; content: string; subject?: string;
+  code?: string | null;
+  topic?: string | null;
+  competition?: string | null;
+  examBoard?: string | null;
+  year?: number | null;
+  city?: string | null;
+  jobRole?: string | null;
+  level?: string | null;
   difficulty: string; alternatives: Alternative[];
   supportText?: string | null;
   hasImage?: boolean;
@@ -1072,7 +1081,22 @@ export default function SimuladoPage() {
           {/* Question card */}
           <div className="card" style={{ padding: 24, marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-              {q.subject && <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>{q.subject}</span>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <QuestionMetaLine
+                  meta={{
+                    code: q.code ?? null,
+                    examBoard: q.examBoard ?? null,
+                    year: q.year ?? null,
+                    subject: q.subject ?? null,
+                    topic: q.topic ?? null,
+                    competition: q.competition ?? null,
+                    jobRole: q.jobRole ?? null,
+                    level: q.level ?? null,
+                    city: q.city ?? null,
+                    difficulty: q.difficulty,
+                  }}
+                />
+              </div>
               <button
                 onClick={() => setFlagged((prev) => { const n = new Set(prev); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: flagged.has(q.id) ? "#D97706" : "#9CA3AF", fontFamily: "var(--font-sans)", fontWeight: 600 }}

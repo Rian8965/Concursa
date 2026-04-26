@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
+import { nextQuestionCode } from "@/lib/questions/question-code";
 import { deleteImportPdfFile } from "@/lib/import-pdf-storage";
 import {
   analyzeEnunciadoHeuristic,
@@ -379,8 +380,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                 ca = alternatives[0]!.letter;
               }
 
+              const code = await nextQuestionCode(tx as any);
               const q = await tx.question.create({
                 data: {
+                  code,
                   content: freshIq.content,
                   supportText,
                   correctAnswer: ca,

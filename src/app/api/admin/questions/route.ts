@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getQuestionOptionalLinkColumns } from "@/lib/db/questions-table-columns";
+import { nextQuestionCode } from "@/lib/questions/question-code";
 import { Prisma, QuestionStatus } from "@prisma/client";
 import type { Difficulty } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
   const searchWhere: Prisma.QuestionWhereInput | undefined = search
     ? {
         OR: [
+          { code: { contains: search, mode: "insensitive" } },
           { content: { contains: search, mode: "insensitive" } },
           { supportText: { contains: search, mode: "insensitive" } },
           { alternatives: { some: { content: { contains: search, mode: "insensitive" } } } },
@@ -115,6 +117,7 @@ export async function GET(req: NextRequest) {
     prisma.question.findMany({
       where,
       include: {
+        // inclui `code` (coluna direta) por padrão
         subject: { select: { name: true } },
         topic: { select: { name: true } },
         competition: { select: { name: true } },
@@ -181,8 +184,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const linkCols = await getQuestionOptionalLinkColumns(prisma);
-    const question = await prisma.question.create({
-      data: {
+    const question = await prisma.$transaction(async (tx) => {
+      const code = await nextQuestionCode(tx as any);
+      return tx.question.create({
+        data: {
+          code,
         content,
         supportText: typeof supportText === "string" && supportText.trim() ? supportText.trim() : null,
         competitionId: optRelationId(competitionId),
@@ -204,8 +210,9 @@ export async function POST(req: NextRequest) {
             order: i + 1,
           })),
         },
-      },
-      include: { alternatives: { orderBy: { order: "asc" } }, subject: { select: { name: true } } },
+        },
+        include: { alternatives: { orderBy: { order: "asc" } }, subject: { select: { name: true } } },
+      });
     });
 
     return NextResponse.json({ question }, { status: 201 });

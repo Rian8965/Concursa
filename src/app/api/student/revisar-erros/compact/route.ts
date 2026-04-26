@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       wrongCount: number;
       lastAttemptAt: Date;
       lastOrigin: string;
+      code: string | null;
       content: string;
       year: number | null;
       subjectName: string | null;
@@ -110,6 +111,7 @@ SELECT
   w."wrongCount",
   w."lastAttemptAt",
   lo."lastOrigin",
+  q."code" AS "code",
   q."content",
   q."year",
   s."name" AS "subjectName",
@@ -127,6 +129,7 @@ WHERE (${subjectId}::text IS NULL OR q."subjectId" = ${subjectId}::text)
   AND (${yearNum}::int IS NULL OR q."year" = ${yearNum}::int)
   AND (
     ${search}::text = '' OR
+    COALESCE(q."code",'') ILIKE ('%' || ${search}::text || '%') OR
     q."content" ILIKE ('%' || ${search}::text || '%') OR
     COALESCE(q."supportText",'') ILIKE ('%' || ${search}::text || '%')
   )
@@ -192,6 +195,7 @@ SELECT COUNT(*)::bigint AS total FROM wrong;
     })(),
     items: rows.map((r) => ({
       questionId: r.questionId,
+      code: r.code,
       snippet: r.content.length > 180 ? `${r.content.slice(0, 180)}…` : r.content,
       subjectName: r.subjectName,
       topicName: r.topicName,

@@ -18,6 +18,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       subject: { select: { id: true, name: true, color: true } },
       topic: { select: { id: true, name: true } },
       examBoard: { select: { id: true, acronym: true, name: true } },
+      competition: { select: { id: true, name: true } },
+      city: { select: { id: true, name: true, state: true } },
+      jobRole: { select: { id: true, name: true, level: true } },
     },
   });
   if (!question) return NextResponse.json({ error: "Questão não encontrada" }, { status: 404 });
@@ -95,6 +98,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({
       question: {
         id: question.id,
+        code: (question as any).code ?? null,
         content: question.content,
         supportText: question.supportText,
         imageUrl: question.imageUrl,
@@ -106,6 +110,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         subject: question.subject,
         topic: question.topic,
         examBoard: question.examBoard,
+        competition: (question as any).competition ?? null,
+        city: (question as any).city ?? null,
+        jobRole: (question as any).jobRole ?? null,
         alternatives: question.alternatives.map((a) => ({ letter: a.letter, content: a.content, imageUrl: a.imageUrl ?? null })),
       },
       lastAnswer: bestLast ? {
@@ -123,6 +130,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({
     question: {
       id: question.id,
+      code: (question as any).code ?? null,
       content: question.content,
       supportText: question.supportText,
       imageUrl: question.imageUrl,
@@ -134,6 +142,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       subject: question.subject,
       topic: question.topic,
       examBoard: question.examBoard,
+      competition: (question as any).competition ?? null,
+      city: (question as any).city ?? null,
+      jobRole: (question as any).jobRole ?? null,
       alternatives: question.alternatives.map((a) => ({ letter: a.letter, content: a.content, imageUrl: a.imageUrl ?? null })),
     },
     lastAnswer: last ? {

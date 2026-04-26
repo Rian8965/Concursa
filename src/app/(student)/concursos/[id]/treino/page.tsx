@@ -7,6 +7,7 @@ import {
   Play, CheckCircle2, ArrowRight, ArrowLeft,
   Trophy, RotateCcw, AlertTriangle, Send, X, Bot,
 } from "lucide-react";
+import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
 
 type ReportCategory =
   | "INCOMPLETE_STATEMENT" | "MISSING_TEXT" | "MISSING_IMAGE"
@@ -211,8 +212,18 @@ type Phase = "config" | "loading" | "training" | "finishing" | "summary";
 interface Alternative { id: string; letter: string; content: string; imageUrl?: string | null }
 interface Question {
   id: string; content: string;
+  code?: string | null;
   supportText?: string | null;
-  subject?: string; difficulty: string; alternatives: Alternative[];
+  subject?: string;
+  topic?: string | null;
+  competition?: string | null;
+  examBoard?: string | null;
+  year?: number | null;
+  city?: string | null;
+  jobRole?: string | null;
+  level?: string | null;
+  difficulty: string;
+  alternatives: Alternative[];
   hasImage?: boolean;
   imageUrl?: string | null;
 }
@@ -569,13 +580,21 @@ export default function TreinoPage() {
                 </div>
               ) : (
                 <div>
-                  <div style={{ marginBottom: 12 }}>
-                    {reviewQuestion.question?.subject?.name && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>
-                        {reviewQuestion.question.subject.name}
-                      </span>
-                    )}
-                  </div>
+                  <QuestionMetaLine
+                    meta={{
+                      code: (reviewQuestion.question as any)?.code ?? null,
+                      examBoard: (reviewQuestion.question as any)?.examBoard?.acronym ?? null,
+                      year: (reviewQuestion.question as any)?.year ?? null,
+                      subject: reviewQuestion.question?.subject?.name ?? null,
+                      topic: reviewQuestion.question?.topic?.name ?? null,
+                      competition: (reviewQuestion.question as any)?.competition?.name ?? null,
+                      jobRole: (reviewQuestion.question as any)?.jobRole?.name ?? null,
+                      level: (reviewQuestion.question as any)?.jobRole?.level ?? null,
+                      city: (reviewQuestion.question as any)?.city ? `${(reviewQuestion.question as any).city.name}/${(reviewQuestion.question as any).city.state}` : null,
+                      difficulty: (reviewQuestion.question as any)?.difficulty ?? null,
+                    }}
+                    className="mb-3"
+                  />
 
                   {reviewQuestion.question?.supportText ? (
                     <div style={{ marginBottom: 12, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
@@ -883,21 +902,21 @@ export default function TreinoPage() {
 
       {/* Question card */}
       <div className="card" style={{ padding: 28, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          {q.subject && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20, letterSpacing: "0.02em" }}>
-              {q.subject}
-            </span>
-          )}
-          <span style={{
-            fontSize: 11, fontWeight: 600,
-            color: q.difficulty === "EASY" ? "#059669" : q.difficulty === "HARD" ? "#DC2626" : "#D97706",
-            background: q.difficulty === "EASY" ? "#ECFDF5" : q.difficulty === "HARD" ? "#FEF2F2" : "#FFFBEB",
-            padding: "3px 10px", borderRadius: 20,
-          }}>
-            {q.difficulty === "EASY" ? "Fácil" : q.difficulty === "HARD" ? "Difícil" : "Médio"}
-          </span>
-        </div>
+        <QuestionMetaLine
+          meta={{
+            code: q.code ?? null,
+            examBoard: q.examBoard ?? null,
+            year: q.year ?? null,
+            subject: q.subject ?? null,
+            topic: q.topic ?? null,
+            competition: q.competition ?? null,
+            jobRole: q.jobRole ?? null,
+            city: q.city ?? null,
+            level: q.level ?? null,
+            difficulty: q.difficulty,
+          }}
+          className="mb-3"
+        />
 
         {q.supportText ? (
           <div style={{ marginBottom: 16, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>

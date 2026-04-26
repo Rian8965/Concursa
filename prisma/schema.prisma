@@ -373,6 +373,8 @@ model StudentCompetition {
 
 model Question {
   id             String         @id @default(cuid())
+  /// Código legível e estável (ex: DQ001). Gerado automaticamente.
+  code           String?        @unique
   content        String         @db.Text
   /// Texto de apoio compartilhado (artigo, trecho comum a várias questões), separado do enunciado
   supportText    String?        @db.Text
@@ -419,6 +421,15 @@ model Question {
   revisions        QuestionRevision[]
 
   @@map("questions")
+}
+
+/// Sequenciador simples para códigos de questões (DQ001, DQ002, ...).
+/// Mantém geração atômica via transação no Postgres.
+model QuestionCodeSeq {
+  id   Int @id @default(1)
+  next Int
+
+  @@map("question_code_seq")
 }
 
 model QuestionAiMeta {

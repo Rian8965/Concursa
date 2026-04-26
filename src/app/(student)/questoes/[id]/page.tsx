@@ -8,10 +8,12 @@ import { ArrowLeft, AlertTriangle, Bot, CheckCircle2, XCircle } from "lucide-rea
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
+import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
 
 type Alternative = { letter: string; content: string; imageUrl: string | null };
 type QuestionDetail = {
   id: string;
+  code?: string | null;
   content: string;
   supportText: string | null;
   imageUrl: string | null;
@@ -21,6 +23,9 @@ type QuestionDetail = {
   subject: { id: string; name: string; color: string | null } | null;
   topic: { id: string; name: string } | null;
   examBoard: { id: string; acronym: string; name: string } | null;
+  competition?: { id: string; name: string } | null;
+  city?: { id: string; name: string; state: string } | null;
+  jobRole?: { id: string; name: string; level: string | null } | null;
   alternatives: Alternative[];
 };
 
@@ -111,31 +116,20 @@ export default function StudentQuestionDetailPage() {
         description="Enunciado completo, sua resposta, a correta e seu histórico."
       />
 
-      <div className="flex flex-wrap gap-2">
-        {q.subject && (
-          <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-800">
-            {q.subject.name}
-          </span>
-        )}
-        {q.topic && (
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
-            {q.topic.name}
-          </span>
-        )}
-        {q.examBoard?.acronym && (
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
-            {q.examBoard.acronym}
-          </span>
-        )}
-        {q.year && (
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
-            {q.year}
-          </span>
-        )}
-        <span className={cn("rounded-lg border px-2.5 py-0.5 text-[11px] font-bold", chip.cls)}>
-          {chip.label}
-        </span>
-      </div>
+      <QuestionMetaLine
+        meta={{
+          code: q.code ?? null,
+          examBoard: q.examBoard?.acronym ?? null,
+          year: q.year,
+          subject: q.subject?.name ?? null,
+          topic: q.topic?.name ?? null,
+          competition: q.competition?.name ?? null,
+          jobRole: q.jobRole?.name ?? null,
+          level: q.jobRole?.level ?? null,
+          city: q.city ? `${q.city.name}/${q.city.state}` : null,
+          difficulty: q.difficulty,
+        }}
+      />
 
       <article className="orbit-card-premium space-y-4">
         {q.supportText ? (

@@ -16,6 +16,7 @@
     "create-admin": "tsx scripts/create-admin.ts",
     "admin:credentials": "tsx scripts/admin-credentials.ts",
     "check-users": "tsx scripts/check-users.ts",
+    "db:backfill-question-codes": "tsx scripts/backfill-question-codes.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "pdf-service": "cd pdf-service && uvicorn main:app --reload --port 8000"

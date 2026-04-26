@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils/cn";
 
 type Row = {
   questionId: string;
+  code?: string | null;
   snippet: string;
   subjectName: string | null;
   topicName: string | null;
@@ -209,6 +210,11 @@ export default function QuestoesPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap gap-2">
+                    {r.code && (
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-800">
+                        {r.code}
+                      </span>
+                    )}
                     {r.subjectName && (
                       <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-700">
                         {r.subjectName}

@@ -97,6 +97,11 @@ export async function selectQuestionsForStudent(input: SelectQuestionsInput) {
     include: {
       alternatives: { orderBy: { order: "asc" } },
       subject: { select: { name: true } },
+      topic: { select: { name: true } },
+      competition: { select: { name: true } },
+      examBoard: { select: { acronym: true } },
+      city: { select: { name: true, state: true } },
+      jobRole: { select: { name: true, level: true } },
     },
   });
   const qMap = new Map(questions.map((q) => [q.id, q]));
