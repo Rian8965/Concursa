@@ -8,6 +8,13 @@ export default function AssinarPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+
+  function normalizeCheckoutUrl(url: string) {
+    const u = url.trim();
+    if (u.startsWith("http://")) return `https://${u.slice("http://".length)}`;
+    return u;
+  }
 
   const screenshots = [
     // Landing (domínio raiz) - usadas como decoração desfocada.
@@ -23,6 +30,7 @@ export default function AssinarPage() {
     if (!name.trim() || name.trim().length < 2) { toast.error("Informe seu nome"); return; }
     if (!email.trim() || !email.includes("@")) { toast.error("Informe um e-mail válido"); return; }
 
+    setCheckoutUrl(null);
     setLoading(true);
     const res = await fetch("/api/billing/infinitepay/checkout", {
       method: "POST",
@@ -41,7 +49,10 @@ export default function AssinarPage() {
       toast.error("Link de pagamento não retornou");
       return;
     }
-    window.location.href = url;
+    const normalized = normalizeCheckoutUrl(url);
+    setCheckoutUrl(normalized);
+    // tenta redirecionar automaticamente, mas mantém fallback na tela
+    window.location.assign(normalized);
   }
 
   return (
@@ -137,6 +148,36 @@ export default function AssinarPage() {
                 {loading ? "Abrindo pagamento..." : "Assinar agora"}
               </button>
             </form>
+
+            {checkoutUrl ? (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs font-semibold text-[var(--text-primary)]">Se não abrir automaticamente</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)] break-all">
+                  <a className="underline underline-offset-2" href={checkoutUrl} target="_blank" rel="noopener noreferrer">
+                    {checkoutUrl}
+                  </a>
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a className="btn btn-primary rounded-2xl" href={checkoutUrl} target="_blank" rel="noopener noreferrer">
+                    Abrir checkout
+                  </a>
+                  <button
+                    type="button"
+                    className="btn btn-ghost rounded-2xl"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(checkoutUrl);
+                        toast.success("Link copiado.");
+                      } catch {
+                        toast.error("Não foi possível copiar.");
+                      }
+                    }}
+                  >
+                    Copiar link
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <p className="mt-4 text-xs text-[var(--text-muted)]">
               Após o pagamento aprovado, você recebe um e-mail para criar sua senha e acessar.
