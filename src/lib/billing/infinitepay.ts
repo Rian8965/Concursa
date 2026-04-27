@@ -28,14 +28,18 @@ export function getInfinitepayHandle() {
 
 export function getInfinitepayWebhookUrl() {
   const u = (process.env.INFINITEPAY_WEBHOOK_URL ?? "").trim();
-  if (!u) throw new Error("INFINITEPAY_WEBHOOK_URL não configurado");
-  return u;
+  if (u) return u;
+  // Fallback seguro para DEV (evita 500 no localhost)
+  if (process.env.NODE_ENV !== "production") return `${getAppUrl()}/api/webhooks/infinitepay`;
+  throw new Error("INFINITEPAY_WEBHOOK_URL não configurado");
 }
 
 export function getAppUrl() {
   const u = (process.env.APP_URL ?? "").trim();
-  if (!u) throw new Error("APP_URL não configurado");
-  return u.replace(/\/+$/, "");
+  if (u) return u.replace(/\/+$/, "");
+  // Fallback seguro para DEV (evita 500 no localhost)
+  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+  throw new Error("APP_URL não configurado");
 }
 
 export async function infinitepayCreateCheckoutLink(input: {
