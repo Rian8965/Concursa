@@ -4,13 +4,13 @@ import readline from "node:readline";
 function askHidden(prompt: string) {
   return new Promise<string>((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    // @ts-expect-error - hack simples pra ocultar input
-    rl._writeToOutput = function _writeToOutput(stringToWrite: string) {
-      if (rl.stdoutMuted) (rl.output as any).write("*");
-      else (rl.output as any).write(stringToWrite);
+    const anyRl = rl as any;
+    // hack simples pra ocultar input (typescript-safe via any)
+    anyRl._writeToOutput = function _writeToOutput(stringToWrite: string) {
+      if (anyRl.stdoutMuted) (anyRl.output as any).write("*");
+      else (anyRl.output as any).write(stringToWrite);
     };
-    // @ts-expect-error
-    rl.stdoutMuted = true;
+    anyRl.stdoutMuted = true;
     rl.question(prompt, (answer) => {
       rl.close();
       process.stdout.write("\n");
