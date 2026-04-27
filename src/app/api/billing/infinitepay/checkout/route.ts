@@ -15,12 +15,23 @@ function makeOrderNsu() {
   return `SUB_${Date.now()}_${rnd}`;
 }
 
+function normalizePhone(phone?: string | null) {
+  const p = (phone ?? "").trim();
+  if (!p) return undefined;
+  const digits = p.replace(/[^\d+]/g, "");
+  if (digits.startsWith("+")) return digits;
+  // Se veio só com dígitos, assume BR
+  if (digits.startsWith("55")) return `+${digits}`;
+  return `+55${digits}`;
+}
+
 export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
   const plan = await ensurePlanoCompleto();
   const orderNsu = makeOrderNsu();
+  const phoneNormalized = normalizePhone(parsed.data.phone);
 
   const tx = await prisma.paymentTransaction.create({
     data: {
@@ -28,20 +39,34 @@ export async function POST(req: NextRequest) {
       amountCents: PLAN_COMPLETO.priceCents,
       handle: process.env.INFINITEPAY_HANDLE ?? "missing",
       orderNsu,
-      raw: { customer: { name: parsed.data.name, email: parsed.data.email, phone: parsed.data.phone ?? null } } as any,
+      raw: { customer: { name: parsed.data.name, email: parsed.data.email, phone: phoneNormalized ?? null } } as any,
     },
   });
 
   const redirectUrl = `${getAppUrl()}/checkout/obrigado?order_nsu=${encodeURIComponent(orderNsu)}`;
   const webhookUrl = getInfinitepayWebhookUrl();
 
-  const { checkoutUrl, invoiceSlug, raw } = await infinitepayCreateCheckoutLink({
-    orderNsu,
-    redirectUrl,
-    webhookUrl,
-    items: [{ quantity: 1, price: PLAN_COMPLETO.priceCents, description: PLAN_COMPLETO.name }],
-    customer: { name: parsed.data.name, email: parsed.data.email, phone_number: parsed.data.phone },
-  });
+  let checkoutUrl: string | null = null;
+  let invoiceSlug: string | null = null;
+  let raw: unknown = null;
+  try {
+    const created = await infinitepayCreateCheckoutLink({
+      orderNsu,
+      redirectUrl,
+      webhookUrl,
+      items: [{ quantity: 1, price: PLAN_COMPLETO.priceCents, description: PLAN_COMPLETO.name }],
+      customer: { name: parsed.data.name, email: parsed.data.email, phone_number: phoneNormalized },
+    });
+    checkoutUrl = created.checkoutUrl;
+    invoiceSlug = created.invoiceSlug;
+    raw = created.raw;
+  } catch (e: any) {
+    await prisma.paymentTransaction.update({
+      where: { id: tx.id },
+      data: { status: "REFUSED", raw: { ...(tx.raw as any), error: String(e?.message ?? e) } as any },
+    });
+    return NextResponse.json({ error: "Não foi possível iniciar o pagamento" }, { status: 502 });
+  }
 
   if (!checkoutUrl) {
     await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: "REFUSED", raw: raw as any } });

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-const INFINITEPAY_BASE = (process.env.INFINITEPAY_API_BASE ?? "https://api.infinitepay.io").replace(/\/+$/, "");
+// Docs oficiais (2026): https://www.infinitepay.io/checkout-documentacao
+// Mantemos override via env para facilitar testes.
+const INFINITEPAY_BASE = (process.env.INFINITEPAY_API_BASE ?? "https://api.checkout.infinitepay.io").replace(/\/+$/, "");
 
 export const infinitepayCheckoutResponseSchema = z.object({
   url: z.string().url().optional(),
@@ -54,7 +56,7 @@ export async function infinitepayCreateCheckoutLink(input: {
     body.customer = input.customer;
   }
 
-  const res = await fetch(`${INFINITEPAY_BASE}/invoices/public/checkout/links`, {
+  const res = await fetch(`${INFINITEPAY_BASE}/links`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -85,7 +87,7 @@ export async function infinitepayPaymentCheck(input: {
   if (input.transactionNsu) body.transaction_nsu = input.transactionNsu;
   if (input.slug) body.slug = input.slug;
 
-  const res = await fetch(`${INFINITEPAY_BASE}/invoices/public/checkout/payment_check`, {
+  const res = await fetch(`${INFINITEPAY_BASE}/payment_check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
