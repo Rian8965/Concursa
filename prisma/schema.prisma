@@ -69,6 +69,7 @@ model User {
   accounts       Account[]
   sessions       Session[]
   studentProfile StudentProfile?
+  firstAccessTokens FirstAccessToken[]
 
   @@map("users")
 }
@@ -86,6 +87,7 @@ model StudentProfile {
   accessExpiresAt DateTime?
   phone           String?
   cpf             String?   @unique
+  onboardingCompletedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -98,8 +100,84 @@ model StudentProfile {
   apostilas           Apostila[]
   usedQuestions       UsedQuestion[]
   questionReports     QuestionReport[]
+  subscriptions       Subscription[]
 
   @@map("student_profiles")
+}
+
+// ============================================================
+// BILLING / ASSINATURAS (InfinityPay)
+// ============================================================
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REFUSED
+  CANCELLED
+}
+
+model Subscription {
+  id               String        @id @default(cuid())
+  studentProfileId String
+  planId           String
+  status           PaymentStatus @default(PENDING)
+  startedAt        DateTime?
+  cancelledAt      DateTime?
+  currentPeriodEnd DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  plan           Plan           @relation(fields: [planId], references: [id])
+  transactions   PaymentTransaction[]
+
+  @@index([studentProfileId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model PaymentTransaction {
+  id             String        @id @default(cuid())
+  subscriptionId String?
+  status         PaymentStatus @default(PENDING)
+  amountCents    Int
+  paidAmountCents Int?
+  installments   Int?
+  captureMethod  String?
+  receiptUrl     String?       @db.Text
+
+  // InfinityPay identifiers
+  handle         String
+  orderNsu       String?
+  invoiceSlug    String?
+  transactionNsu String?
+
+  raw            Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  approvedAt     DateTime?
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([handle, orderNsu])
+  @@index([status])
+  @@index([invoiceSlug])
+  @@index([transactionNsu])
+  @@map("payment_transactions")
+}
+
+model FirstAccessToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("first_access_tokens")
 }
 
 // ============================================================
@@ -119,6 +197,7 @@ model Plan {
 
   students         StudentProfile[]
   planCompetitions PlanCompetition[]
+  subscriptions    Subscription[]
 
   @@map("plans")
 }
