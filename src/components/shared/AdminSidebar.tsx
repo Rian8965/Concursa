@@ -59,7 +59,10 @@ const navGroups = [
   },
   {
     label: "Sistema",
-    items: [{ label: "Configurações", href: "/admin/configuracoes", icon: Settings }],
+    items: [
+      { label: "Relatório Financeiro", href: "/admin/financeiro", icon: CreditCard },
+      { label: "Configurações", href: "/admin/configuracoes", icon: Settings },
+    ],
   },
 ];
 

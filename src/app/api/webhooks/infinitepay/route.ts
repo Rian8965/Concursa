@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
 
   // Ativa assinatura + libera acesso (30 dias)
   const periodEnd = nowPlusDays(plan.durationDays ?? 30);
+  let createdToken: string | null = null;
 
   await prisma.$transaction(async (p) => {
     await p.paymentTransaction.update({
@@ -160,14 +161,19 @@ export async function POST(req: NextRequest) {
         expiresAt: nowPlusDays(7),
       },
     });
-
-    (user as any).__firstAccessToken = token;
+    createdToken = token;
   });
 
   try {
-    const token = (user as any).__firstAccessToken as string | undefined;
-    if (token) {
-      await sendFirstAccessEmail({ to: user.email, name: user.name, token });
+    if (createdToken) {
+      await sendFirstAccessEmail({
+        to: user.email,
+        name: user.name,
+        token: createdToken,
+        planName: plan.name,
+        accessUntil: periodEnd,
+        orderNsu: tx.orderNsu ?? null,
+      });
     }
   } catch {
     // não bloquear liberação por falha de e-mail
