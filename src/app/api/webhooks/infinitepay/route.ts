@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { infinitepayPaymentCheck } from "@/lib/billing/infinitepay";
-import { ensurePlanoCompleto, PLAN_COMPLETO } from "@/lib/billing/plan";
+import { approvePaidTransaction } from "@/lib/billing/approve";
 import bcrypt from "bcryptjs";
-import { sendFirstAccessEmail } from "@/lib/email/first-access";
 
 type WebhookPayload = {
   invoice_slug?: string;
@@ -116,68 +115,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const plan = await ensurePlanoCompleto();
-  const { user, profile } = await ensureStudentFromTransaction(tx);
-
-  // Ativa assinatura + libera acesso (30 dias)
-  const periodEnd = nowPlusDays(plan.durationDays ?? 30);
-  let createdToken: string | null = null;
-
-  await prisma.$transaction(async (p) => {
-    await p.paymentTransaction.update({
-      where: { id: tx.id },
-      data: {
-        status: "APPROVED",
-        approvedAt: new Date(),
-        amountCents: PLAN_COMPLETO.priceCents,
-      },
-    });
-
-    await p.studentProfile.update({
-      where: { id: profile.id },
-      data: {
-        planId: plan.id,
-        accessExpiresAt: periodEnd,
-      },
-    });
-
-    await p.subscription.create({
-      data: {
-        studentProfileId: profile.id,
-        planId: plan.id,
-        status: "APPROVED",
-        startedAt: new Date(),
-        currentPeriodEnd: periodEnd,
-        transactions: { connect: { id: tx.id } },
-      },
-    });
-
-    // Token de primeiro acesso (definir senha)
-    const token = randomToken();
-    await p.firstAccessToken.create({
-      data: {
-        userId: user.id,
-        token,
-        expiresAt: nowPlusDays(7),
-      },
-    });
-    createdToken = token;
+  await approvePaidTransaction({
+    handle: process.env.INFINITEPAY_HANDLE ?? "missing",
+    orderNsu,
+    invoiceSlug,
+    transactionNsu,
+    paymentCheckRaw: check.raw,
   });
-
-  try {
-    if (createdToken) {
-      await sendFirstAccessEmail({
-        to: user.email,
-        name: user.name,
-        token: createdToken,
-        planName: plan.name,
-        accessUntil: periodEnd,
-        orderNsu: tx.orderNsu ?? null,
-      });
-    }
-  } catch {
-    // não bloquear liberação por falha de e-mail
-  }
 
   return NextResponse.json({ ok: true });
 }
