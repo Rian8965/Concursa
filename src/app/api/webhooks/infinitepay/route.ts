@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { infinitepayPaymentCheck } from "@/lib/billing/infinitepay";
 import { ensurePlanoCompleto, PLAN_COMPLETO } from "@/lib/billing/plan";
 import bcrypt from "bcryptjs";
+import { sendFirstAccessEmail } from "@/lib/email/first-access";
 
 type WebhookPayload = {
   invoice_slug?: string;
@@ -159,9 +160,19 @@ export async function POST(req: NextRequest) {
         expiresAt: nowPlusDays(7),
       },
     });
+
+    (user as any).__firstAccessToken = token;
   });
 
-  // E-mail será implementado em seguida (SMTP). Por enquanto apenas finaliza o webhook.
+  try {
+    const token = (user as any).__firstAccessToken as string | undefined;
+    if (token) {
+      await sendFirstAccessEmail({ to: user.email, name: user.name, token });
+    }
+  } catch {
+    // não bloquear liberação por falha de e-mail
+  }
+
   return NextResponse.json({ ok: true });
 }
 
