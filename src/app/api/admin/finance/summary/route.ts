@@ -16,7 +16,7 @@ function parseDate(s: string | null) {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  if (!hasValidFinanceAuthCookie()) return NextResponse.json({ error: "Senha extra necessária" }, { status: 403 });
+  if (!(await hasValidFinanceAuthCookie())) return NextResponse.json({ error: "Senha extra necessária" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const from = parseDate(searchParams.get("from"));

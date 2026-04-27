@@ -13,12 +13,12 @@ export function financeCookieMaxAgeSeconds() {
   return 60 * 60 * 12; // 12h
 }
 
-export function setFinanceAuthCookie() {
+export async function setFinanceAuthCookie() {
   const secret = reqEnv("FINANCE_REPORT_SESSION_SECRET");
   const ts = Date.now().toString(10);
   const sig = crypto.createHmac("sha256", secret).update(ts).digest("hex");
   const value = `${ts}.${sig}`;
-  const jar = cookies() as any;
+  const jar = (await cookies()) as any;
   jar.set(COOKIE_NAME, value, {
     httpOnly: true,
     secure: true,
@@ -28,15 +28,15 @@ export function setFinanceAuthCookie() {
   });
 }
 
-export function clearFinanceAuthCookie() {
-  const jar = cookies() as any;
+export async function clearFinanceAuthCookie() {
+  const jar = (await cookies()) as any;
   jar.set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
 }
 
-export function hasValidFinanceAuthCookie(): boolean {
+export async function hasValidFinanceAuthCookie(): Promise<boolean> {
   const secret = (process.env.FINANCE_REPORT_SESSION_SECRET ?? "").trim();
   if (!secret) return false;
-  const jar = cookies() as any;
+  const jar = (await cookies()) as any;
   const v = jar.get(COOKIE_NAME)?.value ?? "";
   const [ts, sig] = v.split(".");
   if (!ts || !sig) return false;
@@ -44,6 +44,7 @@ export function hasValidFinanceAuthCookie(): boolean {
   const ageMs = Date.now() - parseInt(ts, 10);
   if (ageMs < 0 || ageMs > financeCookieMaxAgeSeconds() * 1000) return false;
   const expected = crypto.createHmac("sha256", secret).update(ts).digest("hex");
+  if (sig.length !== expected.length) return false;
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
 }
 

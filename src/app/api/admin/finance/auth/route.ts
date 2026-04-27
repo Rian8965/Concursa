@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const ok = await bcrypt.compare(parsed.data.password, hash);
   if (!ok) return NextResponse.json({ error: "Senha incorreta" }, { status: 403 });
 
-  setFinanceAuthCookie();
+  await setFinanceAuthCookie();
   return NextResponse.json({ ok: true });
 }
 

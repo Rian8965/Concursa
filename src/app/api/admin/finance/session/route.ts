@@ -9,6 +9,6 @@ function isAdmin(r?: string) {
 export async function GET() {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return NextResponse.json({ ok: hasValidFinanceAuthCookie() });
+  return NextResponse.json({ ok: await hasValidFinanceAuthCookie() });
 }
 
