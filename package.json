@@ -15,6 +15,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "admin:credentials": "tsx scripts/admin-credentials.ts",
+    "finance:set-password": "tsx scripts/finance-set-password.ts",
     "check-users": "tsx scripts/check-users.ts",
     "db:backfill-question-codes": "tsx scripts/backfill-question-codes.ts",
     "db:studio": "prisma studio",
