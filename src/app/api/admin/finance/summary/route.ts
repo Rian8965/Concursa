@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { hasValidFinanceAuthCookie } from "@/lib/finance/extra-auth";
+import { getGoogleBillingMonthCostCents, getMaintenanceMonthlyCents } from "@/lib/finance/google-billing";
 
 function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
     approvedCount,
     pendingCount,
     refusedCount,
+    googleCost,
   ] = await Promise.all([
     prisma.subscription.count({ where: { status: "APPROVED" } }),
     prisma.subscription.count({ where: { status: "CANCELLED" } }),
@@ -44,9 +46,14 @@ export async function GET(req: NextRequest) {
     prisma.paymentTransaction.count({ where: { status: "APPROVED", ...createdAtWhere } }),
     prisma.paymentTransaction.count({ where: { status: "PENDING", ...createdAtWhere } }),
     prisma.paymentTransaction.count({ where: { status: "REFUSED", ...createdAtWhere } }),
+    getGoogleBillingMonthCostCents(),
   ]);
 
   const revenueCents = totalApproved._sum.paidAmountCents ?? totalApproved._sum.amountCents ?? 0;
+  const maintenanceCents = getMaintenanceMonthlyCents();
+  const googleCostCents = googleCost.costCents ?? 0;
+  const totalCostCents = googleCostCents + maintenanceCents;
+  const netCents = revenueCents - totalCostCents;
 
   // Receita por mês (últimos 12 meses, independente do filtro, para visual)
   const monthly = await prisma.$queryRaw<Array<{ ym: string; revenue: bigint; qty: bigint }>>`
@@ -92,6 +99,12 @@ ORDER BY 1 ASC
       approvedCount,
       pendingCount,
       refusedCount,
+      googleCostMonthCents: googleCost.costCents,
+      maintenanceMonthCents: maintenanceCents,
+      totalCostMonthCents: totalCostCents,
+      netMonthCents: netCents,
+      googleCostCurrency: googleCost.currency,
+      googleCostLastUpdatedTime: googleCost.lastUpdatedTime,
     },
     monthly: monthly.map((m) => ({ ym: m.ym, revenueCents: Number(m.revenue ?? 0), qty: Number(m.qty ?? 0) })),
     transactions: txs.map((t) => ({

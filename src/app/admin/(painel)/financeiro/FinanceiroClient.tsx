@@ -23,6 +23,12 @@ type Summary = {
     approvedCount: number;
     pendingCount: number;
     refusedCount: number;
+    googleCostMonthCents?: number | null;
+    maintenanceMonthCents?: number;
+    totalCostMonthCents?: number;
+    netMonthCents?: number;
+    googleCostCurrency?: string | null;
+    googleCostLastUpdatedTime?: string | null;
   };
   monthly: { ym: string; revenueCents: number; qty: number }[];
   transactions: Array<{
@@ -153,6 +159,29 @@ export default function FinanceiroClient() {
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Receita (aprovados)</p>
               <p className="mt-1 text-xl font-extrabold tracking-tight text-[var(--text-primary)]">{moneyBRL(data.kpis.revenueCents)}</p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">{data.kpis.approvedCount} aprovados</p>
+            </div>
+            <div className="orbit-card-premium p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Gasto Google (mês)</p>
+              <p className="mt-1 text-xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                {data.kpis.googleCostMonthCents == null ? "—" : moneyBRL(data.kpis.googleCostMonthCents)}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {data.kpis.googleCostLastUpdatedTime ? `Atualizado: ${new Date(data.kpis.googleCostLastUpdatedTime).toLocaleString("pt-BR")}` : "Conta inteira (Billing)"}
+              </p>
+            </div>
+            <div className="orbit-card-premium p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Manutenção (fixo)</p>
+              <p className="mt-1 text-xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                {moneyBRL(data.kpis.maintenanceMonthCents ?? 11000)}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Previsto mensal</p>
+            </div>
+            <div className="orbit-card-premium p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Resultado do mês</p>
+              <p className="mt-1 text-xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                {moneyBRL(data.kpis.netMonthCents ?? (data.kpis.revenueCents - ((data.kpis.googleCostMonthCents ?? 0) + (data.kpis.maintenanceMonthCents ?? 11000))))}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Receita − custos</p>
             </div>
             <div className="orbit-card-premium p-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Alunos pagantes</p>
