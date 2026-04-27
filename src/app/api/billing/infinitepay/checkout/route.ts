@@ -61,11 +61,19 @@ export async function POST(req: NextRequest) {
     invoiceSlug = created.invoiceSlug;
     raw = created.raw;
   } catch (e: any) {
+    console.error("[infinitepay.checkout] falha ao criar link", {
+      orderNsu,
+      txId: tx.id,
+      message: String(e?.message ?? e),
+    });
     await prisma.paymentTransaction.update({
       where: { id: tx.id },
       data: { status: "REFUSED", raw: { ...(tx.raw as any), error: String(e?.message ?? e) } as any },
     });
-    return NextResponse.json({ error: "Não foi possível iniciar o pagamento" }, { status: 502 });
+    return NextResponse.json(
+      { error: "Não foi possível iniciar o pagamento", orderNsu },
+      { status: 502 }
+    );
   }
 
   if (!checkoutUrl) {

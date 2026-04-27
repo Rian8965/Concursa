@@ -68,7 +68,8 @@ export async function infinitepayCreateCheckoutLink(input: {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (json as any)?.error ?? (json as any)?.message ?? "Falha ao criar checkout InfinityPay";
-    throw new Error(msg);
+    // Importante: não inclui segredos; apenas status e mensagem do provedor.
+    throw new Error(`InfinityPay links ${res.status}: ${msg}`);
   }
 
   const parsed = infinitepayCheckoutResponseSchema.safeParse(json);
@@ -99,7 +100,7 @@ export async function infinitepayPaymentCheck(input: {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (json as any)?.error ?? (json as any)?.message ?? "Falha ao checar pagamento InfinityPay";
-    throw new Error(msg);
+    throw new Error(`InfinityPay payment_check ${res.status}: ${msg}`);
   }
   const parsed = infinitepayPaymentCheckResponseSchema.safeParse(json);
   return { raw: json, paid: parsed.success ? !!parsed.data.paid : false };
