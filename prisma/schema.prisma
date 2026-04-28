@@ -70,6 +70,7 @@ model User {
   sessions       Session[]
   studentProfile StudentProfile?
   firstAccessTokens FirstAccessToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -178,6 +179,22 @@ model FirstAccessToken {
 
   @@index([userId])
   @@map("first_access_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  createdByAdminId String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 // ============================================================

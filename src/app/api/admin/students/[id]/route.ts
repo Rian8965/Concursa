@@ -1,8 +1,11 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 function isAdmin(r?: string) { return r === "ADMIN" || r === "SUPER_ADMIN"; }
+
+const emailSchema = z.string().email();
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -54,8 +57,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const userUpdateData: Record<string, unknown> = {
     ...(isActive !== undefined && { isActive }),
     ...(typeof name === "string" && name.trim() && { name: name.trim() }),
-    ...(typeof email === "string" && email.trim() && { email: email.trim().toLowerCase() }),
   };
+
+  if (typeof email === "string" && email.trim()) {
+    const normalized = email.trim().toLowerCase();
+    const ok = emailSchema.safeParse(normalized);
+    if (!ok.success) return NextResponse.json({ error: "E-mail inválido" }, { status: 400 });
+    const exists = await prisma.user.findFirst({ where: { email: normalized, id: { not: id } }, select: { id: true } });
+    if (exists) return NextResponse.json({ error: "E-mail já está em uso" }, { status: 409 });
+    userUpdateData.email = normalized;
+  }
 
   if (typeof password === "string" && password.trim().length >= 6) {
     const bcrypt = await import("bcryptjs");

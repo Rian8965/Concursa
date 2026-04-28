@@ -272,6 +272,8 @@ interface ModalProps {
 function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalProps) {
   const isNew = student.id === "__new__";
   const [saving, setSaving] = useState(false);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+  const [sendingReset, setSendingReset] = useState(false);
   const [form, setForm] = useState({
     name: student.name,
     email: student.email,
@@ -400,6 +402,26 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
       } else toast.error("Erro ao atualizar");
     }
     setSaving(false);
+  }
+
+  async function sendReset() {
+    if (isNew) return;
+    setSendingReset(true);
+    setResetLink(null);
+    const res = await fetch(`/api/admin/students/${student.id}/password-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sendEmail: true }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setSendingReset(false);
+    if (!res.ok) {
+      if (d?.link) setResetLink(d.link);
+      toast.error(d?.error ?? "Não foi possível enviar o link");
+      return;
+    }
+    setResetLink(d?.link ?? null);
+    toast.success("Link enviado com sucesso.");
   }
 
   return (
@@ -564,6 +586,49 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
                 </div>
               )}
             </fieldset>
+
+            {!isNew ? (
+              <fieldset className="space-y-3">
+                <legend className="text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--text-muted)]">
+                  Segurança
+                </legend>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={sendReset}
+                    disabled={sendingReset}
+                    className="btn btn-ghost rounded-xl"
+                  >
+                    {sendingReset ? "Enviando..." : "Enviar link de redefinição"}
+                  </button>
+                  {resetLink ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary rounded-xl"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(resetLink);
+                          toast.success("Link copiado.");
+                        } catch {
+                          toast.error("Não foi possível copiar.");
+                        }
+                      }}
+                    >
+                      Copiar link
+                    </button>
+                  ) : null}
+                </div>
+                {resetLink ? (
+                  <p className="text-xs text-[var(--text-muted)] break-all">
+                    {resetLink}
+                  </p>
+                ) : (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    O link expira e pode ser usado apenas uma vez.
+                  </p>
+                )}
+              </fieldset>
+            ) : null}
           </div>
         </div>
 

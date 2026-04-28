@@ -350,7 +350,7 @@ export function LoginClient() {
                 <button
                   type="button"
                   className="shrink-0 self-start text-left text-sm font-semibold text-violet-700 underline-offset-4 hover:underline sm:self-auto sm:text-right"
-                  onClick={() => toast.info("Em breve: recuperação de senha. Fale com o administrador.")}
+                  onClick={() => (window.location.href = "/esqueci-minha-senha")}
                 >
                   Esqueci minha senha
                 </button>

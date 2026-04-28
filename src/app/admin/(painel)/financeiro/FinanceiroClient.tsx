@@ -55,6 +55,10 @@ export default function FinanceiroClient() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Summary | null>(null);
 
+  const [cancelTxId, setCancelTxId] = useState<string | null>(null);
+  const [cancelPassword, setCancelPassword] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
   useEffect(() => {
     fetch("/api/admin/finance/session")
       .then((r) => r.json())
@@ -101,6 +105,30 @@ export default function FinanceiroClient() {
       return;
     }
     setData(d as Summary);
+  }
+
+  async function cancelTransaction() {
+    if (!cancelTxId) return;
+    if (!cancelPassword.trim()) {
+      toast.error("Informe a senha administrativa");
+      return;
+    }
+    setCancelling(true);
+    const res = await fetch(`/api/admin/finance/transactions/${cancelTxId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminPassword: cancelPassword }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setCancelling(false);
+    if (!res.ok) {
+      toast.error(d?.error ?? "Não foi possível cancelar");
+      return;
+    }
+    toast.success("Transação cancelada.");
+    setCancelTxId(null);
+    setCancelPassword("");
+    await load();
   }
 
   useEffect(() => {
@@ -224,14 +252,14 @@ export default function FinanceiroClient() {
               <table className="orbit-admin-table">
                 <thead>
                   <tr>
-                    {["Data", "Status", "Valor", "Método", "Parcelas", "Order NSU", "Comprovante"].map((h) => (
+                    {["Data", "Status", "Valor", "Método", "Parcelas", "Order NSU", "Comprovante", "Ações"].map((h) => (
                       <th key={h} className={h === "Valor" ? "text-right" : "text-left"}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {data.transactions.map((t) => (
-                    <tr key={t.id}>
+                    <tr key={t.id} className={t.status === "CANCELLED" ? "opacity-60" : ""}>
                       <td className="text-xs text-[var(--text-secondary)]">{new Date(t.createdAt).toLocaleString("pt-BR")}</td>
                       <td className="text-xs font-semibold">{t.status}</td>
                       <td className="text-right text-xs font-extrabold">{moneyBRL(t.paidAmountCents ?? t.amountCents)}</td>
@@ -245,6 +273,19 @@ export default function FinanceiroClient() {
                           </a>
                         ) : "—"}
                       </td>
+                      <td className="text-xs">
+                        {t.status !== "CANCELLED" ? (
+                          <button
+                            type="button"
+                            className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-100"
+                            onClick={() => setCancelTxId(t.id)}
+                          >
+                            Cancelar operação
+                          </button>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -255,6 +296,59 @@ export default function FinanceiroClient() {
       ) : (
         <div className="py-10 text-center text-sm text-[var(--text-muted)]">Carregue para ver os dados.</div>
       )}
+
+      {cancelTxId ? (
+        <div
+          className="orbit-modal-backdrop z-[120]"
+          onClick={(e) => e.target === e.currentTarget && !cancelling && setCancelTxId(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="orbit-modal-panel orbit-modal-panel--sm orbit-modal-panel--flex"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="orbit-modal-panel__head">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="min-w-0 text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+                  Cancelar operação
+                </h2>
+                <button
+                  type="button"
+                  className="orbit-modal-close shrink-0"
+                  onClick={() => !cancelling && setCancelTxId(null)}
+                  aria-label="Fechar"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="orbit-modal-panel__body">
+              <p className="text-sm text-[var(--text-secondary)]">
+                Tem certeza que deseja cancelar esta transação? Essa ação remove a transação da receita e marca como cancelada.
+              </p>
+              <div className="mt-4">
+                <label className="orbit-form-label">Senha administrativa *</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={cancelPassword}
+                  onChange={(e) => setCancelPassword(e.target.value)}
+                  placeholder="********"
+                />
+              </div>
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                <button type="button" className="btn btn-ghost rounded-2xl" onClick={() => setCancelTxId(null)} disabled={cancelling}>
+                  Voltar
+                </button>
+                <button type="button" className="btn btn-primary rounded-2xl" onClick={cancelTransaction} disabled={cancelling}>
+                  {cancelling ? "Cancelando..." : "Confirmar cancelamento"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
