@@ -1493,8 +1493,14 @@ export default function RevisaoImportacaoPage() {
                         toast.info("Esta questão já foi publicada. Não é possível aprovar novamente.");
                         return;
                       }
-                      if (d === "approve") setDecisions((prev) => ({ ...prev, [q.id]: "pending" }));
-                      else setQuestionDecision(q.id, "approve");
+                      if (d === "approve") {
+                        setDecisions((prev) => ({ ...prev, [q.id]: "pending" }));
+                        return;
+                      }
+                      // Ao aprovar (botão verde), salva a questão automaticamente para não perder edições.
+                      const cur = drafts[q.id] ?? q;
+                      void saveQuestion(q.id, cur, { silent: true, skipRefresh: true });
+                      setQuestionDecision(q.id, "approve");
                     }}
                     title={!cap.ok ? cap.message : "Aprovar"}
                     aria-pressed={d === "approve"}
@@ -1948,16 +1954,15 @@ export default function RevisaoImportacaoPage() {
                                         checked={isCorrect}
                                         onChange={() => {
                                           unsavedRef.current = true;
-                                          const cur = drafts[q.id];
-                                          if (!cur) return;
-                                          const rawText = mergeRawTextPatch(cur.rawText, {
-                                            answerSource: "manual",
-                                            gabaritoMatchNumber: null,
+                                          setDrafts((prev) => {
+                                            const cur = prev[q.id];
+                                            if (!cur) return prev;
+                                            const rawText = mergeRawTextPatch(cur.rawText, {
+                                              answerSource: "manual",
+                                              gabaritoMatchNumber: null,
+                                            });
+                                            return { ...prev, [q.id]: { ...cur, correctAnswer: letter, rawText } };
                                           });
-                                          const nextDraft: ImportedQ = { ...cur, correctAnswer: letter, rawText };
-                                          setDrafts((prev) => ({ ...prev, [q.id]: nextDraft }));
-                                          // Salva imediatamente ao marcar a correta (não perde ao sair/atualizar)
-                                          void saveQuestion(q.id, nextDraft, { silent: true, skipRefresh: true });
                                         }}
                                       />
                                       <span className="text-xs font-extrabold uppercase tracking-wide text-[var(--text-muted)]">Correta</span>
