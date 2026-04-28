@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -20,6 +20,7 @@ import {
   X,
   Lightbulb,
   LifeBuoy,
+  ChevronDown,
 } from "lucide-react";
 
 const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -48,10 +49,19 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [brand, setBrand] = useState<{ name: string; logoUrl: string }>({ name: DEFAULT_BRAND_NAME, logoUrl: DEFAULT_LOGO });
   const [logoFailed, setLogoFailed] = useState(false);
+  const [myCompetitions, setMyCompetitions] = useState<Array<{ id: string; name: string }>>([]);
+  const [compOpen, setCompOpen] = useState(false);
+
+  const shouldAutoOpen = useMemo(() => pathname === "/concursos" || pathname.startsWith("/concursos/"), [pathname]);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    // Abre automaticamente quando estiver dentro de /concursos/*
+    if (shouldAutoOpen) setCompOpen(true);
+  }, [shouldAutoOpen]);
 
   useEffect(() => {
     if (mobileOpen) document.body.style.overflow = "hidden";
@@ -71,6 +81,18 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         const logoUrl = String(d?.theme?.logoUrl ?? DEFAULT_LOGO);
         setLogoFailed(false);
         setBrand({ name, logoUrl });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/student/my-competitions")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        setMyCompetitions(Array.isArray(d?.competitions) ? d.competitions : []);
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -154,6 +176,72 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         <nav className="flex flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-6">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isCompetitions = item.href === "/concursos";
+
+            if (isCompetitions) {
+              return (
+                <div
+                  key={item.href}
+                  onMouseEnter={() => setCompOpen(true)}
+                  onMouseLeave={() => { if (!shouldAutoOpen) setCompOpen(false); }}
+                >
+                  <div className={cn("nav-item", isActive && "active")}>
+                    <Link
+                      href={item.href}
+                      className="flex flex-1 items-center gap-3"
+                      onClick={() => { setMobileOpen(false); setCompOpen(true); }}
+                    >
+                      <item.icon
+                        className={cn(
+                          "h-[18px] w-[18px] shrink-0 transition-colors",
+                          isActive ? "text-white" : "text-white/55",
+                        )}
+                        strokeWidth={isActive ? 2.4 : 1.9}
+                      />
+                      <span>Meus Concursos</span>
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label="Expandir concursos"
+                      className="ml-auto flex h-8 w-8 items-center justify-center rounded-xl hover:bg-white/10"
+                      onClick={() => setCompOpen((v) => !v)}
+                    >
+                      <ChevronDown
+                        className={cn("h-4 w-4 text-white/70 transition-transform", compOpen && "rotate-180")}
+                      />
+                    </button>
+                  </div>
+
+                  {compOpen ? (
+                    <div className="mt-1 ml-[34px] space-y-1">
+                      {myCompetitions.length === 0 ? (
+                        <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11.5px] text-white/60">
+                          Você ainda não está inscrito em nenhum concurso
+                        </div>
+                      ) : (
+                        myCompetitions.map((c) => {
+                          const active = pathname === `/concursos/${c.id}` || pathname.startsWith(`/concursos/${c.id}/`);
+                          return (
+                            <Link
+                              key={c.id}
+                              href={`/concursos/${c.id}`}
+                              className={cn(
+                                "block rounded-xl px-3 py-2 text-[12.5px] font-semibold",
+                                active ? "bg-white/12 text-white" : "text-white/70 hover:bg-white/8 hover:text-white",
+                              )}
+                              onClick={() => setMobileOpen(false)}
+                            >
+                              {c.name}
+                            </Link>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
