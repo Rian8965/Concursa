@@ -375,6 +375,7 @@ export default function RevisaoImportacaoPage() {
   const [llmAnalyzed, setLlmAnalyzed] = useState(false);
   const textDrawerAutoOpened = useRef<Set<string>>(new Set());
   const [applyAlternativesMode, setApplyAlternativesMode] = useState(false);
+  const unsavedRef = useRef(false);
   const [activeAltLetter, setActiveAltLetter] = useState("A");
 
   const refreshImport = useCallback(async () => {
@@ -696,8 +697,23 @@ export default function RevisaoImportacaoPage() {
     setSaving(false);
   }
 
-  async function saveQuestion(questionId: string) {
-    const d = drafts[questionId];
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!unsavedRef.current) return;
+      e.preventDefault();
+      // Chrome exige returnValue para mostrar o prompt padrão
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  async function saveQuestion(
+    questionId: string,
+    overrideDraft?: ImportedQ,
+    opts?: { silent?: boolean; skipRefresh?: boolean },
+  ) {
+    const d = overrideDraft ?? drafts[questionId];
     if (!d) return;
     const { review: rSave } = parseImportRawText(d.rawText);
     const heurV = detectLikelyVisualAlternatives(d.alternatives ?? []);
@@ -732,8 +748,9 @@ export default function RevisaoImportacaoPage() {
       toast.error(data.error ?? "Erro ao salvar questão");
       return;
     }
-    toast.success("Questão salva");
-    await refreshImport();
+    unsavedRef.current = false;
+    if (!opts?.silent) toast.success("Questão salva");
+    if (!opts?.skipRefresh) await refreshImport();
   }
 
   async function applyAlternativesFromAi(questionId: string, mode: "replace" | "merge", alternatives: { letter: string; content: string }[]) {
@@ -1850,7 +1867,10 @@ export default function RevisaoImportacaoPage() {
                         <textarea
                           className="input min-h-[220px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
                           value={draft.content}
-                          onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }))}
+                          onChange={(e) => {
+                            unsavedRef.current = true;
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }));
+                          }}
                         />
                       </section>
 
@@ -1878,6 +1898,7 @@ export default function RevisaoImportacaoPage() {
                                   },
                                 };
                               });
+                              unsavedRef.current = true;
                               toast.success("Alternativa adicionada. Preencha o texto e salve.");
                             }}
                           >
@@ -1926,15 +1947,17 @@ export default function RevisaoImportacaoPage() {
                                         name={`correct-${q.id}`}
                                         checked={isCorrect}
                                         onChange={() => {
-                                          setDrafts((prev) => {
-                                            const cur = prev[q.id];
-                                            if (!cur) return prev;
-                                            const rawText = mergeRawTextPatch(cur.rawText, {
-                                              answerSource: "manual",
-                                              gabaritoMatchNumber: null,
-                                            });
-                                            return { ...prev, [q.id]: { ...cur, correctAnswer: letter, rawText } };
+                                          unsavedRef.current = true;
+                                          const cur = drafts[q.id];
+                                          if (!cur) return;
+                                          const rawText = mergeRawTextPatch(cur.rawText, {
+                                            answerSource: "manual",
+                                            gabaritoMatchNumber: null,
                                           });
+                                          const nextDraft: ImportedQ = { ...cur, correctAnswer: letter, rawText };
+                                          setDrafts((prev) => ({ ...prev, [q.id]: nextDraft }));
+                                          // Salva imediatamente ao marcar a correta (não perde ao sair/atualizar)
+                                          void saveQuestion(q.id, nextDraft, { silent: true, skipRefresh: true });
                                         }}
                                       />
                                       <span className="text-xs font-extrabold uppercase tracking-wide text-[var(--text-muted)]">Correta</span>
@@ -1946,6 +1969,7 @@ export default function RevisaoImportacaoPage() {
                                         value={alt.letter}
                                         onChange={(e) => {
                                           const v = e.target.value.toUpperCase();
+                                          unsavedRef.current = true;
                                           setDrafts((prev) => {
                                             const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, letter: v } : a));
                                             return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
@@ -1962,6 +1986,7 @@ export default function RevisaoImportacaoPage() {
                                       value={alt.content}
                                       onChange={(e) => {
                                         const v = e.target.value;
+                                        unsavedRef.current = true;
                                         setDrafts((prev) => {
                                           const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));
                                           return { ...prev, [q.id]: { ...draft, alternatives: nextAlts } };
