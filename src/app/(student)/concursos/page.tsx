@@ -90,8 +90,18 @@ export default async function CompetitionsPage() {
           </div>
           <p className="text-[16px] font-bold text-[#0F172A]">Nenhum concurso vinculado</p>
           <p className="mt-2 max-w-md text-[13.5px] text-[#64748B]">
-            Você ainda não foi vinculado a um concurso. Fale com o administrador.
+            Se você ainda não escolheu um concurso/cargo, defina agora para liberarmos seu conteúdo automaticamente.
           </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/onboarding" className="dash-btn-primary">
+              Definir concurso/cargo
+              <ArrowRight className="h-[17px] w-[17px]" strokeWidth={2.2} />
+            </Link>
+            <Link href="/questoes" className="dash-btn-secondary">
+              <BookOpen className="h-[17px] w-[17px]" strokeWidth={2.4} />
+              Ir para questões
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-5">

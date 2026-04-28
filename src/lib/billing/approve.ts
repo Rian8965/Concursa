@@ -31,7 +31,7 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
       email,
       password: passwordHash,
       role: "STUDENT",
-      studentProfile: { create: {} },
+      studentProfile: { create: { createdByPayment: true, needsOnboarding: true } },
     },
     include: { studentProfile: true },
   });

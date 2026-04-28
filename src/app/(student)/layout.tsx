@@ -10,8 +10,17 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   const studentProfile = await prisma.studentProfile.findUnique({
     where: { userId: session.user.id },
-    include: { plan: true },
+    include: { plan: true, studentCompetitions: { where: { isActive: true }, select: { id: true }, take: 1 } },
   });
+
+  // Onboarding obrigatório apenas para alunos criados via pagamento automático.
+  // Importante: `/onboarding` fica fora do layout do aluno para evitar loop.
+  const mustOnboard =
+    Boolean(studentProfile?.createdByPayment) &&
+    Boolean(studentProfile?.needsOnboarding) &&
+    !studentProfile?.onboardingCompletedAt &&
+    (studentProfile?.studentCompetitions?.length ?? 0) === 0;
+  if (mustOnboard) redirect("/onboarding");
 
   return (
     <div className="orbit-shell min-h-screen">

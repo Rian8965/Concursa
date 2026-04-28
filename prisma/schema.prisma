@@ -88,12 +88,19 @@ model StudentProfile {
   accessExpiresAt DateTime?
   phone           String?
   cpf             String?   @unique
+  createdByPayment Boolean  @default(false)
+  needsOnboarding  Boolean  @default(false)
+  preferredCompetitionId String?
+  preferredJobRoleId String?
+  preferredJobRoleText String?
   onboardingCompletedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan                Plan?                 @relation(fields: [planId], references: [id])
+  preferredCompetition Competition?         @relation("StudentPreferredCompetition", fields: [preferredCompetitionId], references: [id])
+  preferredJobRole     JobRole?             @relation("StudentPreferredJobRole", fields: [preferredJobRoleId], references: [id])
   studentCompetitions StudentCompetition[]
   studentAnswers      StudentAnswer[]
   trainingSessions    TrainingSession[]
@@ -103,6 +110,8 @@ model StudentProfile {
   questionReports     QuestionReport[]
   subscriptions       Subscription[]
 
+  @@index([createdByPayment])
+  @@index([needsOnboarding])
   @@map("student_profiles")
 }
 
@@ -284,6 +293,7 @@ model JobRole {
   competitionSubjects CompetitionJobRoleSubject[]
   subjects            JobRoleSubject[]
   studentCompetitions StudentCompetition[]
+  preferredByStudents StudentProfile[] @relation("StudentPreferredJobRole")
   questions           Question[]
   aiMetas             QuestionAiMeta[]
   importedQuestionRows ImportedQuestion[]
@@ -319,6 +329,7 @@ model Competition {
   jobRoleSubjects  CompetitionJobRoleSubject[]
   stages           CompetitionStage[]
   students         StudentCompetition[]
+  preferredByStudents StudentProfile[] @relation("StudentPreferredCompetition")
   questions        Question[]
   planCompetitions PlanCompetition[]
   pdfImports       PDFImport[]

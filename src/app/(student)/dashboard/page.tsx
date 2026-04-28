@@ -49,6 +49,7 @@ export default async function StudentDashboardPage() {
     where: { userId: session.user.id },
     include: {
       plan: true,
+      preferredJobRole: { select: { id: true, name: true } },
       studentCompetitions: {
         where: { isActive: true },
         include: {
@@ -112,6 +113,26 @@ export default async function StudentDashboardPage() {
         },
       });
       questionsBanca = hasBanca ? (mainComp.competition.examBoard?.acronym ?? null) : null;
+    }
+  }
+  // Se o aluno não tem concurso vinculado, mas escolheu um cargo no onboarding,
+  // mostramos uma liberação "geral" por matéria do cargo (sem filtrar por banca).
+  if (!mainComp && profile?.preferredJobRole?.id) {
+    const links = await prisma.jobRoleSubject.findMany({
+      where: { jobRoleId: profile.preferredJobRole.id },
+      select: { subjectId: true },
+      take: 200,
+    });
+    const subjectIds = links.map((l) => l.subjectId);
+    if (subjectIds.length > 0) {
+      availableQuestions = await prisma.question.count({
+        where: {
+          status: "ACTIVE",
+          alternatives: { some: {} },
+          subjectId: { in: subjectIds },
+        },
+      });
+      questionsBanca = null;
     }
   }
 
@@ -376,8 +397,22 @@ export default async function StudentDashboardPage() {
               </div>
               <p className="text-[16px] font-bold text-[#0F172A]">Nenhum concurso vinculado</p>
               <p className="mt-2 max-w-md text-[13.5px] text-[#64748B]">
-                O administrador precisa vincular você a um concurso para liberar o conteúdo.
+                {profile?.preferredJobRole
+                  ? `Você está estudando pela trilha: ${profile.preferredJobRole.name}.`
+                  : profile?.preferredJobRoleText
+                    ? `Você está estudando pela trilha: ${profile.preferredJobRoleText}.`
+                    : "Você ainda não escolheu uma trilha de estudo."}
               </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/questoes" className="dash-btn-primary">
+                  <BookOpen className="h-[17px] w-[17px]" strokeWidth={2.4} />
+                  Ir para questões
+                </Link>
+                <Link href="/onboarding" className="dash-btn-secondary">
+                  Definir concurso/cargo
+                  <ArrowRight className="h-[17px] w-[17px]" strokeWidth={2.2} />
+                </Link>
+              </div>
             </div>
           )}
 
