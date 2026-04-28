@@ -356,6 +356,19 @@ export default function RevisaoImportacaoPage() {
   const [visibleCount, setVisibleCount] = useState(60);
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [search, setSearch] = useState("");
+  const [filterKey, setFilterKey] = useState<
+    | "all"
+    | "approved"
+    | "pending"
+    | "recommended"
+    | "img_pending"
+    | "text_pending"
+    | "alts_pending"
+    | "alts_in_image"
+    | "no_answer"
+    | "low_confidence"
+  >("all");
+  const [flashQ, setFlashQ] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [llmById, setLlmById] = useState<Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null>(null);
@@ -945,15 +958,56 @@ export default function RevisaoImportacaoPage() {
 
   const filteredQuestions = useMemo(() => {
     const all = imp?.importedQuestions ?? [];
-    const base = onlyNeedsReview
-      ? all.filter((q) => {
-          const d = drafts[q.id] ?? q;
-          const { review } = parseImportRawText(d.rawText);
-          if (!review.revisaoDispensada && computeReviewWarnings(d).length > 0) return true;
-          if (!imp) return false;
-          return !canApproveImportQuestion(imp, drafts, llmById, q.id).ok;
-        })
-      : all;
+    const base = all.filter((q) => {
+      const d = drafts[q.id] ?? q;
+      const decision = decisions[q.id] ?? "pending";
+      const { review } = parseImportRawText(d.rawText);
+      const warningsRaw = computeReviewWarnings(d);
+      const warnings = review.revisaoDispensada ? [] : warningsRaw;
+      const cap = imp ? canApproveImportQuestion(imp, drafts, llmById, q.id) : { ok: true };
+      const ext = imp
+        ? getExtendedLinkFlags(imp.importAssets, q.id)
+        : ({ hasTextBlockLink: true, hasMainImageLink: true, altImageByLetter: {} } as any);
+      const dep = mergedDepByQuestion[q.id];
+      const vg = isVinculoSatisfiedForReview(
+        dep?.needsTextSupport ?? false,
+        dep?.needsFigure ?? false,
+        ext.hasTextBlockLink,
+        ext.hasMainImageLink,
+        review,
+      );
+      const vinculoIncomplete = dep ? !vg.ok : false;
+      const depNeedsImage = Boolean(dep?.needsFigure && !ext.hasMainImageLink && !review.vinculoExcecao?.semImagem);
+      const depNeedsText = Boolean(dep?.needsTextSupport && !ext.hasTextBlockLink && !review.vinculoExcecao?.semTexto);
+      const heurVis = detectLikelyVisualAlternatives(d.alternatives ?? []);
+      const visOn = alternativasVisuaisAtivas(review, heurVis);
+      const visExempted = Boolean(review.alternativasVisuais?.dispensarExigencia?.at);
+      const altLetters = (d.alternatives ?? []).map((a) => a.letter.trim().toUpperCase().slice(0, 1));
+      const hasByLetter: Record<string, boolean> = {};
+      for (const L of altLetters) {
+        if (L) hasByLetter[L] = Boolean(ext.altImageByLetter?.[L]);
+      }
+      const missAlts = visOn ? missingAlternativeImageLinks(altLetters, hasByLetter) : [];
+      const altsPend = missAlts.length > 0 && !visExempted;
+      const recommended = (!review.revisaoDispensada && warnings.length > 0) || !cap.ok || vinculoIncomplete || altsPend;
+
+      if (onlyNeedsReview && !recommended) return false;
+
+      switch (filterKey) {
+        case "approved": return decision === "approve";
+        case "pending": return decision === "pending";
+        case "recommended": return recommended;
+        case "img_pending": return depNeedsImage;
+        case "text_pending": return depNeedsText;
+        case "alts_pending": return altsPend;
+        case "alts_in_image": return visOn;
+        case "no_answer": return !d.correctAnswer;
+        case "low_confidence": return d.confidence != null && d.confidence < 0.55;
+        case "all":
+        default: return true;
+      }
+    });
+
     const s = search.trim().toLowerCase();
     if (!s) return base;
     const gm = globalMetaDisplay;
@@ -976,10 +1030,42 @@ export default function RevisaoImportacaoPage() {
       ]
         .join(" ")
         .toLowerCase();
-      const hay = `${idx + 1} ${num} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
+      const ans = (d.correctAnswer ?? "").toString().trim().toUpperCase();
+      const hay = `${idx + 1} ${q.id} ${num} ${ans} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, imp, drafts, search, globalMetaDisplay, llmById]);
+  }, [onlyNeedsReview, filterKey, imp, drafts, search, globalMetaDisplay, llmById, decisions, mergedDepByQuestion]);
+
+  const gabaritoOverview = useMemo(() => {
+    const all = imp?.importedQuestions ?? [];
+    return all
+      .map((q, idx) => {
+        const d = drafts[q.id] ?? q;
+        const ai = parseAiMeta(d.rawText);
+        const num = (ai?.number ?? idx + 1) as number;
+        const { review } = parseImportRawText(d.rawText);
+        const warningsRaw = computeReviewWarnings(d);
+        const warnings = review.revisaoDispensada ? [] : warningsRaw;
+        const conflict = warnings.some((w) => w.toLowerCase().includes("resposta correta não bate"));
+        const ignored = (decisions[q.id] ?? "pending") === "reject";
+        const answer = d.correctAnswer ? String(d.correctAnswer).trim().toUpperCase() : null;
+        const pending = !answer;
+        const status: "ok" | "pending" | "conflict" | "ignored" = ignored ? "ignored" : conflict ? "conflict" : pending ? "pending" : "ok";
+        return { id: q.id, num, answer, status };
+      })
+      .sort((a, b) => a.num - b.num);
+  }, [imp?.importedQuestions, drafts, decisions]);
+
+  const goToQuestion = useCallback((qid: string) => {
+    const el = document.getElementById(`iq-${qid}`);
+    if (!el) {
+      toast.info("Essa questão não está visível (verifique filtros).");
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setFlashQ(qid);
+    window.setTimeout(() => setFlashQ((cur) => (cur === qid ? null : cur)), 2600);
+  }, []);
 
   useLayoutEffect(() => {
     if (!imp || loading) return;
@@ -1053,10 +1139,38 @@ export default function RevisaoImportacaoPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <input
             className="input h-11 w-full min-w-0 flex-1 text-sm sm:max-w-md"
-            placeholder="Buscar (texto, nº)…"
+            placeholder="Buscar (nº, código, texto, gabarito)…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              ["all", "Todas"] as const,
+              ["approved", "Aprovadas"] as const,
+              ["pending", "Pendentes"] as const,
+              ["recommended", "Revisão recomendada"] as const,
+              ["img_pending", "Pendência de imagem"] as const,
+              ["text_pending", "Pendência de texto"] as const,
+              ["alts_pending", "Pendência de alternativas"] as const,
+              ["alts_in_image", "Alternativas em imagem"] as const,
+              ["no_answer", "Sem gabarito"] as const,
+              ["low_confidence", "Baixa confiança"] as const,
+            ].map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                className={cn(
+                  "h-10 rounded-2xl border px-3 text-xs font-bold",
+                  filterKey === k
+                    ? "border-violet-300 bg-violet-50 text-violet-800"
+                    : "border-black/[0.08] bg-white text-[var(--text-secondary)] hover:bg-slate-50",
+                )}
+                onClick={() => setFilterKey(k)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             className={cn(
@@ -1069,6 +1183,41 @@ export default function RevisaoImportacaoPage() {
           </button>
         </div>
         <p className="shrink-0 text-sm font-bold tabular-nums text-[var(--text-muted)]">{filteredQuestions.length} questões</p>
+      </div>
+
+      <div className="orbit-card-premium !py-5 sm:!py-6">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Gabarito extraído pela IA</h2>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              Clique em um quadradinho para ir direto na questão e conferir o gabarito marcado.
+            </p>
+          </div>
+          <p className="text-xs font-semibold text-[var(--text-muted)]">
+            Verde = identificado · Amarelo = pendente · Vermelho = conflito · Cinza = ignorada
+          </p>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {gabaritoOverview.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => goToQuestion(g.id)}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-left shadow-sm transition hover:scale-[1.01]",
+                g.status === "ok" && "border-emerald-200 bg-emerald-50/70",
+                g.status === "pending" && "border-amber-200 bg-amber-50/70",
+                g.status === "conflict" && "border-red-200 bg-red-50/70",
+                g.status === "ignored" && "border-slate-200 bg-slate-50/80 opacity-70",
+              )}
+              title={`Questão ${g.num}`}
+            >
+              <div className="text-[11px] font-extrabold text-[var(--text-primary)]">
+                Q{g.num} — {g.answer ?? "pendente"}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {globalMetaDisplay &&
@@ -1176,9 +1325,11 @@ export default function RevisaoImportacaoPage() {
           return (
             <article
               key={q.id}
+              id={`iq-${q.id}`}
               data-review-card={isFirstVisible ? "" : undefined}
               className={cn(
                 "min-w-0 rounded-[var(--r-3xl)] border border-black/[0.08] bg-gradient-to-br from-white to-[#fafafd] shadow-[var(--shadow-card)] transition-shadow",
+                flashQ === q.id && "ring-2 ring-violet-400/85 shadow-[0_0_0_6px_rgba(124,58,237,0.10)]",
                 anyPend && "ring-2 ring-rose-400/85",
                 !anyPend && d === "approve" && "ring-2 ring-emerald-300/50",
                 !anyPend && d === "reject" && "ring-2 ring-red-300/50",

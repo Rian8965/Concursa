@@ -26,7 +26,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ key
     ? Buffer.from(db.bytes)
     : await readBrandAssetBuffer(`private/brand-assets/${key}`);
 
-  if (!buf) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
+  // Não retorne JSON aqui: o front usa `next/image` e isso vira "imagem inválida".
+  if (!buf) {
+    return new NextResponse(null, {
+      status: 404,
+      headers: {
+        "Content-Type": contentTypeFromKey(key),
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 
   return new NextResponse(new Uint8Array(buf), {
     status: 200,

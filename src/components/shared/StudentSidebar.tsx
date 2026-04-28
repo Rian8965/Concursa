@@ -40,6 +40,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [brand, setBrand] = useState<{ name: string; logoUrl: string }>({ name: DEFAULT_BRAND_NAME, logoUrl: DEFAULT_LOGO });
+  const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -61,6 +62,7 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
         if (!alive) return;
         const name = String(d?.theme?.platformName ?? DEFAULT_BRAND_NAME);
         const logoUrl = String(d?.theme?.logoUrl ?? DEFAULT_LOGO);
+        setLogoFailed(false);
         setBrand({ name, logoUrl });
       })
       .catch(() => {});
@@ -115,12 +117,13 @@ export function StudentSidebar({ studentName, planName }: StudentSidebarProps) {
             >
               <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-[1.03]">
                 <Image
-                  src={brand.logoUrl}
+                  src={logoFailed ? DEFAULT_LOGO : brand.logoUrl}
                   alt={brand.name}
                   width={48}
                   height={48}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain"
                   priority
+                  onError={() => setLogoFailed(true)}
                 />
               </div>
               <div className="min-w-0 flex-1">
