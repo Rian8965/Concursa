@@ -39,6 +39,12 @@ export async function POST(req: NextRequest) {
     paymentCheckRaw: check.raw,
   });
 
-  return NextResponse.json({ ok: true, paid: true, firstAccessUrl: (approved as any)?.firstAccessUrl ?? null });
+  return NextResponse.json({
+    ok: true,
+    paid: true,
+    firstAccessUrl: (approved as any)?.firstAccessUrl ?? null,
+    isFirstAccess: Boolean((approved as any)?.isFirstAccess),
+    renewedUntil: (approved as any)?.renewedUntil ?? null,
+  });
 }
 

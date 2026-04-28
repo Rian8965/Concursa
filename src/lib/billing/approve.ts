@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import bcrypt from "bcryptjs";
 import { ensurePlanoCompleto, PLAN_COMPLETO } from "@/lib/billing/plan";
 import { sendFirstAccessEmail } from "@/lib/email/first-access";
+import { sendRenewalEmail } from "@/lib/email/renewal";
 import { getAppUrl } from "@/lib/billing/infinitepay";
 import { createAdminNotification } from "@/lib/admin/notifications";
 
@@ -21,7 +22,7 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
   if (!email) throw new Error("Transação sem e-mail do comprador");
 
   const existing = await prisma.user.findUnique({ where: { email }, include: { studentProfile: true } });
-  if (existing?.studentProfile) return { user: existing, profile: existing.studentProfile };
+  if (existing?.studentProfile) return { user: existing, profile: existing.studentProfile, createdNew: false as const };
 
   const passwordTemp = randomToken().slice(0, 16);
   const passwordHash = await bcrypt.hash(passwordTemp, 10);
@@ -32,9 +33,14 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
       email,
       password: passwordHash,
       role: "STUDENT",
-      studentProfile: { create: { createdByPayment: true, needsOnboarding: true } },
+      studentProfile: { create: {} },
     },
     include: { studentProfile: true },
+  });
+  // Flags do fluxo de pagamento (feito separado para evitar inconsistência de tipos em alguns ambientes)
+  await prisma.studentProfile.update({
+    where: { id: user.studentProfile!.id },
+    data: { createdByPayment: true, needsOnboarding: true } as any,
   });
 
   void createAdminNotification({
@@ -45,7 +51,7 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
     meta: { userId: user.id, studentProfileId: user.studentProfile?.id ?? null },
   });
 
-  return { user, profile: user.studentProfile! };
+  return { user, profile: user.studentProfile!, createdNew: true as const };
 }
 
 export async function approvePaidTransaction(input: {
@@ -56,7 +62,7 @@ export async function approvePaidTransaction(input: {
   paymentCheckRaw?: unknown;
 }) {
   const plan = await ensurePlanoCompleto();
-  const periodEnd = nowPlusDays(plan.durationDays ?? 30);
+  const durationDays = plan.durationDays ?? 30;
 
   // Garante TX sem perder `raw.customer` (e-mail/nome) que veio do checkout.
   // Importante: em produção pode existir divergência de handle (ex.: "missing") por env errada antiga.
@@ -102,8 +108,10 @@ export async function approvePaidTransaction(input: {
     return { ok: true, alreadyApproved: true, txId: tx.id };
   }
 
-  const { user, profile } = await ensureStudentFromTransaction(tx as any);
+  const { user, profile, createdNew } = await ensureStudentFromTransaction(tx as any);
+  const userId = user.id;
   let createdToken: string | null = null;
+  let renewedUntil: Date | null = null;
 
   await prisma.$transaction(async (p) => {
     await p.paymentTransaction.update({
@@ -118,41 +126,68 @@ export async function approvePaidTransaction(input: {
       },
     });
 
+    // Calcula novo vencimento: se já existe um vencimento no futuro, soma a partir dele.
+    const current = await p.studentProfile.findUnique({
+      where: { id: profile.id },
+      select: { accessExpiresAt: true },
+    });
+    const base = current?.accessExpiresAt && current.accessExpiresAt.getTime() > Date.now()
+      ? current.accessExpiresAt
+      : new Date();
+    const newEnd = new Date(base);
+    newEnd.setDate(newEnd.getDate() + durationDays);
+    renewedUntil = newEnd;
+
     await p.studentProfile.update({
       where: { id: profile.id },
       data: {
         planId: plan.id,
-        accessExpiresAt: periodEnd,
+        accessExpiresAt: newEnd,
       },
     });
 
-    // evita duplicar assinatura se webhook/confirm rodarem juntos
+    // Upsert de assinatura: mantém uma assinatura APPROVED e atualiza período.
     const existingSub = await p.subscription.findFirst({
-      where: { studentProfileId: profile.id, planId: plan.id, status: "APPROVED" },
-      select: { id: true },
+      where: { studentProfileId: profile.id, planId: plan.id },
+      orderBy: { currentPeriodEnd: "desc" },
+      select: { id: true, startedAt: true },
     });
-    if (!existingSub) {
+    if (existingSub) {
+      await p.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          status: "APPROVED",
+          cancelledAt: null,
+          startedAt: existingSub.startedAt ?? new Date(),
+          currentPeriodEnd: newEnd,
+          transactions: { connect: { id: tx.id } },
+        },
+      });
+    } else {
       await p.subscription.create({
         data: {
           studentProfileId: profile.id,
           planId: plan.id,
           status: "APPROVED",
           startedAt: new Date(),
-          currentPeriodEnd: periodEnd,
+          currentPeriodEnd: newEnd,
           transactions: { connect: { id: tx.id } },
         },
       });
     }
 
-    const token = randomToken();
-    await p.firstAccessToken.create({
-      data: {
-        userId: user.id,
-        token,
-        expiresAt: nowPlusDays(7),
-      },
-    });
-    createdToken = token;
+    // Token de primeiro acesso só para conta criada agora
+    if (createdNew) {
+      const token = randomToken();
+      await p.firstAccessToken.create({
+        data: {
+          userId,
+          token,
+          expiresAt: nowPlusDays(7),
+        },
+      });
+      createdToken = token;
+    }
   });
 
   const firstAccessUrl = createdToken
@@ -166,14 +201,28 @@ export async function approvePaidTransaction(input: {
         name: user.name,
         token: createdToken,
         planName: plan.name,
-        accessUntil: periodEnd,
+        accessUntil: renewedUntil ?? nowPlusDays(durationDays),
         orderNsu: tx.orderNsu ?? null,
+      });
+    } else if (renewedUntil) {
+      await sendRenewalEmail({
+        to: user.email,
+        name: user.name,
+        accessUntil: renewedUntil,
       });
     }
   } catch (e: any) {
     console.error("[email.first-access] falha ao enviar", { to: user.email, message: String(e?.message ?? e) });
   }
 
-  return { ok: true, alreadyApproved: false, txId: tx.id, firstAccessUrl };
+  return {
+    ok: true,
+    alreadyApproved: false,
+    txId: tx.id,
+    firstAccessUrl,
+    // Para UI/confirm: renovação não exige senha.
+    isFirstAccess: Boolean(createdToken),
+    renewedUntil: renewedUntil ? (renewedUntil as any).toISOString() : null,
+  };
 }
 

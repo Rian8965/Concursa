@@ -21,6 +21,8 @@ function CheckoutObrigadoInner() {
 
   const [status, setStatus] = useState<"idle" | "checking" | "paid" | "unpaid" | "error">("idle");
   const [firstAccessUrl, setFirstAccessUrl] = useState<string | null>(null);
+  const [renewedUntil, setRenewedUntil] = useState<string | null>(null);
+  const [isFirstAccess, setIsFirstAccess] = useState<boolean>(false);
 
   useEffect(() => {
     if (!orderNsu) return;
@@ -45,6 +47,8 @@ function CheckoutObrigadoInner() {
         if (j?.paid) {
           setStatus("paid");
           setFirstAccessUrl(j?.firstAccessUrl ?? null);
+          setRenewedUntil(j?.renewedUntil ?? null);
+          setIsFirstAccess(Boolean(j?.isFirstAccess));
         } else {
           setStatus("unpaid");
         }
@@ -70,7 +74,9 @@ function CheckoutObrigadoInner() {
           <p className="mt-2 text-sm text-[var(--text-secondary)]">Confirmando o pagamento…</p>
         ) : status === "paid" ? (
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Seu acesso foi liberado. Se o e-mail não chegar em alguns minutos, use o botão abaixo para criar sua senha agora.
+            {isFirstAccess
+              ? "Seu acesso foi liberado. Se o e-mail não chegar em alguns minutos, use o botão abaixo para criar sua senha agora."
+              : `Sua assinatura foi renovada${renewedUntil ? ` e seu acesso foi atualizado até ${new Date(renewedUntil).toLocaleDateString("pt-BR")}` : ""}. Você já pode continuar estudando normalmente.`}
           </p>
         ) : status === "unpaid" ? (
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
@@ -105,6 +111,7 @@ function CheckoutObrigadoInner() {
             </a>
           ) : null}
           <Link href="/login" className="btn btn-primary rounded-2xl">Ir para login</Link>
+          <Link href="/dashboard" className="btn btn-ghost rounded-2xl">Ir para o sistema</Link>
           <Link href="/assinar" className="btn btn-ghost rounded-2xl">Voltar</Link>
         </div>
       </div>

@@ -8,13 +8,16 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const competitionId = url.searchParams.get("competitionId");
-  if (!competitionId) return NextResponse.json({ apostilas: [] });
 
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) return NextResponse.json({ apostilas: [] });
 
   const apostilas = await prisma.apostila.findMany({
-    where: { studentProfileId: profile.id, competitionId },
+    where: {
+      studentProfileId: profile.id,
+      // Se não vier concurso, lista as apostilas "gerais" (competitionId null).
+      ...(competitionId ? { competitionId } : { competitionId: null }),
+    },
     orderBy: { generatedAt: "desc" },
     take: 30,
     include: {
