@@ -77,32 +77,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  const created = await prisma.$transaction(async (tx) => {
-    if (altL && body.confirmReplace) {
-      await tx.importedQuestionAsset.deleteMany({
-        where: { importedQuestionId: { in: qids }, alternativeLetter: altL },
-      });
-    }
+  // IMPORTANTE: não usar transação interativa aqui.
+  // Em imports grandes, o loop pode ultrapassar 60s e estourar o timeout do Prisma ("expired transaction").
+  if (altL && body.confirmReplace) {
+    await prisma.importedQuestionAsset.deleteMany({
+      where: { importedQuestionId: { in: qids }, alternativeLetter: altL },
+    });
+  }
 
-    const results: Array<{ importedQuestionId: string; created: boolean }> = [];
-    for (const importedQuestionId of qids) {
-      try {
-        await tx.importedQuestionAsset.create({
-          data: {
-            importedQuestionId,
-            importAssetId: body.importAssetId,
-            role: body.role,
-            alternativeLetter: altL,
-          },
-        });
-        results.push({ importedQuestionId, created: true });
-      } catch {
-        // já existia (unique), não é erro para fluxo em lote
-        results.push({ importedQuestionId, created: false });
-      }
-    }
-    return results;
+  const data = qids.map((importedQuestionId) => ({
+    importedQuestionId,
+    importAssetId: body.importAssetId,
+    role: body.role,
+    alternativeLetter: altL,
+  }));
+
+  await prisma.importedQuestionAsset.createMany({
+    data: data as any,
+    skipDuplicates: true,
   });
+
+  const created = qids.map((importedQuestionId) => ({ importedQuestionId, created: true }));
 
   return NextResponse.json({ ok: true, results: created }, { status: 201 });
 }
