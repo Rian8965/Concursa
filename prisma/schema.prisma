@@ -71,6 +71,8 @@ model User {
   studentProfile StudentProfile?
   firstAccessTokens FirstAccessToken[]
   passwordResetTokens PasswordResetToken[]
+  supportTicketsCreated SupportTicket[] @relation("SupportTicketCreatedBy")
+  supportTicketsAsUser  SupportTicket[] @relation("SupportTicketUser")
 
   @@map("users")
 }
@@ -79,6 +81,99 @@ enum UserRole {
   STUDENT
   ADMIN
   SUPER_ADMIN
+}
+
+// ============================================================
+// SUPORTE (IA + CHAMADOS) + NOTIFICAÇÕES DO ADMIN
+// ============================================================
+
+enum SupportTicketStatus {
+  OPEN
+  IN_ANALYSIS
+  RESPONDED
+  RESOLVED
+  AUTO_CLOSED
+}
+
+enum SupportTicketType {
+  ACCESS
+  PAYMENT
+  QUESTION_ERROR
+  USAGE_DOUBT
+  TECHNICAL
+  OTHER
+}
+
+enum SupportMessageActor {
+  USER
+  ADMIN
+  AI
+  SYSTEM
+}
+
+model SupportTicket {
+  id          String               @id @default(cuid())
+  protocol    String               @unique
+  createdById String
+  userId      String?
+  studentProfileId String?
+  subject     String
+  type        SupportTicketType    @default(OTHER)
+  status      SupportTicketStatus  @default(OPEN)
+  dueAt       DateTime
+  respondedAt DateTime?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  closedReason String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  createdBy   User                 @relation("SupportTicketCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  user        User?                @relation("SupportTicketUser", fields: [userId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile?   @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
+  messages    SupportMessage[]
+
+  @@index([createdById, createdAt])
+  @@index([status, updatedAt])
+  @@index([dueAt])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id          String             @id @default(cuid())
+  ticketId    String
+  actor       SupportMessageActor
+  actorUserId String?
+  content     String             @db.Text
+  attachments Json?
+  createdAt   DateTime           @default(now())
+
+  ticket      SupportTicket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
+}
+
+enum AdminNotificationType {
+  SUPPORT_TICKET_CREATED
+  QUESTION_REPORTED
+  PAYMENT_STUDENT_CREATED
+  SYSTEM
+}
+
+model AdminNotification {
+  id        String                @id @default(cuid())
+  type      AdminNotificationType
+  title     String
+  body      String?               @db.Text
+  href      String?
+  meta      Json?
+  readAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  @@index([readAt, createdAt])
+  @@index([type, createdAt])
+  @@map("admin_notifications")
 }
 
 model StudentProfile {
@@ -109,6 +204,7 @@ model StudentProfile {
   usedQuestions       UsedQuestion[]
   questionReports     QuestionReport[]
   subscriptions       Subscription[]
+  supportTickets      SupportTicket[]
 
   @@index([createdByPayment])
   @@index([needsOnboarding])

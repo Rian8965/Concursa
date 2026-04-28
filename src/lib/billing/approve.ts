@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { ensurePlanoCompleto, PLAN_COMPLETO } from "@/lib/billing/plan";
 import { sendFirstAccessEmail } from "@/lib/email/first-access";
 import { getAppUrl } from "@/lib/billing/infinitepay";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 function nowPlusDays(days: number) {
   const d = new Date();
@@ -35,6 +36,15 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
     },
     include: { studentProfile: true },
   });
+
+  void createAdminNotification({
+    type: "PAYMENT_STUDENT_CREATED",
+    title: "Novo aluno criado por pagamento",
+    body: `${user.name} · ${user.email}`,
+    href: "/admin/alunos",
+    meta: { userId: user.id, studentProfileId: user.studentProfile?.id ?? null },
+  });
+
   return { user, profile: user.studentProfile! };
 }
 

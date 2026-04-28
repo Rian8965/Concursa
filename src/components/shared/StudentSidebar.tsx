@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Lightbulb,
+  LifeBuoy,
 } from "lucide-react";
 
 const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -29,6 +30,7 @@ const navItems = [
   { label: "Revisar erros", href: "/revisar-erros", icon: Lightbulb },
   { label: "Desempenho", href: "/desempenho", icon: BarChart3 },
   { label: "Histórico", href: "/historico", icon: History },
+  { label: "Falar com o Suporte", href: "/suporte", icon: LifeBuoy },
 ];
 
 interface StudentSidebarProps {

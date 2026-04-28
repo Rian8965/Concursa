@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { analyzeQuestionReport } from "@/lib/ai/analyze-question-report";
+import { createAdminNotification } from "@/lib/admin/notifications";
 import { NextRequest, NextResponse } from "next/server";
 
 const STRUCTURAL_CATEGORIES = [
@@ -53,6 +54,15 @@ export async function POST(req: NextRequest) {
       sessionId: sessionId || null,
       sessionType: sessionType || null,
     },
+  });
+
+  // Notifica admin (painel) sobre nova denúncia
+  void createAdminNotification({
+    type: "QUESTION_REPORTED",
+    title: "Nova denúncia de questão",
+    body: `${category}${description?.trim() ? ` — ${description.trim().slice(0, 180)}` : ""}`,
+    href: "/admin/denuncias",
+    meta: { reportId: report.id, questionId },
   });
 
   // Se o aluno denunciou gabarito errado (ou ambiguidade) com detalhes: rodar análise da IA imediatamente

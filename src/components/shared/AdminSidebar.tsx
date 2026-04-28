@@ -22,6 +22,8 @@ import {
   Menu,
   X,
   AlertTriangle,
+  LifeBuoy,
+  Bell,
 } from "lucide-react";
 
 const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -61,6 +63,8 @@ const navGroups = [
     label: "Sistema",
     items: [
       { label: "Relatório Financeiro", href: "/admin/financeiro", icon: CreditCard },
+      { label: "Notificações", href: "/admin/notificacoes", icon: Bell },
+      { label: "Suporte", href: "/admin/suporte", icon: LifeBuoy },
       { label: "Configurações", href: "/admin/configuracoes", icon: Settings },
     ],
   },
