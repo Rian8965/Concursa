@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     select: { id: true, orderNsu: true, invoiceSlug: true, transactionNsu: true },
   });
 
+  console.info("[infinitepay.reconcile] iniciando", { pending: pending.length });
+
   let checked = 0;
   let approved = 0;
   const errors: Array<{ orderNsu: string; message: string }> = [];
@@ -65,6 +67,13 @@ export async function POST(req: NextRequest) {
       errors.push({ orderNsu, message: String(e?.message ?? e) });
     }
   }
+
+  console.info("[infinitepay.reconcile] finalizado", {
+    checked,
+    approved,
+    errors: errors.length,
+    sampleError: errors[0] ?? null,
+  });
 
   return NextResponse.json({ ok: true, checked, approved, errors });
 }

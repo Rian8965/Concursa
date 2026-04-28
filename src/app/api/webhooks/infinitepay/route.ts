@@ -52,62 +52,106 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
 }
 
 export async function POST(req: NextRequest) {
-  const payload = (await req.json().catch(() => ({}))) as WebhookPayload;
+  // A InfinitePay envia JSON, mas protegemos contra payload inválido para não retornar 500.
+  const rawBody = await req.text().catch(() => "");
+  const payload = (() => {
+    try {
+      return (rawBody ? JSON.parse(rawBody) : {}) as WebhookPayload;
+    } catch {
+      return {} as WebhookPayload;
+    }
+  })();
 
   const orderNsu = payload.order_nsu?.toString().trim() ?? "";
   const invoiceSlug = (payload.invoice_slug ?? payload.slug)?.toString().trim() ?? null;
   const transactionNsu = payload.transaction_nsu?.toString().trim() ?? null;
+  const captureMethod = payload.capture_method?.toString().trim() ?? null;
 
-  if (!orderNsu) return NextResponse.json({ error: "order_nsu ausente" }, { status: 400 });
-
-  const tx = await prisma.paymentTransaction.findFirst({
-    where: {
-      handle: process.env.INFINITEPAY_HANDLE ?? "missing",
-      orderNsu,
-    },
+  console.info("[infinitepay.webhook] recebido", {
+    orderNsu,
+    invoiceSlug,
+    transactionNsu,
+    captureMethod,
   });
 
-  if (!tx) {
-    // registra mesmo assim, para não perder eventos
-    await prisma.paymentTransaction.create({
-      data: {
-        status: "PENDING",
-        amountCents: payload.amount ?? 0,
-        paidAmountCents: payload.paid_amount ?? null,
-        installments: payload.installments ?? null,
-        captureMethod: payload.capture_method ?? null,
-        receiptUrl: payload.receipt_url ?? null,
-        handle: process.env.INFINITEPAY_HANDLE ?? "missing",
-        orderNsu,
-        invoiceSlug,
-        transactionNsu,
-        raw: payload as any,
-      },
-    });
+  if (!orderNsu) {
+    // não retorne 500; apenas sinalize para log/diagnóstico
+    console.warn("[infinitepay.webhook] order_nsu ausente", { rawBody: rawBody.slice(0, 500) });
     return NextResponse.json({ ok: true });
   }
 
-  await prisma.paymentTransaction.update({
-    where: { id: tx.id },
-    data: {
-      invoiceSlug: invoiceSlug ?? tx.invoiceSlug ?? undefined,
-      transactionNsu: transactionNsu ?? tx.transactionNsu ?? undefined,
-      paidAmountCents: payload.paid_amount ?? tx.paidAmountCents ?? undefined,
-      installments: payload.installments ?? tx.installments ?? undefined,
-      captureMethod: payload.capture_method ?? tx.captureMethod ?? undefined,
-      receiptUrl: payload.receipt_url ?? tx.receiptUrl ?? undefined,
-      raw: { ...(tx.raw as any), webhook: payload } as any,
-    },
-  });
+  const envHandle = (process.env.INFINITEPAY_HANDLE ?? "").trim() || "missing";
+  // Primeiro tenta pelo handle+orderNsu (padrão), mas se não achar tenta só por orderNsu.
+  const tx =
+    (await prisma.paymentTransaction.findFirst({
+      where: { handle: envHandle, orderNsu },
+    })) ??
+    (await prisma.paymentTransaction.findFirst({
+      where: { orderNsu },
+      orderBy: { createdAt: "desc" },
+    }));
+
+  if (!tx) {
+    // registra mesmo assim, para não perder eventos
+    try {
+      await prisma.paymentTransaction.create({
+        data: {
+          status: "PENDING",
+          amountCents: payload.amount ?? 0,
+          paidAmountCents: payload.paid_amount ?? null,
+          installments: payload.installments ?? null,
+          captureMethod: payload.capture_method ?? null,
+          receiptUrl: payload.receipt_url ?? null,
+          handle: envHandle,
+          orderNsu,
+          invoiceSlug,
+          transactionNsu,
+          raw: payload as any,
+        },
+      });
+    } catch (e: any) {
+      // não deixar webhook 500 por conflito/duplicidade
+      console.error("[infinitepay.webhook] falha ao registrar tx", { orderNsu, message: String(e?.message ?? e) });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  try {
+    await prisma.paymentTransaction.update({
+      where: { id: tx.id },
+      data: {
+        // garante handle consistente com o ambiente (sem quebrar lookup)
+        handle: envHandle,
+        invoiceSlug: invoiceSlug ?? tx.invoiceSlug ?? undefined,
+        transactionNsu: transactionNsu ?? tx.transactionNsu ?? undefined,
+        paidAmountCents: payload.paid_amount ?? tx.paidAmountCents ?? undefined,
+        installments: payload.installments ?? tx.installments ?? undefined,
+        captureMethod: payload.capture_method ?? tx.captureMethod ?? undefined,
+        receiptUrl: payload.receipt_url ?? tx.receiptUrl ?? undefined,
+        raw: { ...(tx.raw as any), webhook: payload } as any,
+      },
+    });
+  } catch (e: any) {
+    console.error("[infinitepay.webhook] falha ao atualizar tx", { orderNsu, txId: tx.id, message: String(e?.message ?? e) });
+    // não retorna 500: reconcile vai conseguir dar baixa depois
+    return NextResponse.json({ ok: true });
+  }
 
   // Confirma “pago” via payment_check antes de liberar acesso
-  const check = await infinitepayPaymentCheck({
-    orderNsu,
-    transactionNsu,
-    slug: invoiceSlug,
-  });
+  let check: { raw: unknown; paid: boolean } | null = null;
+  try {
+    check = await infinitepayPaymentCheck({
+      orderNsu,
+      transactionNsu,
+      slug: invoiceSlug,
+    });
+  } catch (e: any) {
+    console.error("[infinitepay.webhook] falha no payment_check", { orderNsu, message: String(e?.message ?? e) });
+    return NextResponse.json({ ok: true });
+  }
 
   if (!check.paid) {
+    console.info("[infinitepay.webhook] payment_check: ainda não pago", { orderNsu });
     await prisma.paymentTransaction.update({
       where: { id: tx.id },
       data: { status: "PENDING" },
@@ -115,14 +159,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  await approvePaidTransaction({
-    handle: process.env.INFINITEPAY_HANDLE ?? "missing",
-    orderNsu,
-    invoiceSlug,
-    transactionNsu,
-    paymentCheckRaw: check.raw,
-  });
+  try {
+    await approvePaidTransaction({
+      handle: envHandle,
+      orderNsu,
+      invoiceSlug,
+      transactionNsu,
+      paymentCheckRaw: check.raw,
+    });
+  } catch (e: any) {
+    // crucial: não retornar 500 para o provedor; reconcile fica responsável
+    console.error("[infinitepay.webhook] falha ao aprovar/processar", { orderNsu, message: String(e?.message ?? e) });
+    return NextResponse.json({ ok: true });
+  }
 
+  console.info("[infinitepay.webhook] aprovado e processado", { orderNsu });
   return NextResponse.json({ ok: true });
 }
 
