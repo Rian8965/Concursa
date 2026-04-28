@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import { getStudentSubjectScope } from "@/lib/questions/student-scope";
 import { NextRequest, NextResponse } from "next/server";
 
 type StatusFilter = "ALL" | "CORRECT" | "WRONG" | "UNANSWERED";
@@ -33,6 +34,104 @@ export async function GET(req: NextRequest) {
 
     // Busca por número da questão (id "Q123" ou "123") não existe no modelo, então tratamos como conteúdo.
     const qSearch = search;
+
+    // Se o aluno não tem histórico (nem entregas), mostramos um "pool" de questões compatíveis
+    // com o cargo/trilha (ou concurso, se houver) para não ficar em branco.
+    const [hasAnswers, hasUsed] = await Promise.all([
+      prisma.studentAnswer.findFirst({ where: { studentProfileId: profile.id }, select: { id: true } }),
+      prisma.usedQuestion.findFirst({ where: { studentProfileId: profile.id }, select: { id: true } }),
+    ]);
+
+    if (!hasAnswers && !hasUsed) {
+      const scope = await getStudentSubjectScope({ studentProfileId: profile.id });
+      let allowedSubjectIds = scope.subjectIds;
+
+      // Se o usuário filtrou por matéria, restringe ao permitido.
+      if (subjectId && allowedSubjectIds.includes(subjectId)) {
+        allowedSubjectIds = [subjectId];
+      }
+
+      const where: any = {
+        status: "ACTIVE",
+        alternatives: { some: {} },
+        isMarkedSuspect: false,
+        AND: [
+          {
+            OR: [
+              { subjectId: { in: allowedSubjectIds } },
+              { aiMeta: { suggestedSubjectId: { in: allowedSubjectIds } } },
+            ],
+          },
+          ...(topicId ? [{ topicId }] : []),
+          ...(examBoardId ? [{ OR: [{ examBoardId }, { aiMeta: { suggestedExamBoardId: examBoardId } }] }] : []),
+          ...(yearNum ? [{ year: yearNum }] : []),
+          ...(qSearch
+            ? [
+                {
+                  OR: [
+                    { code: { contains: qSearch, mode: "insensitive" } },
+                    { content: { contains: qSearch, mode: "insensitive" } },
+                    { supportText: { contains: qSearch, mode: "insensitive" } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      };
+
+      const [totalCount, qs] = await Promise.all([
+        prisma.question.count({ where }),
+        prisma.question.findMany({
+          where,
+          orderBy: [{ year: "desc" }, { createdAt: "desc" }],
+          take: limit,
+          skip: (page - 1) * limit,
+          select: {
+            id: true,
+            code: true,
+            content: true,
+            year: true,
+            subject: { select: { name: true } },
+            topic: { select: { name: true } },
+            examBoard: { select: { acronym: true } },
+          },
+        }),
+      ]);
+
+      const rows = qs.map((q) => ({
+        questionId: q.id,
+        lastAnsweredAt: null,
+        lastIsCorrect: null,
+        lastSelectedAnswer: null,
+        lastSessionType: null,
+        wrongCount: 0,
+        code: (q as any).code ?? null,
+        content: q.content,
+        year: (q as any).year ?? null,
+        subjectName: q.subject?.name ?? null,
+        topicName: (q as any).topic?.name ?? null,
+        examBoardAcronym: q.examBoard?.acronym ?? null,
+      }));
+
+      return NextResponse.json({
+        page,
+        limit,
+        total: totalCount,
+        questions: rows.map((r) => ({
+          questionId: r.questionId,
+          code: r.code,
+          snippet: (r.content ?? "").toString().slice(0, 220).replace(/\s+/g, " ").trim(),
+          subjectName: r.subjectName,
+          topicName: r.topicName,
+          examBoardAcronym: r.examBoardAcronym,
+          year: r.year,
+          status: "UNANSWERED",
+          lastAnsweredAt: null,
+          wrongCount: 0,
+          origin: null,
+        })),
+      });
+    }
 
     // Listagem compacta baseada em:
     // - últimas respostas por questão (StudentAnswer)

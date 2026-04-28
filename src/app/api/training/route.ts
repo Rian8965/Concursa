@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getEligibleSubjectsForStudentCompetition } from "@/lib/questions/eligible-subjects";
+import { getStudentSubjectScope } from "@/lib/questions/student-scope";
 import { selectQuestionsForStudent } from "@/lib/questions/select-questions";
 import { Difficulty, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -43,29 +44,40 @@ export async function POST(req: NextRequest) {
   const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
 
-  if (!competitionId) {
-    return NextResponse.json({ error: "concurso obrigatório" }, { status: 400 });
-  }
+  const ctxCompetitionId = competitionId ? String(competitionId) : "NO_COMPETITION";
+  let allowedSubjectIds: string[] = [];
+  let jobRoleId: string | null = null;
 
-  const { enrolled, subjectIds: allowedSubjectIds, jobRoleId } = await getEligibleSubjectsForStudentCompetition({
-    studentProfileId: profile.id,
-    competitionId,
-  });
-
-  if (!enrolled) {
-    return NextResponse.json(
-      { code: "NOT_ENROLLED", error: "Você não está inscrito neste concurso." },
-      { status: 403 },
-    );
+  if (competitionId) {
+    const elig = await getEligibleSubjectsForStudentCompetition({
+      studentProfileId: profile.id,
+      competitionId,
+    });
+    if (!elig.enrolled) {
+      return NextResponse.json(
+        { code: "NOT_ENROLLED", error: "Você não está inscrito neste concurso." },
+        { status: 403 },
+      );
+    }
+    allowedSubjectIds = elig.subjectIds;
+    jobRoleId = elig.jobRoleId;
+  } else {
+    const scope = await getStudentSubjectScope({ studentProfileId: profile.id });
+    allowedSubjectIds = scope.subjectIds;
+    jobRoleId = scope.jobRoleId;
   }
 
   if (!allowedSubjectIds.length) {
     return NextResponse.json(
       {
-        code: jobRoleId ? "NO_SUBJECTS_FOR_JOB" : "NO_SUBJECTS_FOR_COMPETITION",
-        error: jobRoleId
-          ? "Não há matérias vinculadas ao seu cargo neste concurso. Peça ao administrador para configurar as matérias do cargo."
-          : "Não há matérias vinculadas a este concurso. Peça ao administrador para configurar as matérias do edital.",
+        code: competitionId
+          ? (jobRoleId ? "NO_SUBJECTS_FOR_JOB" : "NO_SUBJECTS_FOR_COMPETITION")
+          : "NO_SUBJECTS_FOR_JOB_ROLE",
+        error: competitionId
+          ? (jobRoleId
+              ? "Não há matérias vinculadas ao seu cargo neste concurso. Peça ao administrador para configurar as matérias do cargo."
+              : "Não há matérias vinculadas a este concurso. Peça ao administrador para configurar as matérias do edital.")
+          : "Não há matérias vinculadas ao seu cargo/trilha. Tente definir um cargo no onboarding.",
       },
       { status: 400 },
     );
@@ -130,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   const { questions: picked } = await selectQuestionsForStudent({
     studentProfileId: profile.id,
-    competitionId,
+    competitionId: ctxCompetitionId,
     jobRoleId,
     subjectIds: effectiveSubjectIds,
     examBoardId,

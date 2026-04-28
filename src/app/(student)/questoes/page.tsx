@@ -191,7 +191,7 @@ export default function QuestoesPage() {
         <div className="orbit-empty-state">
           <BookOpen className="mx-auto mb-4 h-9 w-9 text-[var(--text-muted)]" strokeWidth={1.5} />
           <p className="text-[15px] font-semibold text-[var(--text-primary)]">Nenhuma questão encontrada</p>
-          <Link href="/concursos" className="orbit-link mt-3 inline-block text-sm font-semibold">Ir para treino →</Link>
+          <Link href="/treino" className="orbit-link mt-3 inline-block text-sm font-semibold">Ir para treino →</Link>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

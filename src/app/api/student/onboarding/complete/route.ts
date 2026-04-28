@@ -9,6 +9,16 @@ const bodySchema = z.object({
   manualJobRoleText: z.string().min(1).max(120).optional(),
 });
 
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -57,11 +67,25 @@ export async function POST(req: Request) {
   }
 
   // 2) Caminho sem concurso: salva trilha preferida por cargo (sem bloquear aluno).
+  let effectiveJobRoleId: string | null = jobRoleId ?? null;
+  if (!effectiveJobRoleId && manualJobRoleText) {
+    const norm = normalize(manualJobRoleText);
+    const tokens = norm.split(" ").filter((t) => t.length >= 3).slice(0, 6);
+    if (tokens.length) {
+      const match = await prisma.jobRole.findFirst({
+        where: { isActive: true, OR: tokens.map((t) => ({ name: { contains: t, mode: "insensitive" as const } })) },
+        select: { id: true },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (match?.id) effectiveJobRoleId = match.id;
+    }
+  }
+
   await prisma.studentProfile.update({
     where: { id: profile.id },
     data: {
       preferredCompetitionId: null,
-      preferredJobRoleId: jobRoleId ?? null,
+      preferredJobRoleId: effectiveJobRoleId,
       preferredJobRoleText: manualJobRoleText ?? null,
       onboardingCompletedAt: new Date(),
       needsOnboarding: false,
