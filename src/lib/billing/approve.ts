@@ -48,24 +48,45 @@ export async function approvePaidTransaction(input: {
   const plan = await ensurePlanoCompleto();
   const periodEnd = nowPlusDays(plan.durationDays ?? 30);
 
-  // Garante TX
-  const tx = await prisma.paymentTransaction.upsert({
-    where: { handle_orderNsu: { handle: input.handle, orderNsu: input.orderNsu } },
-    create: {
-      status: "PENDING",
-      amountCents: PLAN_COMPLETO.priceCents,
-      handle: input.handle,
-      orderNsu: input.orderNsu,
-      invoiceSlug: input.invoiceSlug ?? undefined,
-      transactionNsu: input.transactionNsu ?? undefined,
-      raw: { payment_check: input.paymentCheckRaw ?? null } as any,
-    },
-    update: {
-      invoiceSlug: input.invoiceSlug ?? undefined,
-      transactionNsu: input.transactionNsu ?? undefined,
-      raw: { ...(input.paymentCheckRaw ? { payment_check: input.paymentCheckRaw } : {}) } as any,
-    },
-  });
+  // Garante TX sem perder `raw.customer` (e-mail/nome) que veio do checkout.
+  // Importante: em produção pode existir divergência de handle (ex.: "missing") por env errada antiga.
+  // Então tentamos:
+  // 1) handle+orderNsu (padrão)
+  // 2) qualquer tx com o mesmo orderNsu (fallback)
+  const existingTx =
+    (await prisma.paymentTransaction.findUnique({
+      where: { handle_orderNsu: { handle: input.handle, orderNsu: input.orderNsu } },
+    })) ??
+    (await prisma.paymentTransaction.findFirst({
+      where: { orderNsu: input.orderNsu },
+      orderBy: { createdAt: "desc" },
+    }));
+
+  const tx = existingTx
+    ? await prisma.paymentTransaction.update({
+        where: { id: existingTx.id },
+        data: {
+          // normaliza o handle para o do ambiente atual (se possível)
+          handle: input.handle,
+          invoiceSlug: input.invoiceSlug ?? existingTx.invoiceSlug ?? undefined,
+          transactionNsu: input.transactionNsu ?? existingTx.transactionNsu ?? undefined,
+          raw: {
+            ...(existingTx.raw as any),
+            ...(input.paymentCheckRaw ? { payment_check: input.paymentCheckRaw } : {}),
+          } as any,
+        },
+      })
+    : await prisma.paymentTransaction.create({
+        data: {
+          status: "PENDING",
+          amountCents: PLAN_COMPLETO.priceCents,
+          handle: input.handle,
+          orderNsu: input.orderNsu,
+          invoiceSlug: input.invoiceSlug ?? undefined,
+          transactionNsu: input.transactionNsu ?? undefined,
+          raw: { payment_check: input.paymentCheckRaw ?? null } as any,
+        },
+      });
 
   if (tx.status === "APPROVED") {
     return { ok: true, alreadyApproved: true, txId: tx.id };
