@@ -1860,6 +1860,29 @@ export default function RevisaoImportacaoPage() {
                             <h3 className="text-base font-extrabold tracking-tight text-[var(--text-primary)]">Alternativas</h3>
                             <p className="mt-1 text-xs text-[var(--text-muted)]">Marque a opção correta ao lado de cada letra. O cartão da alternativa correta fica destacado.</p>
                           </div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost rounded-2xl"
+                            onClick={() => {
+                              const ORDER = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+                              setDrafts((prev) => {
+                                const cur = prev[q.id];
+                                if (!cur) return prev;
+                                const used = new Set((cur.alternatives ?? []).map((a) => String(a.letter ?? "").trim().toUpperCase().slice(0, 1)).filter(Boolean));
+                                const next = ORDER.find((L) => !used.has(L)) ?? "X";
+                                return {
+                                  ...prev,
+                                  [q.id]: {
+                                    ...cur,
+                                    alternatives: [...(cur.alternatives ?? []), { letter: next, content: "" }],
+                                  },
+                                };
+                              });
+                              toast.success("Alternativa adicionada. Preencha o texto e salve.");
+                            }}
+                          >
+                            + Adicionar alternativa
+                          </button>
                           {draft.correctAnswer ? (
                             <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 ring-1 ring-emerald-200/80">
                               Resposta: <span className="tabular-nums">{draft.correctAnswer}</span>
