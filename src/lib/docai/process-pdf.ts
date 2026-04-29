@@ -30,9 +30,19 @@ function toGsUri(storedPath: string): string | null {
 async function pickFirstJsonFromPrefix(bucketName: string, prefix: string): Promise<{ bucket: string; object: string } | null> {
   const storage = new Storage();
   const [files] = await storage.bucket(bucketName).getFiles({ prefix });
-  const json = files.find((f) => f.name.toLowerCase().endsWith(".json"));
-  if (!json) return null;
-  return { bucket: bucketName, object: json.name };
+  const jsonFiles = files
+    .map((f) => f.name)
+    .filter((n) => n.toLowerCase().endsWith(".json"));
+  if (!jsonFiles.length) return null;
+
+  // Alguns prefixes incluem arquivos auxiliares (ex.: operation.json). Prioriza prováveis "document" outputs.
+  const preferred =
+    jsonFiles.find((n) => /document\.json$/i.test(n)) ??
+    jsonFiles.find((n) => /output.*\.json$/i.test(n)) ??
+    jsonFiles.find((n) => !/operation\.json$/i.test(n)) ??
+    jsonFiles[0];
+
+  return preferred ? { bucket: bucketName, object: preferred } : null;
 }
 
 async function downloadJson(bucketName: string, objectName: string): Promise<any> {
@@ -40,6 +50,24 @@ async function downloadJson(bucketName: string, objectName: string): Promise<any
   const [buf] = await storage.bucket(bucketName).file(objectName).download();
   const raw = buf.toString("utf8");
   return JSON.parse(raw);
+}
+
+function coerceDocumentFromBatchJson(payload: any): protos.google.cloud.documentai.v1.IDocument | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  // Formato comum: { document: { ... } }
+  if (payload.document && typeof payload.document === "object") {
+    return payload.document as protos.google.cloud.documentai.v1.IDocument;
+  }
+
+  // Em alguns casos, o JSON salvo pode ser o próprio Document (sem wrapper).
+  const looksLikeDoc =
+    typeof payload.text === "string" ||
+    Array.isArray(payload.pages) ||
+    typeof payload.mimeType === "string";
+  if (looksLikeDoc) return payload as protos.google.cloud.documentai.v1.IDocument;
+
+  return null;
 }
 
 async function processPdfViaBatchDocumentAi(params: {
@@ -97,9 +125,31 @@ async function processPdfViaBatchDocumentAi(params: {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(`Falha ao baixar/parsear JSON do Document AI no GCS: ${msg}`);
   }
-  const doc = payload?.document;
-  if (!doc || typeof doc !== "object") throw new Error("JSON do Document AI não contém campo `document`.");
-  return doc as protos.google.cloud.documentai.v1.IDocument;
+  const doc = coerceDocumentFromBatchJson(payload);
+  if (doc) return doc;
+
+  // Fallback: às vezes o primeiro JSON escolhido não é o documento; tenta alguns candidatos.
+  const fallbackOutRef = parseGcsUri(outputGsUri.replace(/^gs:\/\//, "gcs://"));
+  if (!fallbackOutRef) throw new Error("Saída do Document AI (GCS) inválida.");
+  const storage = new Storage();
+  const [files] = await storage.bucket(fallbackOutRef.bucket).getFiles({ prefix: fallbackOutRef.object.replace(/\/?$/, "/") });
+  const candidates = files
+    .map((f) => f.name)
+    .filter((n) => n.toLowerCase().endsWith(".json"))
+    .filter((n) => !/operation\.json$/i.test(n))
+    .slice(0, 15);
+
+  for (const name of candidates) {
+    try {
+      const p = await downloadJson(fallbackOutRef.bucket, name);
+      const d = coerceDocumentFromBatchJson(p);
+      if (d) return d;
+    } catch {
+      // ignora e segue
+    }
+  }
+
+  throw new Error(`JSON do Document AI não contém campo \`document\` (ex.: ${picked.object}).`);
 }
 
 /**
