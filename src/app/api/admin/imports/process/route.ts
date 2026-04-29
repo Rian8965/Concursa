@@ -6,6 +6,7 @@ import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
 import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
+import { processPdfWithDocumentAi } from "@/lib/docai/process-pdf";
 import {
   extractGabaritoSectionFromProvaFullText,
   parseGabaritoMap,
@@ -200,12 +201,14 @@ export async function POST(req: NextRequest) {
 
       let docaiRes: any;
       try {
-        const [res] = await client.processDocument({
-          name,
-          rawDocument: { content: buf.toString("base64"), mimeType: "application/pdf" },
-          ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
+        const processed = await processPdfWithDocumentAi({
+          client,
+          processorName: name,
+          storedPdfPath,
+          pdfBytes: buf,
+          importIdForOutputPrefix: pdfImport.id,
         });
-        docaiRes = res;
+        docaiRes = { document: processed.document, __mode: processed.mode, __pageCount: processed.pageCount };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         const userFacing =
@@ -244,7 +247,8 @@ export async function POST(req: NextRequest) {
             processingError: userFacing,
           },
         });
-        return NextResponse.json({ error: userFacing }, { status: 502 });
+        // Erro do provedor (Document AI) deve virar 4xx para o admin, não 502.
+        return NextResponse.json({ error: userFacing }, { status: 422 });
       }
 
       const fullText = docaiRes.document?.text ?? "";
