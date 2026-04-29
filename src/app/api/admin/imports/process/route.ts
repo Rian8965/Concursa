@@ -218,6 +218,16 @@ export async function POST(req: NextRequest) {
               ? "Processor do Document AI não encontrado. Confira DOC_AI_LOCATION (ex: us) e DOC_AI_PROCESSOR_ID no Firebase App Hosting."
               : `Falha no Document AI: ${message}`.slice(0, 900);
 
+        // Log completo no Cloud Run (ajuda a debugar por trace).
+        console.error("[import][docai] failed", {
+          projectId,
+          location,
+          processorIdPrefix: processorId.slice(0, 8),
+          storedPdfPathKind: storedPdfPath?.startsWith("gcs://") ? "gcs" : "local-or-null",
+          errorMessage: message,
+          errorStack: e instanceof Error ? e.stack : undefined,
+        });
+
         // #region agent log
         fetch("http://127.0.0.1:7283/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
           method: "POST",
@@ -244,11 +254,18 @@ export async function POST(req: NextRequest) {
           where: { id: pdfImport.id },
           data: {
             status: "FAILED",
-            processingError: userFacing,
+            // Salva o erro amigável + detalhe técnico curto para diagnóstico.
+            processingError: `${userFacing}\n\nDetalhe técnico: ${message}`.slice(0, 1500),
           },
         });
         // Erro do provedor (Document AI) deve virar 4xx para o admin, não 502.
-        return NextResponse.json({ error: userFacing }, { status: 422 });
+        return NextResponse.json(
+          {
+            error: userFacing,
+            detail: message.slice(0, 1500),
+          },
+          { status: 422 },
+        );
       }
 
       const fullText = docaiRes.document?.text ?? "";

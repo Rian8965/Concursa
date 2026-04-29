@@ -50,29 +50,53 @@ async function processPdfViaBatchDocumentAi(params: {
 }): Promise<protos.google.cloud.documentai.v1.IDocument> {
   const { client, processorName, inputGsUri, outputGsUri } = params;
 
-  const [op] = await client.batchProcessDocuments({
-    name: processorName,
-    inputDocuments: {
-      gcsDocuments: {
-        documents: [{ gcsUri: inputGsUri, mimeType: "application/pdf" }],
+  let op: any;
+  try {
+    const [created] = await client.batchProcessDocuments({
+      name: processorName,
+      inputDocuments: {
+        gcsDocuments: {
+          documents: [{ gcsUri: inputGsUri, mimeType: "application/pdf" }],
+        },
       },
-    },
-    documentOutputConfig: {
-      gcsOutputConfig: { gcsUri: outputGsUri },
-    },
-    ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
-  });
+      documentOutputConfig: {
+        gcsOutputConfig: { gcsUri: outputGsUri },
+      },
+      ...DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS,
+    });
+    op = created;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Document AI batchProcessDocuments falhou: ${msg}`);
+  }
 
-  await op.promise();
+  try {
+    await op.promise();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Document AI batch op.promise falhou: ${msg}`);
+  }
 
   const outRef = parseGcsUri(outputGsUri.replace(/^gs:\/\//, "gcs://"));
   if (!outRef) throw new Error("Saída do Document AI (GCS) inválida.");
 
   // O Document AI cria subpastas dentro do prefix; pegamos o primeiro .json encontrado.
-  const picked = await pickFirstJsonFromPrefix(outRef.bucket, outRef.object.replace(/\/?$/, "/"));
+  let picked: { bucket: string; object: string } | null = null;
+  try {
+    picked = await pickFirstJsonFromPrefix(outRef.bucket, outRef.object.replace(/\/?$/, "/"));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Falha ao listar saída do Document AI no GCS: ${msg}`);
+  }
   if (!picked) throw new Error("Document AI concluiu, mas não gerou nenhum JSON no GCS.");
 
-  const payload = await downloadJson(picked.bucket, picked.object);
+  let payload: any;
+  try {
+    payload = await downloadJson(picked.bucket, picked.object);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Falha ao baixar/parsear JSON do Document AI no GCS: ${msg}`);
+  }
   const doc = payload?.document;
   if (!doc || typeof doc !== "object") throw new Error("JSON do Document AI não contém campo `document`.");
   return doc as protos.google.cloud.documentai.v1.IDocument;
