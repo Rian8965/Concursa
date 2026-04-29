@@ -179,60 +179,111 @@ export async function processImportAiJob(importId: string): Promise<void> {
     }) ?? [];
 
   const ordered = reconstructReadingOrder(pages);
-  const combined = ordered.map((p) => `--- Página ${p.page ?? "?"} ---\n${p.text}`).join("\n\n");
+  const pageLines = ordered.map((p) => `--- Página ${p.page ?? "?"} ---\n${p.text}`);
+
+  const envChunk = Number.parseInt(process.env.IMPORT_LLM_PAGE_CHUNK ?? "6", 10);
+  const envOverlap = Number.parseInt(process.env.IMPORT_LLM_PAGE_OVERLAP ?? "1", 10);
+  const chunkSize = Number.isFinite(envChunk) && envChunk > 0 ? Math.min(12, envChunk) : 6;
+  const overlap = Number.isFinite(envOverlap) && envOverlap >= 0 ? Math.min(chunkSize - 1, envOverlap) : 1;
 
   const system = [
     "Você é um extrator de provas de concurso.",
     "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
+    "IMPORTANTE: você receberá apenas um SUBCONJUNTO de páginas. Extraia somente as questões que aparecem nesse trecho.",
     "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
     "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
     "REGRAS:",
     "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
     "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria. Para CADA questão, preencha 'materia' com a matéria vigente.",
     "- ASSUNTO: para cada questão, preencha o campo 'assunto' com o tópico específico abordado.",
-    "- meta: preencha banca, concurso, cargo, ano, city.",
+    "- meta: preencha banca, concurso, cargo, ano, city (pode omitir se não estiver no trecho).",
     "- NÃO cole texto-base dentro do enunciado. Se houver texto-base compartilhado, crie baseTexts e aponte baseTextId.",
     "- Ignorar redação/discursivas.",
     "- Manter a ordem correta das questões.",
     "- Alternativas: normalizar letras A,B,C,D,E.",
     "- Numeração: reconhecer padrões (1., 01, Questão 1).",
+    "- Cada questão DEVE ter 'number' (inteiro). Não invente números.",
   ].join("\n");
 
-  const user = [
-    "Extraia a prova abaixo em JSON.",
-    "TEXTO DA PROVA:",
-    combined,
-    gabaritoOcrForLlm
-      ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter):\n${gabaritoOcrForLlm}\n`
-      : "",
-  ].join("\n\n");
+  const yearHint = pdfImport.year;
 
-  const llm = await runLlmJson(system, user);
-  const llmRobust = parseLlmJsonRobustly(llm.jsonText);
-  if (!llmRobust.ok) {
-    const detail = `Resposta JSON do modelo (IA): ${llmRobust.message}`;
+  type ParsedChunk = { baseTexts: any[]; questions: any[]; meta?: unknown; provider: string; model: string };
+  const chunks: ParsedChunk[] = [];
+  const chunkSummaries: Array<{ from: number; to: number; questions: number; ok: boolean; note?: string }> = [];
+
+  if (!pageLines.length) {
     await prisma.pDFImport.update({
       where: { id: importId },
-      data: { status: "FAILED", processingError: detail.slice(0, 1500) },
+      data: { status: "FAILED", processingError: "Document AI não retornou páginas/parágrafos para extrair texto." },
     });
     return;
   }
 
-  const parsed = llmRobust.value as { baseTexts?: unknown; questions?: unknown; meta?: unknown };
-  const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
-  const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+  let lastLlm: { provider: string; model: string } | null = null;
 
-  const yearHint = pdfImport.year;
-  const aiMetaRaw = (parsed?.meta && typeof parsed.meta === "object" ? { ...parsed.meta } : {}) as Record<string, unknown>;
+  for (let start = 0; start < pageLines.length; start += Math.max(1, chunkSize - overlap)) {
+    const end = Math.min(start + chunkSize, pageLines.length);
+    const slice = pageLines.slice(start, end).join("\n\n");
+    const fromPage = ordered[start]?.page ?? start + 1;
+    const toPage = ordered[end - 1]?.page ?? end;
+
+    const user = [
+      `Extraia a prova abaixo em JSON (somente páginas ${fromPage}–${toPage} deste trecho).`,
+      "TEXTO DA PROVA (SUBCONJUNTO):",
+      slice,
+      gabaritoOcrForLlm
+        ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter):\n${gabaritoOcrForLlm}\n`
+        : "",
+    ].join("\n\n");
+
+    try {
+      const llm = await runLlmJson(system, user);
+      lastLlm = { provider: llm.provider, model: llm.model };
+      const llmRobust = parseLlmJsonRobustly(llm.jsonText);
+      if (!llmRobust.ok) {
+        chunkSummaries.push({ from: start + 1, to: end, questions: 0, ok: false, note: llmRobust.message });
+        continue;
+      }
+      const parsed = llmRobust.value as { baseTexts?: unknown; questions?: unknown; meta?: unknown };
+      const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
+      const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+      chunks.push({ baseTexts, questions, meta: parsed?.meta, provider: llm.provider, model: llm.model });
+      chunkSummaries.push({ from: start + 1, to: end, questions: questions.length, ok: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      chunkSummaries.push({ from: start + 1, to: end, questions: 0, ok: false, note: msg });
+    }
+
+    if (end >= pageLines.length) break;
+  }
+
+  if (!chunks.length) {
+    const note = chunkSummaries.map((c) => `${c.from}-${c.to}:${c.ok ? "ok" : `fail:${(c.note ?? "").slice(0, 120)}`}`).join(" | ");
+    await prisma.pDFImport.update({
+      where: { id: importId },
+      data: { status: "FAILED", processingError: `Falha ao extrair JSON do modelo em todos os chunks. Resumo: ${note}`.slice(0, 1500) },
+    });
+    return;
+  }
+
+  // Merge meta (primeiro chunk com meta útil)
+  let mergedMetaFromChunks: Record<string, unknown> = {};
+  for (const c of chunks) {
+    if (c.meta && typeof c.meta === "object") {
+      mergedMetaFromChunks = { ...(c.meta as Record<string, unknown>) };
+      break;
+    }
+  }
+
   const mergedMeta = {
-    ...aiMetaRaw,
-    concurso: (aiMetaRaw.concurso as string | undefined) ?? concurso ?? undefined,
-    city: (aiMetaRaw.city as string | undefined) ?? cidade ?? undefined,
-    banca: (aiMetaRaw.banca as string | undefined) ?? banca ?? undefined,
-    materia: (aiMetaRaw.materia as string | undefined) ?? materia ?? undefined,
+    ...mergedMetaFromChunks,
+    concurso: (mergedMetaFromChunks.concurso as string | undefined) ?? concurso ?? undefined,
+    city: (mergedMetaFromChunks.city as string | undefined) ?? cidade ?? undefined,
+    banca: (mergedMetaFromChunks.banca as string | undefined) ?? banca ?? undefined,
+    materia: (mergedMetaFromChunks.materia as string | undefined) ?? materia ?? undefined,
     ano:
-      aiMetaRaw.ano != null && aiMetaRaw.ano !== ""
-        ? aiMetaRaw.ano
+      mergedMetaFromChunks.ano != null && mergedMetaFromChunks.ano !== ""
+        ? mergedMetaFromChunks.ano
         : yearHint != null
           ? yearHint
           : undefined,
@@ -240,16 +291,55 @@ export async function processImportAiJob(importId: string): Promise<void> {
 
   const baseMap = new Map<string, string>();
   const baseApplies = new Map<string, number[]>();
-  for (const bt of baseTexts as any[]) {
-    if (bt?.id && typeof bt.text === "string") {
-      const id = String(bt.id);
-      baseMap.set(id, bt.text);
-      const numsRaw = Array.isArray(bt.appliesToQuestionNumbers) ? bt.appliesToQuestionNumbers : null;
-      const nums = (numsRaw ?? [])
-        .map((n: any) => (typeof n === "number" && Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null))
-        .filter((n: any) => typeof n === "number") as number[];
-      if (nums.length) baseApplies.set(id, Array.from(new Set(nums)).sort((a, b) => a - b));
+  for (const c of chunks) {
+    for (const bt of c.baseTexts as any[]) {
+      if (bt?.id && typeof bt.text === "string") {
+        const id = String(bt.id);
+        const t = String(bt.text ?? "").trim();
+        if (!t) continue;
+        if (!baseMap.has(id)) baseMap.set(id, t);
+        const numsRaw = Array.isArray(bt.appliesToQuestionNumbers) ? bt.appliesToQuestionNumbers : null;
+        const nums = (numsRaw ?? [])
+          .map((n: any) => (typeof n === "number" && Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null))
+          .filter((n: any) => typeof n === "number") as number[];
+        if (nums.length) {
+          const prev = baseApplies.get(id) ?? [];
+          baseApplies.set(id, Array.from(new Set([...prev, ...nums])).sort((a, b) => a - b));
+        }
+      }
     }
+  }
+
+  const questionsByNumber = new Map<number, any>();
+  for (const c of chunks) {
+    for (const q of c.questions as any[]) {
+      const numberRaw = q?.number;
+      const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
+      if (!number) continue;
+      const prev = questionsByNumber.get(number);
+      const nextStmt = String(q?.statement ?? q?.content ?? "").trim();
+      const prevStmt = prev ? String(prev?.statement ?? prev?.content ?? "").trim() : "";
+      if (!prev || nextStmt.length > prevStmt.length) {
+        questionsByNumber.set(number, q);
+      }
+    }
+  }
+
+  const questions = Array.from(questionsByNumber.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, q]) => q);
+
+  if (!questions.length) {
+    await prisma.pDFImport.update({
+      where: { id: importId },
+      data: {
+        status: "FAILED",
+        processingError:
+          "O modelo não retornou questões estruturadas (0 itens após mesclar chunks). Verifique OCR/qualidade do PDF e tente novamente.".slice(0, 1500),
+        processingLog: JSON.stringify({ pipeline: "ai", llmChunking: { chunkSize, overlap, pages: pageLines.length, chunkSummaries } }),
+      },
+    });
+    return;
   }
 
   const baseAssetIdByBaseId = new Map<string, string>();
@@ -461,8 +551,9 @@ export async function processImportAiJob(importId: string): Promise<void> {
         elapsedMs,
         docaiMode: processed.mode,
         docaiPageCount: processed.pageCount,
-        provider: llm.provider,
-        model: llm.model,
+        llmChunking: { chunkSize, overlap, pages: pageLines.length, chunkSummaries },
+        provider: lastLlm?.provider ?? chunks[0]?.provider,
+        model: lastLlm?.model ?? chunks[0]?.model,
       }),
       gabaritoInSamePdf: pdfImport.gabaritoInSamePdf,
     },
