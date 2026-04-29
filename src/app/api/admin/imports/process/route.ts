@@ -1,12 +1,13 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { saveImportPdfBuffer } from "@/lib/import-pdf-storage";
+import { saveImportPdfBuffer, saveImportGabaritoPdfBuffer } from "@/lib/import-pdf-storage";
 import { NextRequest, NextResponse } from "next/server";
 import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
 import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 import { processPdfWithDocumentAi } from "@/lib/docai/process-pdf";
+import { enqueueImportProcessTask } from "@/lib/tasks/cloud-tasks";
 import {
   extractGabaritoSectionFromProvaFullText,
   parseGabaritoMap,
@@ -111,6 +112,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const forceSync = searchParams.get("sync") === "1";
+
   const formData = await req.formData();
   const provaFile = formData.get("prova") as File | null;
   const gabaritoFile = formData.get("gabarito") as File | null;
@@ -152,6 +156,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falha ao armazenar o arquivo PDF." }, { status: 500 });
   }
 
+  // Se houver gabarito separado, armazenar também (para job assíncrono).
+  if (gabaritoFile && gabaritoFile.size > 0) {
+    try {
+      const gBuf = Buffer.from(await gabaritoFile.arrayBuffer());
+      await saveImportGabaritoPdfBuffer(pdfImport.id, gBuf);
+      await prisma.pDFImport.update({
+        where: { id: pdfImport.id },
+        data: { originalFilenameGabarito: gabaritoFile.name },
+      });
+    } catch (e) {
+      console.warn("[import] falha ao salvar gabarito; seguindo sem arquivo separado.", e);
+    }
+  }
+
   // Buscar metadados do concurso para enriquecer a extração
   let banca: string | undefined;
   let concurso: string | undefined;
@@ -183,6 +201,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    if (useAi && !forceSync) {
+      // Assíncrono (evita 504/timeout no Cloud Run).
+      await prisma.pDFImport.update({
+        where: { id: pdfImport.id },
+        data: { status: "PROCESSING", gabaritoInSamePdf: gabaritoNoMesmoPdf },
+      });
+      await enqueueImportProcessTask({ importId: pdfImport.id });
+      return NextResponse.json({ importId: pdfImport.id, queued: true }, { status: 202 });
+    }
+
     if (useAi) {
       const startedAt = Date.now();
 

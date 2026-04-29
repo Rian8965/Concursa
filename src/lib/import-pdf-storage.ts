@@ -59,6 +59,22 @@ export async function saveImportPdfBuffer(importId: string, buffer: Buffer): Pro
   return `private/import-pdfs/${importId}.pdf`;
 }
 
+export async function saveImportGabaritoPdfBuffer(importId: string, buffer: Buffer): Promise<string> {
+  const bucket = configuredBucket();
+  if (bucket) {
+    const object = `imports/${importId}.gabarito.pdf`;
+    const storage = storageClient();
+    const file = storage.bucket(bucket).file(object);
+    await file.save(buffer, { contentType: "application/pdf", resumable: false });
+    return `gcs://${bucket}/${object}`;
+  }
+
+  await ensureImportPdfDir();
+  const p = path.join(baseDir(), `${importId}.gabarito.pdf`);
+  await fs.writeFile(p, buffer);
+  return `private/import-pdfs/${importId}.gabarito.pdf`;
+}
+
 export async function deleteImportPdfFile(storedPath: string | null | undefined): Promise<void> {
   if (!storedPath) return;
   const ref = parseStoredPdfPath(storedPath);
@@ -94,6 +110,24 @@ export async function readImportPdfBuffer(storedPath: string | null | undefined)
   const full = path.join(/*turbopackIgnore: true*/ process.cwd(), ref.path);
   try {
     return await fs.readFile(full);
+  } catch {
+    return null;
+  }
+}
+
+export async function readImportGabaritoPdfBuffer(importId: string): Promise<Buffer | null> {
+  const bucket = configuredBucket();
+  if (bucket) {
+    try {
+      const [buf] = await storageClient().bucket(bucket).file(`imports/${importId}.gabarito.pdf`).download();
+      return buf;
+    } catch {
+      return null;
+    }
+  }
+  const local = path.join(/*turbopackIgnore: true*/ process.cwd(), "private", "import-pdfs", `${importId}.gabarito.pdf`);
+  try {
+    return await fs.readFile(local);
   } catch {
     return null;
   }

@@ -15,6 +15,7 @@ export default function NovaImportacaoPage() {
   const [stage, setStage] = useState<Stage>("form");
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<{ importId: string; totalExtracted: number; usedOcr: boolean } | null>(null);
+  const pollRef = useRef<number | null>(null);
 
   const provaRef = useRef<HTMLInputElement>(null);
   const gabaritoRef = useRef<HTMLInputElement>(null);
@@ -34,6 +35,54 @@ export default function NovaImportacaoPage() {
       setSubjects(sd.subjects ?? []);
     });
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
+  }, []);
+
+  async function pollImportUntilDone(importId: string) {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    const startedAt = Date.now();
+
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/imports/${importId}`, { method: "GET" });
+        const data = await res.json();
+        if (!res.ok) return;
+        const imp = data?.import;
+        const status = String(imp?.status ?? "");
+
+        if (status === "FAILED") {
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          setErrorMsg(String(imp?.processingError ?? "Falha no processamento"));
+          setStage("error");
+          return;
+        }
+
+        if (status === "REVIEW_PENDING" || status === "COMPLETED") {
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          setResult({
+            importId,
+            totalExtracted: Number(imp?.totalExtracted ?? 0),
+            usedOcr: true,
+          });
+          setStage("done");
+          return;
+        }
+
+        // Hard timeout no client (evita “processando infinito”)
+        if (Date.now() - startedAt > 45 * 60 * 1000) {
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          setErrorMsg("Processamento está demorando demais. Verifique os logs do servidor e tente novamente.");
+          setStage("error");
+        }
+      } catch {
+        // ignora; continua tentando
+      }
+    }, 2500);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +110,12 @@ export default function NovaImportacaoPage() {
         return;
       }
 
+      // Novo modo assíncrono: 202 + importId
+      if (res.status === 202 && data?.importId) {
+        await pollImportUntilDone(String(data.importId));
+        return;
+      }
+
       setResult(data);
       setStage("done");
     } catch (err) {
@@ -79,7 +134,7 @@ export default function NovaImportacaoPage() {
         <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", marginBottom: 8 }}>Processando PDF...</h2>
         <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7 }}>
           A IA está lendo o PDF, interpretando o layout (inclusive 2 colunas), identificando texto-base e estruturando as questões.<br />
-          Isso pode levar alguns segundos para PDFs grandes.
+          Isso pode levar alguns minutos para PDFs grandes.
         </p>
         <div style={{ marginTop: 24, background: "#F8F7FF", border: "1px solid #EDE9FE", borderRadius: 12, padding: "14px 18px", textAlign: "left" }}>
           <p style={{ fontSize: 12, color: "#7C3AED", fontWeight: 600 }}>Pipeline em execução:</p>
