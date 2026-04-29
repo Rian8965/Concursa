@@ -34,6 +34,24 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[import][job] failed", { importId, message, stack: e instanceof Error ? e.stack : undefined });
+
+    const isQuota =
+      /RESOURCE_EXHAUSTED/i.test(message) ||
+      /Quota limit/i.test(message) ||
+      /ProcessorConcurrentBatchProcessDocumentRequestsPerProject/i.test(message);
+
+    if (isQuota) {
+      // Erro transiente: não marcar FAILED; deixa o Cloud Tasks retentar.
+      await prisma.pDFImport.update({
+        where: { id: importId },
+        data: {
+          status: "PROCESSING",
+          processingError: `Document AI está ocupado (quota/concurrency). Reprocessando automaticamente. Detalhe: ${message}`.slice(0, 1500),
+        },
+      }).catch(() => {});
+      return NextResponse.json({ error: "Quota do Document AI excedida (retry automático)", detail: message }, { status: 503 });
+    }
+
     await prisma.pDFImport.update({
       where: { id: importId },
       data: { status: "FAILED", processingError: message.slice(0, 1500) },
