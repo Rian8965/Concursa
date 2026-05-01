@@ -89,7 +89,19 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const pdfImport = await prisma.pDFImport.findUnique({ where: { id: importId } });
   if (!pdfImport) throw new Error("Importação não encontrada.");
 
-  await prisma.pDFImport.update({ where: { id: importId }, data: { status: "PROCESSING", processingError: null } });
+  // Idempotência: se o job for reexecutado (retries do Cloud Tasks), não pode duplicar questões/assets.
+  // Limpamos qualquer resultado anterior desta importação antes de processar de novo.
+  await prisma.$transaction(async (tx) => {
+    await tx.importedQuestionAsset.deleteMany({
+      where: { importedQuestion: { importId } },
+    }).catch(() => {});
+    await tx.importedQuestion.deleteMany({ where: { importId } }).catch(() => {});
+    await tx.importAsset.deleteMany({ where: { importId } }).catch(() => {});
+    await tx.pDFImport.update({
+      where: { id: importId },
+      data: { status: "PROCESSING", processingError: null, totalExtracted: 0 },
+    });
+  });
 
   const storedPdfPath = pdfImport.storedPdfPath;
   const provaBuf = await readImportPdfBuffer(storedPdfPath);
@@ -185,6 +197,8 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const envOverlap = Number.parseInt(process.env.IMPORT_LLM_PAGE_OVERLAP ?? "1", 10);
   const chunkSize = Number.isFinite(envChunk) && envChunk > 0 ? Math.min(12, envChunk) : 6;
   const overlap = Number.isFinite(envOverlap) && envOverlap >= 0 ? Math.min(chunkSize - 1, envOverlap) : 1;
+  const minQuestionsEnv = Number.parseInt(process.env.IMPORT_MIN_QUESTIONS ?? "20", 10);
+  const minQuestions = Number.isFinite(minQuestionsEnv) && minQuestionsEnv > 0 ? minQuestionsEnv : 20;
 
   const system = [
     "Você é um extrator de provas de concurso.",
@@ -208,7 +222,7 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const yearHint = pdfImport.year;
 
   type ParsedChunk = { baseTexts: any[]; questions: any[]; meta?: unknown; provider: string; model: string };
-  const chunks: ParsedChunk[] = [];
+  const chunks: Array<ParsedChunk> = [];
   const chunkSummaries: Array<{ from: number; to: number; questions: number; ok: boolean; note?: string }> = [];
 
   if (!pageLines.length) {
@@ -219,42 +233,115 @@ export async function processImportAiJob(importId: string): Promise<void> {
     return;
   }
 
-  let lastLlm: { provider: string; model: string } | null = null;
+  let llmProvider: string | null = null;
+  let llmModel: string | null = null;
 
-  for (let start = 0; start < pageLines.length; start += Math.max(1, chunkSize - overlap)) {
-    const end = Math.min(start + chunkSize, pageLines.length);
-    const slice = pageLines.slice(start, end).join("\n\n");
-    const fromPage = ordered[start]?.page ?? start + 1;
-    const toPage = ordered[end - 1]?.page ?? end;
+  async function extractChunks(opts: { chunkSize: number; overlap: number }) {
+    const chunksLocal: ParsedChunk[] = [];
+    const summariesLocal: Array<{ from: number; to: number; questions: number; ok: boolean; note?: string }> = [];
 
-    const user = [
-      `Extraia a prova abaixo em JSON (somente páginas ${fromPage}–${toPage} deste trecho).`,
-      "TEXTO DA PROVA (SUBCONJUNTO):",
-      slice,
-      gabaritoOcrForLlm
-        ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter):\n${gabaritoOcrForLlm}\n`
-        : "",
-    ].join("\n\n");
+    const stride = Math.max(1, opts.chunkSize - opts.overlap);
+    for (let start = 0; start < pageLines.length; start += stride) {
+      const end = Math.min(start + opts.chunkSize, pageLines.length);
+      const slice = pageLines.slice(start, end).join("\n\n");
+      const fromPage = ordered[start]?.page ?? start + 1;
+      const toPage = ordered[end - 1]?.page ?? end;
 
-    try {
-      const llm = await runLlmJson(system, user);
-      lastLlm = { provider: llm.provider, model: llm.model };
-      const llmRobust = parseLlmJsonRobustly(llm.jsonText);
-      if (!llmRobust.ok) {
-        chunkSummaries.push({ from: start + 1, to: end, questions: 0, ok: false, note: llmRobust.message });
-        continue;
+      const user = [
+        `Extraia a prova abaixo em JSON (somente páginas ${fromPage}–${toPage} deste trecho).`,
+        "TEXTO DA PROVA (SUBCONJUNTO):",
+        slice,
+        gabaritoOcrForLlm
+          ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter):\n${gabaritoOcrForLlm}\n`
+          : "",
+      ].join("\n\n");
+
+      // Retry local: se falhar/truncar, tenta mais 1x com instrução mais “curta” (menos meta) para caber.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const systemTry = attempt === 0
+          ? system
+          : `${system}\n\nMODO RESGATE: se estiver grande, retorne SOMENTE questions (e baseTexts vazio), mantendo JSON válido.`;
+        try {
+          const llm = await runLlmJson(systemTry, user);
+          llmProvider = llm.provider;
+          llmModel = llm.model;
+          const llmRobust = parseLlmJsonRobustly(llm.jsonText);
+          if (!llmRobust.ok) {
+            if (attempt === 1) summariesLocal.push({ from: start + 1, to: end, questions: 0, ok: false, note: llmRobust.message });
+            continue;
+          }
+          const parsed = llmRobust.value as { baseTexts?: unknown; questions?: unknown; meta?: unknown };
+          const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
+          const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+          chunksLocal.push({ baseTexts, questions, meta: parsed?.meta, provider: llm.provider, model: llm.model });
+          summariesLocal.push({ from: start + 1, to: end, questions: questions.length, ok: true });
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (attempt === 1) summariesLocal.push({ from: start + 1, to: end, questions: 0, ok: false, note: msg });
+        }
       }
-      const parsed = llmRobust.value as { baseTexts?: unknown; questions?: unknown; meta?: unknown };
-      const baseTexts = Array.isArray(parsed?.baseTexts) ? parsed.baseTexts : [];
-      const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
-      chunks.push({ baseTexts, questions, meta: parsed?.meta, provider: llm.provider, model: llm.model });
-      chunkSummaries.push({ from: start + 1, to: end, questions: questions.length, ok: true });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      chunkSummaries.push({ from: start + 1, to: end, questions: 0, ok: false, note: msg });
+
+      if (end >= pageLines.length) break;
     }
 
-    if (end >= pageLines.length) break;
+    return { chunksLocal, summariesLocal };
+  }
+
+  function mergeFromChunks(chunksIn: ParsedChunk[]) {
+    const baseMapLocal = new Map<string, string>();
+    const baseAppliesLocal = new Map<string, number[]>();
+    for (const c of chunksIn) {
+      for (const bt of c.baseTexts as any[]) {
+        if (bt?.id && typeof bt.text === "string") {
+          const id = String(bt.id);
+          const t = String(bt.text ?? "").trim();
+          if (!t) continue;
+          if (!baseMapLocal.has(id)) baseMapLocal.set(id, t);
+          const numsRaw = Array.isArray(bt.appliesToQuestionNumbers) ? bt.appliesToQuestionNumbers : null;
+          const nums = (numsRaw ?? [])
+            .map((n: any) => (typeof n === "number" && Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null))
+            .filter((n: any) => typeof n === "number") as number[];
+          if (nums.length) {
+            const prev = baseAppliesLocal.get(id) ?? [];
+            baseAppliesLocal.set(id, Array.from(new Set([...prev, ...nums])).sort((a, b) => a - b));
+          }
+        }
+      }
+    }
+
+    const questionsByNumberLocal = new Map<number, any>();
+    for (const c of chunksIn) {
+      for (const q of c.questions as any[]) {
+        const numberRaw = q?.number;
+        const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
+        if (!number) continue;
+        const prev = questionsByNumberLocal.get(number);
+        const nextStmt = String(q?.statement ?? q?.content ?? "").trim();
+        const prevStmt = prev ? String(prev?.statement ?? prev?.content ?? "").trim() : "";
+        if (!prev || nextStmt.length > prevStmt.length) questionsByNumberLocal.set(number, q);
+      }
+    }
+
+    const questionsLocal = Array.from(questionsByNumberLocal.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, q]) => q);
+
+    return { baseMapLocal, baseAppliesLocal, questionsLocal };
+  }
+
+  // Passo 1: extração com chunkSize configurado
+  const pass1 = await extractChunks({ chunkSize, overlap });
+  chunks.push(...pass1.chunksLocal);
+  chunkSummaries.push(...pass1.summariesLocal);
+
+  // Se extraiu pouco, faz Passo 2 automático com chunk menor (mais chamadas, menos truncagem)
+  const merged1 = mergeFromChunks(chunks);
+  if (merged1.questionsLocal.length > 0 && merged1.questionsLocal.length < minQuestions && pageLines.length >= 8) {
+    const fallbackChunkSize = Math.max(2, Math.min(4, chunkSize - 2));
+    const pass2 = await extractChunks({ chunkSize: fallbackChunkSize, overlap: 1 });
+    chunks.push(...pass2.chunksLocal);
+    chunkSummaries.push(...pass2.summariesLocal.map((s) => ({ ...s, note: s.note ? `fallback:${s.note}` : "fallback" })));
   }
 
   if (!chunks.length) {
@@ -289,45 +376,10 @@ export async function processImportAiJob(importId: string): Promise<void> {
           : undefined,
   };
 
-  const baseMap = new Map<string, string>();
-  const baseApplies = new Map<string, number[]>();
-  for (const c of chunks) {
-    for (const bt of c.baseTexts as any[]) {
-      if (bt?.id && typeof bt.text === "string") {
-        const id = String(bt.id);
-        const t = String(bt.text ?? "").trim();
-        if (!t) continue;
-        if (!baseMap.has(id)) baseMap.set(id, t);
-        const numsRaw = Array.isArray(bt.appliesToQuestionNumbers) ? bt.appliesToQuestionNumbers : null;
-        const nums = (numsRaw ?? [])
-          .map((n: any) => (typeof n === "number" && Number.isFinite(n) ? Math.max(1, Math.floor(n)) : null))
-          .filter((n: any) => typeof n === "number") as number[];
-        if (nums.length) {
-          const prev = baseApplies.get(id) ?? [];
-          baseApplies.set(id, Array.from(new Set([...prev, ...nums])).sort((a, b) => a - b));
-        }
-      }
-    }
-  }
-
-  const questionsByNumber = new Map<number, any>();
-  for (const c of chunks) {
-    for (const q of c.questions as any[]) {
-      const numberRaw = q?.number;
-      const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
-      if (!number) continue;
-      const prev = questionsByNumber.get(number);
-      const nextStmt = String(q?.statement ?? q?.content ?? "").trim();
-      const prevStmt = prev ? String(prev?.statement ?? prev?.content ?? "").trim() : "";
-      if (!prev || nextStmt.length > prevStmt.length) {
-        questionsByNumber.set(number, q);
-      }
-    }
-  }
-
-  const questions = Array.from(questionsByNumber.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, q]) => q);
+  const mergedAll = mergeFromChunks(chunks);
+  const baseMap = mergedAll.baseMapLocal;
+  const baseApplies = mergedAll.baseAppliesLocal;
+  const questions = mergedAll.questionsLocal;
 
   if (!questions.length) {
     await prisma.pDFImport.update({
@@ -541,6 +593,7 @@ export async function processImportAiJob(importId: string): Promise<void> {
   }
 
   const elapsedMs = Date.now() - startedAt;
+  const firstChunk = chunks.length ? chunks[0] : null;
   await prisma.pDFImport.update({
     where: { id: importId },
     data: {
@@ -552,8 +605,8 @@ export async function processImportAiJob(importId: string): Promise<void> {
         docaiMode: processed.mode,
         docaiPageCount: processed.pageCount,
         llmChunking: { chunkSize, overlap, pages: pageLines.length, chunkSummaries },
-        provider: lastLlm?.provider ?? chunks[0]?.provider,
-        model: lastLlm?.model ?? chunks[0]?.model,
+        provider: llmProvider ?? firstChunk?.provider,
+        model: llmModel ?? firstChunk?.model,
       }),
       gabaritoInSamePdf: pdfImport.gabaritoInSamePdf,
     },
