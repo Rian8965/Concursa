@@ -84,6 +84,50 @@ function reconstructReadingOrder(pages: Array<{ pageNumber: number | null; parag
   return out;
 }
 
+function normalizeForMatch(s: string): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function statementLooksGrounded(statement: string, corpusNorm: string): boolean {
+  const st = normalizeForMatch(statement);
+  if (!st) return false;
+  // Pega tokens “fortes” (>=4) para evitar aceitar frases inventadas.
+  const tokens = Array.from(new Set(st.split(" ").filter((t) => t.length >= 4)));
+  if (tokens.length < 4) return true; // enunciado curto: não dá pra exigir muito
+  let hits = 0;
+  for (const t of tokens.slice(0, 18)) {
+    if (corpusNorm.includes(t)) hits++;
+  }
+  // Exige pelo menos 3 tokens presentes no OCR para considerar “do PDF”.
+  return hits >= 3;
+}
+
+function filterHallucinatedQuestions(rawQuestions: any[], corpusNorm: string) {
+  const kept: any[] = [];
+  const dropped: Array<{ number: number | null; reason: string }> = [];
+  for (const q of rawQuestions) {
+    const numberRaw = q?.number;
+    const number = typeof numberRaw === "number" && Number.isFinite(numberRaw) ? Math.max(1, Math.floor(numberRaw)) : null;
+    const statement = String(q?.statement ?? q?.content ?? "").trim();
+    if (!statement) {
+      dropped.push({ number, reason: "empty_statement" });
+      continue;
+    }
+    if (!statementLooksGrounded(statement, corpusNorm)) {
+      dropped.push({ number, reason: "not_grounded_in_ocr" });
+      continue;
+    }
+    kept.push(q);
+  }
+  return { kept, dropped };
+}
+
 export async function processImportAiJob(importId: string): Promise<void> {
   const startedAt = Date.now();
   const pdfImport = await prisma.pDFImport.findUnique({ where: { id: importId } });
@@ -192,6 +236,8 @@ export async function processImportAiJob(importId: string): Promise<void> {
 
   const ordered = reconstructReadingOrder(pages);
   const pageLines = ordered.map((p) => `--- Página ${p.page ?? "?"} ---\n${p.text}`);
+  const combinedAllPages = pageLines.join("\n\n");
+  const corpusNorm = normalizeForMatch(combinedAllPages);
 
   const envChunk = Number.parseInt(process.env.IMPORT_LLM_PAGE_CHUNK ?? "6", 10);
   const envOverlap = Number.parseInt(process.env.IMPORT_LLM_PAGE_OVERLAP ?? "1", 10);
@@ -204,6 +250,8 @@ export async function processImportAiJob(importId: string): Promise<void> {
     "Você é um extrator de provas de concurso.",
     "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
     "IMPORTANTE: você receberá apenas um SUBCONJUNTO de páginas. Extraia somente as questões que aparecem nesse trecho.",
+    "ANTI-ALUCINAÇÃO (CRÍTICO): NÃO invente questões, alternativas, textos-base, banca, cidade, ano ou qualquer conteúdo que não esteja literalmente presente no OCR fornecido.",
+    "Se o OCR estiver ilegível/incompleto para uma questão, NÃO chute: omita a questão ou deixe campos como null.",
     "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
     "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
     "REGRAS:",
@@ -379,7 +427,9 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const mergedAll = mergeFromChunks(chunks);
   const baseMap = mergedAll.baseMapLocal;
   const baseApplies = mergedAll.baseAppliesLocal;
-  const questions = mergedAll.questionsLocal;
+  const questionsMerged = mergedAll.questionsLocal;
+  const grounded = filterHallucinatedQuestions(questionsMerged, corpusNorm);
+  const questions = grounded.kept;
 
   if (!questions.length) {
     await prisma.pDFImport.update({
@@ -387,8 +437,12 @@ export async function processImportAiJob(importId: string): Promise<void> {
       data: {
         status: "FAILED",
         processingError:
-          "O modelo não retornou questões estruturadas (0 itens após mesclar chunks). Verifique OCR/qualidade do PDF e tente novamente.".slice(0, 1500),
-        processingLog: JSON.stringify({ pipeline: "ai", llmChunking: { chunkSize, overlap, pages: pageLines.length, chunkSummaries } }),
+          "A IA não retornou questões confiáveis (0 itens após validação anti-alucinação). Verifique OCR/qualidade do PDF e tente novamente.".slice(0, 1500),
+        processingLog: JSON.stringify({
+          pipeline: "ai",
+          llmChunking: { chunkSize, overlap, pages: pageLines.length, chunkSummaries },
+          grounding: { merged: questionsMerged.length, kept: grounded.kept.length, dropped: grounded.dropped.slice(0, 30) },
+        }),
       },
     });
     return;
