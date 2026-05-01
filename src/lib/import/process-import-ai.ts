@@ -66,19 +66,36 @@ function reconstructReadingOrder(pages: Array<{ pageNumber: number | null; parag
       .filter((x) => x.text.trim().length > 0 && x.midY != null)
       .filter((x) => (x.midY ?? 0) > 0.06 && (x.midY ?? 1) < 0.94);
 
-    const left = withPos.filter((x) => (x.midX ?? 0.5) < 0.45).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
-    const right = withPos.filter((x) => (x.midX ?? 0.5) > 0.55).sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
-    const oneCol = [...withPos].sort((a, b) => {
-      const dy = (a.midY ?? 0) - (b.midY ?? 0);
-      if (Math.abs(dy) > 0.002) return dy;
-      return (a.midX ?? 0.5) - (b.midX ?? 0.5);
-    });
+    // Detecta 2 colunas: se há parágrafos claramente na coluna esquerda (midX<0.40)
+    // e na direita (midX>0.60), os itens do centro (cabeçalhos / separadores) são
+    // atribuídos à coluna mais próxima — sem descartar ninguém.
+    const leftItems  = withPos.filter((x) => (x.midX ?? 0.5) < 0.40);
+    const rightItems = withPos.filter((x) => (x.midX ?? 0.5) > 0.60);
+    const midItems   = withPos.filter((x) => (x.midX ?? 0.5) >= 0.40 && (x.midX ?? 0.5) <= 0.60);
+    const likelyTwoCols = leftItems.length >= 3 && rightItems.length >= 3;
 
-    const likelyTwoCols = left.length >= 5 && right.length >= 5;
-    const joined = (likelyTwoCols ? [...left, ...right] : oneCol)
-      .map((x) => x.text.trim())
-      .filter(Boolean)
-      .join("\n");
+    let joined: string;
+    if (likelyTwoCols) {
+      // Cabeçalhos centrais e similares vão no início (menores midY) da coluna esquerda
+      const leftFull  = [...midItems.filter((x) => (x.midX ?? 0.5) <= 0.5), ...leftItems]
+        .sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
+      const rightFull = [...midItems.filter((x) => (x.midX ?? 0.5) > 0.5), ...rightItems]
+        .sort((a, b) => (a.midY ?? 0) - (b.midY ?? 0));
+      joined = [...leftFull, ...rightFull]
+        .map((x) => x.text.trim())
+        .filter(Boolean)
+        .join("\n");
+    } else {
+      joined = [...withPos]
+        .sort((a, b) => {
+          const dy = (a.midY ?? 0) - (b.midY ?? 0);
+          if (Math.abs(dy) > 0.002) return dy;
+          return (a.midX ?? 0.5) - (b.midX ?? 0.5);
+        })
+        .map((x) => x.text.trim())
+        .filter(Boolean)
+        .join("\n");
+    }
     out.push({ page: p.pageNumber, text: joined });
   }
   return out;
@@ -247,24 +264,45 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const minQuestions = Number.isFinite(minQuestionsEnv) && minQuestionsEnv > 0 ? minQuestionsEnv : 20;
 
   const system = [
-    "Você é um extrator de provas de concurso.",
-    "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
-    "IMPORTANTE: você receberá apenas um SUBCONJUNTO de páginas. Extraia somente as questões que aparecem nesse trecho.",
-    "ANTI-ALUCINAÇÃO (CRÍTICO): NÃO invente questões, alternativas, textos-base, banca, cidade, ano ou qualquer conteúdo que não esteja literalmente presente no OCR fornecido.",
-    "Se o OCR estiver ilegível/incompleto para uma questão, NÃO chute: omita a questão ou deixe campos como null.",
-    "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-    "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
-    "REGRAS:",
-    "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
-    "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria. Para CADA questão, preencha 'materia' com a matéria vigente.",
-    "- ASSUNTO: para cada questão, preencha o campo 'assunto' com o tópico específico abordado.",
-    "- meta: preencha banca, concurso, cargo, ano, city (pode omitir se não estiver no trecho).",
-    "- NÃO cole texto-base dentro do enunciado. Se houver texto-base compartilhado, crie baseTexts e aponte baseTextId.",
-    "- Ignorar redação/discursivas.",
-    "- Manter a ordem correta das questões.",
-    "- Alternativas: normalizar letras A,B,C,D,E.",
-    "- Numeração: reconhecer padrões (1., 01, Questão 1).",
-    "- Cada questão DEVE ter 'number' (inteiro). Não invente números.",
+    "Você é um extrator especializado de provas de concurso público.",
+    "Receberá texto OCR em ordem de leitura (já organizado por páginas e colunas).",
+    "IMPORTANTE: você receberá apenas um TRECHO do PDF. Extraia SOMENTE as questões que aparecem nesse trecho.",
+    "",
+    "═══ COMO IDENTIFICAR QUESTÕES vs ALTERNATIVAS ═══",
+    "• Uma QUESTÃO começa com número seguido de ponto, parêntese ou travessão: '1.', '01)', 'Questão 1', '1 -'.",
+    "  O corpo da questão (enunciado) vem logo após o número.",
+    "• Uma ALTERNATIVA pertence à questão anterior e começa com LETRA seguida de ponto/parêntese: 'A)', 'a.', 'B)', etc.",
+    "  NUNCA trate uma alternativa como se fosse uma questão nova.",
+    "• Se um parágrafo começa com letra + ) ou letra + . e o conteúdo é curto (opção de múltipla escolha), é ALTERNATIVA.",
+    "",
+    "═══ ALTERNATIVAS (CRÍTICO) ═══",
+    "• Cada questão de múltipla escolha tem EXATAMENTE as alternativas que aparecem no PDF (geralmente A, B, C, D, E — 5 alternativas).",
+    "• Extraia TODAS as alternativas visíveis: A, B, C, D e E. NUNCA pare na D se houver E.",
+    "• Se a prova vai até alternativa E, todas as questões devem ter 5 alternativas em 'alternatives'.",
+    "• Não omita alternativas por limitação de contexto — elas são obrigatórias.",
+    "",
+    "═══ ANTI-REPETIÇÃO (CRÍTICO) ═══",
+    "• Cada número de questão deve aparecer UMA ÚNICA VEZ no array 'questions'.",
+    "• Se o mesmo número aparecer novamente no OCR (cabeçalho repetido, quebra de coluna), ignore a segunda ocorrência.",
+    "",
+    "═══ ANTI-ALUCINAÇÃO (CRÍTICO) ═══",
+    "• NÃO invente questões, alternativas, textos-base, banca, cidade, ano ou qualquer conteúdo.",
+    "• Se o OCR estiver ilegível para uma questão, omita-a ou deixe campos como null.",
+    "",
+    "TAREFA: retornar APENAS JSON válido sem markdown no formato exato:",
+    "{ \"meta\": { \"city\"?: string, \"concurso\"?: string, \"ano\"?: number|null, \"banca\"?: string, \"cargo\"?: string, \"materia\"?: string },",
+    "  \"baseTexts\": [{\"id\": string, \"text\": string, \"appliesToQuestionNumbers\"?: number[]}],",
+    "  \"questions\": [{\"number\": number, \"statement\": string, \"baseTextId\"?: string, \"materia\"?: string, \"assunto\"?: string,",
+    "                  \"alternatives\": [{\"letter\": string, \"text\": string}], \"correctAnswerLetter\"?: string|null, \"commentary\"?: string}] }",
+    "",
+    "REGRAS ADICIONAIS:",
+    "- GABARITO: se existir seção 'TEXTO DO GABARITO', use-a para preencher correctAnswerLetter pelo número da questão.",
+    "- MATÉRIA: em provas com várias disciplinas, leia o título de seção logo antes das questões para preencher 'materia'.",
+    "- ASSUNTO: preencha o tópico específico abordado em cada questão.",
+    "- Texto-base compartilhado: crie baseTexts com id único e aponte baseTextId. Não cole o texto-base dentro do enunciado.",
+    "- Ignorar questões dissertativas/redação.",
+    "- Numeração: reconhecer padrões '1.', '01', 'Questão 1', '1 -'.",
+    "- 'number' deve ser inteiro positivo. Não invente números.",
   ].join("\n");
 
   const yearHint = pdfImport.year;

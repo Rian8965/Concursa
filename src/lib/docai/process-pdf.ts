@@ -152,39 +152,13 @@ async function processPdfViaBatchDocumentAi(params: {
   throw new Error(`JSON do Document AI não contém campo \`document\` (ex.: ${picked.object}).`);
 }
 
-/**
- * Processa um PDF no Document AI retornando o `document` completo (com páginas/layout).
- *
- * - Produção (quando `storedPdfPath` aponta para GCS): usa Batch (suporta PDFs > 30 páginas).
- * - Dev/local: tenta online; se estourar o limite, cai no fallback existente (chunking).
- */
-export async function processPdfWithDocumentAi(params: {
-  client: DocumentProcessorServiceClient;
-  processorName: string;
-  storedPdfPath: string | null | undefined;
-  pdfBytes: Buffer;
-  importIdForOutputPrefix?: string;
-}): Promise<DocAiProcessed> {
-  const { client, processorName, storedPdfPath, pdfBytes, importIdForOutputPrefix } = params;
+const ONLINE_PAGE_LIMIT = 28; // margem de segurança abaixo do limite real (30)
 
-  const inputGs = storedPdfPath ? toGsUri(storedPdfPath) : null;
-  if (storedPdfPath && inputGs) {
-    const outRef = parseGcsUri(storedPdfPath.replace(/^gs:\/\//, "gcs://"));
-    if (!outRef) throw new Error("storedPdfPath inválido para Batch.");
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const prefix = `docai/outputs/${importIdForOutputPrefix ?? "import"}/${stamp}/`;
-    const outputGs = `gs://${outRef.bucket}/${prefix}`;
-    const document = await processPdfViaBatchDocumentAi({
-      client,
-      processorName,
-      inputGsUri: inputGs,
-      outputGsUri: outputGs,
-    });
-    const pageCount = Array.isArray((document as any).pages) ? (document as any).pages.length : null;
-    return { document, mode: "batch", pageCount };
-  }
-
-  // Fallback local/dev (sem GCS): online; se limite estourar, usa o helper (chunking) pra não quebrar dev.
+async function processPdfViaOnline(
+  client: DocumentProcessorServiceClient,
+  processorName: string,
+  pdfBytes: Buffer,
+): Promise<DocAiProcessed> {
   try {
     const [res] = await client.processDocument({
       name: processorName,
@@ -200,5 +174,61 @@ export async function processPdfWithDocumentAi(params: {
     const extracted = await extractPdfFullTextWithDocumentAi(client, processorName, pdfBytes);
     return { document: extracted.document, mode: extracted.usedChunking ? "online_chunked" : "online", pageCount: extracted.pageCount };
   }
+}
+
+/**
+ * Processa um PDF no Document AI retornando o `document` completo (com páginas/layout).
+ *
+ * Estratégia automática:
+ * - PDFs ≤ ONLINE_PAGE_LIMIT páginas → online (rápido, ~10–30s).
+ * - PDFs maiores via GCS (produção) → Batch (~2–5min, sem limite de páginas).
+ * - Dev/local sem GCS grande → chunking via extract-pdf-fulltext.
+ */
+export async function processPdfWithDocumentAi(params: {
+  client: DocumentProcessorServiceClient;
+  processorName: string;
+  storedPdfPath: string | null | undefined;
+  pdfBytes: Buffer;
+  importIdForOutputPrefix?: string;
+}): Promise<DocAiProcessed> {
+  const { client, processorName, storedPdfPath, pdfBytes, importIdForOutputPrefix } = params;
+
+  // Conta páginas do PDF antes de decidir o modo.
+  let pageCount: number | null = null;
+  try {
+    const { PDFDocument } = await import("pdf-lib");
+    const src = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    pageCount = src.getPageCount();
+  } catch {
+    // Se não conseguir contar, assume "grande" pra ser seguro.
+  }
+
+  const isSmall = pageCount !== null && pageCount <= ONLINE_PAGE_LIMIT;
+
+  // PDFs pequenos: sempre online (rápido, sem GCS, sem quota de Batch).
+  if (isSmall) {
+    return processPdfViaOnline(client, processorName, pdfBytes);
+  }
+
+  // PDFs grandes via GCS (produção): Batch.
+  const inputGs = storedPdfPath ? toGsUri(storedPdfPath) : null;
+  if (storedPdfPath && inputGs) {
+    const outRef = parseGcsUri(storedPdfPath.replace(/^gs:\/\//, "gcs://"));
+    if (!outRef) throw new Error("storedPdfPath inválido para Batch.");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const prefix = `docai/outputs/${importIdForOutputPrefix ?? "import"}/${stamp}/`;
+    const outputGs = `gs://${outRef.bucket}/${prefix}`;
+    const document = await processPdfViaBatchDocumentAi({
+      client,
+      processorName,
+      inputGsUri: inputGs,
+      outputGsUri: outputGs,
+    });
+    const batchPageCount = Array.isArray((document as any).pages) ? (document as any).pages.length : null;
+    return { document, mode: "batch", pageCount: batchPageCount };
+  }
+
+  // Fallback local/dev (PDF grande sem GCS): online com chunking automático.
+  return processPdfViaOnline(client, processorName, pdfBytes);
 }
 
