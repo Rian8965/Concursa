@@ -233,7 +233,6 @@ export async function processImportAiJob(importId: string): Promise<void> {
   }
 
   const gabaritoMap = parseGabaritoMap(gabaritoOcrText);
-  const gabaritoOcrForLlm = gabaritoOcrText.length > 100_000 ? gabaritoOcrText.slice(0, 100_000) : gabaritoOcrText;
 
   const doc = processed.document as unknown as {
     pages?: Array<{ pageNumber?: number; paragraphs?: Array<{ layout?: DocaiLayout }> }>;
@@ -289,14 +288,18 @@ export async function processImportAiJob(importId: string): Promise<void> {
     "• NÃO invente questões, alternativas, textos-base, banca, cidade, ano ou qualquer conteúdo.",
     "• Se o OCR estiver ilegível para uma questão, omita-a ou deixe campos como null.",
     "",
+    "═══ GABARITO (CRÍTICO) ═══",
+    "• NÃO tente adivinhar ou inferir a resposta correta de cada questão.",
+    "• O campo 'correctAnswerLetter' deve ser SEMPRE omitido ou null — o gabarito oficial é processado separadamente pelo sistema.",
+    "• Sua função é extrair o CONTEÚDO da prova (questões e alternativas), NÃO determinar respostas corretas.",
+    "",
     "TAREFA: retornar APENAS JSON válido sem markdown no formato exato:",
     "{ \"meta\": { \"city\"?: string, \"concurso\"?: string, \"ano\"?: number|null, \"banca\"?: string, \"cargo\"?: string, \"materia\"?: string },",
     "  \"baseTexts\": [{\"id\": string, \"text\": string, \"appliesToQuestionNumbers\"?: number[]}],",
     "  \"questions\": [{\"number\": number, \"statement\": string, \"baseTextId\"?: string, \"materia\"?: string, \"assunto\"?: string,",
-    "                  \"alternatives\": [{\"letter\": string, \"text\": string}], \"correctAnswerLetter\"?: string|null, \"commentary\"?: string}] }",
+    "                  \"alternatives\": [{\"letter\": string, \"text\": string}] }] }",
     "",
     "REGRAS ADICIONAIS:",
-    "- GABARITO: se existir seção 'TEXTO DO GABARITO', use-a para preencher correctAnswerLetter pelo número da questão.",
     "- MATÉRIA: em provas com várias disciplinas, leia o título de seção logo antes das questões para preencher 'materia'.",
     "- ASSUNTO: preencha o tópico específico abordado em cada questão.",
     "- Texto-base compartilhado: crie baseTexts com id único e aponte baseTextId. Não cole o texto-base dentro do enunciado.",
@@ -337,9 +340,6 @@ export async function processImportAiJob(importId: string): Promise<void> {
         `Extraia a prova abaixo em JSON (somente páginas ${fromPage}–${toPage} deste trecho).`,
         "TEXTO DA PROVA (SUBCONJUNTO):",
         slice,
-        gabaritoOcrForLlm
-          ? `\n\n---\nTEXTO DO GABARITO (OCR — priorize para correctAnswerLetter):\n${gabaritoOcrForLlm}\n`
-          : "",
       ].join("\n\n");
 
       // Retry local: se falhar/truncar, tenta mais 1x com instrução mais “curta” (menos meta) para caber.
@@ -598,14 +598,9 @@ export async function processImportAiJob(importId: string): Promise<void> {
       })),
     );
 
-    const letterFromLlm = q?.correctAnswerLetter
-      ? String(q.correctAnswerLetter).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1)
-      : (q?.correct_answer ? String(q.correct_answer).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 1) : null);
-
     const resolved = resolveCorrectAnswerForImportedQuestion({
       questionNumber: number,
       alternatives,
-      letterFromLlm: letterFromLlm || null,
       gabaritoMap,
     });
 

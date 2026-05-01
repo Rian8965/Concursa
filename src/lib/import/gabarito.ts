@@ -92,8 +92,9 @@ export function pickLetterFromGabaritoMap(
 export function resolveCorrectAnswerForImportedQuestion(args: {
   questionNumber: number | null;
   alternatives: Array<{ letter: string; content: string }>;
-  letterFromLlm: string | null;
   gabaritoMap: Map<number, string>;
+  /** @deprecated Não usado — a resposta correta só vem do gabarito oficial. */
+  letterFromLlm?: string | null;
 }): {
   correctAnswer: string | null;
   answerSource: GabaritoResolveSource;
@@ -102,6 +103,8 @@ export function resolveCorrectAnswerForImportedQuestion(args: {
   const letters = args.alternatives.map((a) => String(a.letter ?? "").trim().toUpperCase().slice(0, 1)).filter(Boolean);
   const valid = new Set(letters);
 
+  // Fonte única de verdade: gabarito oficial (arquivo separado ou seção no PDF).
+  // Se não encontrado, retorna null — a questão fica para revisão manual.
   const fromMap = pickLetterFromGabaritoMap(args.questionNumber, letters, args.gabaritoMap);
   if (fromMap.letter && valid.has(fromMap.letter)) {
     return {
@@ -109,11 +112,6 @@ export function resolveCorrectAnswerForImportedQuestion(args: {
       answerSource: "gabarito",
       gabaritoMatchNumber: fromMap.matchedKey,
     };
-  }
-
-  const L = args.letterFromLlm ? args.letterFromLlm.toUpperCase().slice(0, 1) : null;
-  if (L && valid.has(L)) {
-    return { correctAnswer: L, answerSource: "llm", gabaritoMatchNumber: null };
   }
 
   return { correctAnswer: null, answerSource: null, gabaritoMatchNumber: null };
