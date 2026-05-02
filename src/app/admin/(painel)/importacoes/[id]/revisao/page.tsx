@@ -3,16 +3,18 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, AlertCircle, Trash2, Copy, Check, X, Pencil } from "lucide-react";
+import { Save, AlertCircle, Trash2, Copy, Check, X, Pencil, ScanText, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportLinkDrawer } from "@/components/admin/ImportLinkDrawer";
 import type { PdfLinkType } from "@/components/admin/ImportPdfMarkupPanel";
 import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdentifyAlternativesDrawer";
 import { TopBar } from "@/components/admin/review/TopBar";
+import { ReinterpretQuestionModal } from "@/components/admin/review/ReinterpretQuestionModal";
 import { StatsRow } from "@/components/admin/review/StatsRow";
 import { PdfQuestionLinkAssets } from "@/components/admin/review/PdfQuestionLinkAssets";
 import { RichTextArea } from "@/components/admin/RichTextArea";
+import { FormattedQuestionText } from "@/components/student/FormattedQuestionText";
 import {
   analyzeEnunciadoHeuristic,
   getDependencyBlockUserMessage,
@@ -62,6 +64,7 @@ interface ImportedQ {
   rawText?: string | null;
   hasImage?: boolean;
   imageUrl?: string | null;
+  sourcePosition?: number | null;
 }
 
 type AiMetaBlock = {
@@ -185,6 +188,8 @@ function parseSuggestedSubject(rawText?: string | null): { subject: string; conf
 interface ImportData {
   id: string;
   originalFilename: string;
+  originalFilenameGabarito?: string | null;
+  gabaritoInSamePdf?: boolean;
   status: string;
   totalExtracted: number;
   storedPdfPath?: string | null;
@@ -380,11 +385,27 @@ export default function RevisaoImportacaoPage() {
   const [applyAlternativesMode, setApplyAlternativesMode] = useState(false);
   const unsavedRef = useRef(false);
   const [activeAltLetter, setActiveAltLetter] = useState("A");
+  const gabaritoFileRef = useRef<HTMLInputElement>(null);
+  const [gabaritoBusy, setGabaritoBusy] = useState(false);
+  const [gabaritoFromProvaBusy, setGabaritoFromProvaBusy] = useState(false);
+  const [reinterpretQuestionId, setReinterpretQuestionId] = useState<string | null>(null);
 
   const refreshImport = useCallback(async () => {
     const impData = await fetch(`/api/admin/imports/${id}`).then((r) => r.json());
     setImp(impData.import);
   }, [id]);
+
+  const orderedImportedQuestions = useMemo(() => {
+    if (!imp) return [];
+    const qs = [...imp.importedQuestions];
+    qs.sort((a, b) => {
+      const pa = a.sourcePosition ?? 1_000_000_000;
+      const pb = b.sourcePosition ?? 1_000_000_000;
+      if (pa !== pb) return pa - pb;
+      return a.id.localeCompare(b.id);
+    });
+    return qs;
+  }, [imp]);
 
   const patchImportedReview = useCallback(
     async (questionId: string, patch: Parameters<typeof mergeReviewIntoRawText>[1]) => {
@@ -900,6 +921,85 @@ export default function RevisaoImportacaoPage() {
     await refreshImport();
   }
 
+  async function moveQuestionToPosition(questionId: string, currentPosition: number) {
+    if (!imp) return;
+    const total = orderedImportedQuestions.length;
+    const raw = window.prompt(
+      `Mover a questão na posição ${currentPosition} para qual posição? (1 a ${total})`,
+      String(currentPosition),
+    );
+    if (raw == null || !String(raw).trim()) return;
+    const to = parseInt(String(raw).trim(), 10);
+    if (!Number.isFinite(to) || to < 1 || to > total) {
+      toast.error(`Informe um número inteiro entre 1 e ${total}.`);
+      return;
+    }
+    if (to === currentPosition) {
+      toast.info("A posição informada é a mesma da questão atual.");
+      return;
+    }
+    const other = orderedImportedQuestions[to - 1];
+    const otherDraft = other ? (drafts[other.id] ?? other) : null;
+    const otherNum = otherDraft ? parseAiMeta(otherDraft.rawText)?.number : null;
+    const msg =
+      `Confirma mover a questão da posição ${currentPosition} para a posição ${to}?\n\n` +
+      `A questão que estava na posição ${to}` +
+      (otherNum != null ? ` (Nº ${otherNum} no PDF)` : "") +
+      ` passará a ocupar a posição ${currentPosition}.`;
+    if (!confirm(msg)) return;
+    const res = await fetch(`/api/admin/imports/${id}/imported-questions/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromPosition: currentPosition, toPosition: to }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(typeof data.error === "string" ? data.error : "Falha ao reordenar");
+      return;
+    }
+    toast.success("Ordem das questões atualizada.");
+    await refreshImport();
+  }
+
+  async function postGabaritoFormData(fd: FormData) {
+    setGabaritoBusy(true);
+    try {
+      const res = await fetch(`/api/admin/imports/${id}/gabarito`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Falha ao processar gabarito");
+        return;
+      }
+      toast.success("Gabarito reaplicado às questões extraídas.");
+      await refreshImport();
+    } finally {
+      setGabaritoBusy(false);
+    }
+  }
+
+  async function reinterpretGabaritoFromProvaPdf() {
+    if (
+      !confirm(
+        "Extrair o gabarito a partir do PDF da prova e reinterpretar todas as respostas já extraídas?\n\nO processo pode levar mais de um minuto (OCR completo da prova).",
+      )
+    ) {
+      return;
+    }
+    setGabaritoFromProvaBusy(true);
+    try {
+      const res = await fetch(`/api/admin/imports/${id}/gabarito?fromProva=1`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Falha ao extrair ou aplicar gabarito da prova");
+        return;
+      }
+      toast.success("Gabarito da prova processado e aplicado.");
+      await refreshImport();
+    } finally {
+      setGabaritoFromProvaBusy(false);
+    }
+  }
+
   async function deleteQuestion(questionId: string) {
     if (!confirm("Excluir esta questão importada?")) return;
     const res = await fetch(`/api/admin/imports/${id}/imported-questions/${questionId}`, { method: "DELETE" });
@@ -1014,15 +1114,16 @@ export default function RevisaoImportacaoPage() {
 
   async function mergeWithNext(questionId: string) {
     if (!imp) return;
-    const idx = imp.importedQuestions.findIndex((q) => q.id === questionId);
-    if (idx === -1 || idx >= imp.importedQuestions.length - 1) {
+    const qs = orderedImportedQuestions;
+    const idx = qs.findIndex((q) => q.id === questionId);
+    if (idx === -1 || idx >= qs.length - 1) {
       toast.error("Não há próxima questão para unir.");
       return;
     }
-    const nextQ = imp.importedQuestions[idx + 1];
+    const nextQ = qs[idx + 1];
     if (!confirm("Unir com a próxima questão? Isso vai mover o enunciado da próxima para esta e excluir a próxima.")) return;
 
-    const cur = drafts[questionId] ?? imp.importedQuestions[idx];
+    const cur = drafts[questionId] ?? qs[idx];
     const nxt = drafts[nextQ.id] ?? nextQ;
     const merged = `${(cur.content ?? "").trim()}\n\n${(nxt.content ?? "").trim()}`.trim();
 
@@ -1040,11 +1141,6 @@ export default function RevisaoImportacaoPage() {
   const approved = useMemo(() => Object.values(decisions).filter((d) => d === "approve").length, [decisions]);
   const rejected = useMemo(() => Object.values(decisions).filter((d) => d === "reject").length, [decisions]);
   const pending = useMemo(() => Object.values(decisions).filter((d) => d === "pending").length, [decisions]);
-
-  const qopts = useMemo(() => {
-    const qs = imp?.importedQuestions ?? [];
-    return qs.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }));
-  }, [imp?.importedQuestions]);
 
   const globalMetaDisplay = useMemo(() => {
     if (!imp) return null;
@@ -1069,7 +1165,7 @@ export default function RevisaoImportacaoPage() {
   }, [imp]);
 
   const filteredQuestions = useMemo(() => {
-    const all = imp?.importedQuestions ?? [];
+    const all = orderedImportedQuestions;
     const base = all.filter((q) => {
       const d = drafts[q.id] ?? q;
       const decision = decisions[q.id] ?? "pending";
@@ -1146,10 +1242,10 @@ export default function RevisaoImportacaoPage() {
       const hay = `${idx + 1} ${q.id} ${num} ${ans} ${d.content ?? ""} ${metaHay} ${rowHay}`.toLowerCase();
       return hay.includes(s);
     });
-  }, [onlyNeedsReview, filterKey, imp, drafts, search, globalMetaDisplay, llmById, decisions, mergedDepByQuestion]);
+  }, [onlyNeedsReview, filterKey, imp, orderedImportedQuestions, drafts, search, globalMetaDisplay, llmById, decisions, mergedDepByQuestion]);
 
   const gabaritoOverview = useMemo(() => {
-    const all = imp?.importedQuestions ?? [];
+    const all = orderedImportedQuestions;
     return all
       .map((q, idx) => {
         const d = drafts[q.id] ?? q;
@@ -1166,7 +1262,7 @@ export default function RevisaoImportacaoPage() {
         return { id: q.id, num, answer, status };
       })
       .sort((a, b) => a.num - b.num);
-  }, [imp?.importedQuestions, drafts, decisions]);
+  }, [orderedImportedQuestions, drafts, decisions]);
 
   const goToQuestion = useCallback((qid: string) => {
     const el = document.getElementById(`iq-${qid}`);
@@ -1242,6 +1338,32 @@ export default function RevisaoImportacaoPage() {
         chunkProgress={chunkProgress}
         saveDisabled={reviewSaveBlock.blocked}
         saveHint={reviewSaveBlock.blocked ? reviewSaveBlock.hint : undefined}
+        documentsToolbar={{
+          provaPdfUrl: imp.storedPdfPath ? `/api/admin/imports/${id}/pdf?attachment=1` : null,
+          gabaritoPdfUrl:
+            imp.originalFilenameGabarito?.trim() || imp.gabaritoInSamePdf
+              ? `/api/admin/imports/${id}/gabarito`
+              : null,
+          canDownloadGabarito: Boolean(imp.originalFilenameGabarito?.trim()) || Boolean(imp.gabaritoInSamePdf),
+          onUploadGabaritoClick: () => gabaritoFileRef.current?.click(),
+          gabaritoBusy,
+          onGabaritoFromProva: reinterpretGabaritoFromProvaPdf,
+          showGabaritoFromProva: Boolean(imp.storedPdfPath),
+          gabaritoFromProvaBusy,
+        }}
+      />
+
+      <input
+        ref={gabaritoFileRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        aria-hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void postGabaritoFormData((() => { const fd = new FormData(); fd.append("gabarito", f); return fd; })());
+        }}
       />
 
       <StatsRow total={imp.importedQuestions.length} approved={approved} rejected={rejected} pending={pending} />
@@ -1373,7 +1495,7 @@ export default function RevisaoImportacaoPage() {
           const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
           const warningsRaw = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
-          const qi = imp.importedQuestions.findIndex((x) => x.id === q.id) + 1;
+          const qi = orderedImportedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
           const dep = mergedDepByQuestion[q.id];
@@ -1569,9 +1691,11 @@ export default function RevisaoImportacaoPage() {
                   </div>
 
                   {!isExpanded && (
-                    <p className="line-clamp-3 min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-secondary)]">
-                      {draft.content}
-                    </p>
+                    <FormattedQuestionText
+                      text={draft.content}
+                      as="div"
+                      className="line-clamp-3 min-w-0 break-words text-sm leading-relaxed text-[var(--text-secondary)]"
+                    />
                   )}
                 </div>
 
@@ -2147,6 +2271,20 @@ export default function RevisaoImportacaoPage() {
                           </button>
                           <button
                             type="button"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50/80 px-4 text-sm font-semibold text-violet-900 shadow-sm"
+                            onClick={() => setReinterpretQuestionId(q.id)}
+                          >
+                            <ScanText className="h-4 w-4 shrink-0" /> Reinterpretar questão
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
+                            onClick={() => moveQuestionToPosition(q.id, qi)}
+                          >
+                            <ArrowRightLeft className="h-4 w-4 shrink-0" /> Mover posição…
+                          </button>
+                          <button
+                            type="button"
                             className="btn btn-ghost inline-flex min-h-[46px] w-full items-center justify-center rounded-2xl border border-black/[0.1] bg-white px-4 text-sm font-semibold shadow-sm"
                             onClick={() => splitQuestionAuto(q.id)}
                           >
@@ -2237,7 +2375,7 @@ export default function RevisaoImportacaoPage() {
         }}
         importId={id}
         pdfAvailable={Boolean(imp.storedPdfPath)}
-        questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
+        questions={orderedImportedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
         assets={imp.importAssets ?? []}
         selectedQuestionId={selectedQ}
         onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
@@ -2271,7 +2409,7 @@ export default function RevisaoImportacaoPage() {
         onClose={() => setAltDrawerOpen(false)}
         importId={id}
         pdfAvailable={Boolean(imp.storedPdfPath)}
-        questions={imp.importedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
+        questions={orderedImportedQuestions.map((q, i) => ({ id: q.id, label: `Questão ${i + 1}` }))}
         assets={imp.importAssets ?? []}
         selectedQuestionId={selectedQ}
         onSelectedQuestionIdChange={(qid) => setSelectedQ(qid)}
@@ -2279,6 +2417,24 @@ export default function RevisaoImportacaoPage() {
         onApply={async (mode, alternatives) => applyAlternativesFromAi(selectedQ, mode, alternatives)}
         initialPage={altDrawerStartPage}
       />
+
+      {reinterpretQuestionId ? (
+        <ReinterpretQuestionModal
+          open
+          onClose={() => setReinterpretQuestionId(null)}
+          importId={id}
+          questionId={reinterpretQuestionId}
+          initialPage={resolvePdfStartPageForQuestion(
+            drafts[reinterpretQuestionId] ??
+              imp.importedQuestions.find((x) => x.id === reinterpretQuestionId)!,
+            imp.importAssets,
+          )}
+          onApplied={async () => {
+            setReinterpretQuestionId(null);
+            await refreshImport();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

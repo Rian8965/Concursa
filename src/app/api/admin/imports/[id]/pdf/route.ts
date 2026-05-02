@@ -7,7 +7,7 @@ function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user.role)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -39,11 +39,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Arquivo não encontrado no storage (pode ter expirado ou sido removido)." }, { status: 404 });
   }
 
+  const attachment = new URL(req.url).searchParams.get("attachment") === "1";
+  const fname = imp.originalFilename || "prova.pdf";
+
   return new NextResponse(new Uint8Array(buf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${encodeURIComponent(imp.originalFilename || "prova.pdf")}"`,
+      "Content-Disposition": `${attachment ? "attachment" : "inline"}; filename="${encodeURIComponent(fname)}"`,
       "Cache-Control": "private, max-age=3600",
     },
   });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils/cn";
+import { editorHtmlToRichMarkdown, importedTextToSafeHtml } from "@/lib/format/question-rich-text";
 
 type Props = {
   value: string;
@@ -14,39 +15,96 @@ type Props = {
   ariaLabel?: string;
 };
 
-type FormatToken = {
-  title: string;
-  label: string;
-  open: string;
-  close: string;
-  /** Símbolo exibido no botão */
-  symbol?: React.ReactNode;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-};
+/** Mesmas classes visuais que `FormattedQuestionText` (aluno), + realce de negrito/sublinhado/tachado no modo edição. */
+const WYSIWYG_MARKDOWN_CLASSES = cn(
+  "question-formatted-text",
+  "[&_.question-text-mark]:rounded-sm [&_.question-text-mark]:bg-amber-200/90 [&_.question-text-mark]:px-0.5 [&_.question-text-mark]:text-inherit",
+  "dark:[&_.question-text-mark]:bg-amber-400/35",
+  "[&_strong]:font-semibold [&_strong]:text-[#111827] dark:[&_strong]:text-[var(--text-primary)]",
+  "[&_b]:font-semibold [&_b]:text-[#111827] dark:[&_b]:text-[var(--text-primary)]",
+  "[&_u]:underline [&_u]:decoration-solid [&_u]:decoration-auto [&_u]:underline-offset-2",
+  "[&_em]:italic",
+  "[&_i]:italic",
+  "[&_del]:line-through [&_s]:line-through [&_strike]:line-through",
+);
 
-const FORMAT_TOKENS: FormatToken[] = [
-  { title: "Negrito (Ctrl+B)", label: "N", open: "**", close: "**", bold: true },
-  { title: "Itálico (Ctrl+I)", label: "I", open: "*", close: "*", italic: true },
-  { title: "Sublinhado (Ctrl+U)", label: "S̲", open: "__", close: "__", underline: true },
-  { title: "Tachado", label: "T̶", open: "~~", close: "~~" },
-  { title: "Grifado / Destaque", label: "H", open: "==", close: "==" },
-];
+function selectionInsideEditor(sel: Selection | null, editor: HTMLElement): boolean {
+  if (!sel?.rangeCount) return false;
+  const r = sel.getRangeAt(0);
+  return editor.contains(r.commonAncestorContainer);
+}
 
-/** Renderiza markdown simples como HTML inline para pré-visualização */
-export function renderMarkdownInline(text: string): string {
-  return text
-    .replace(/==(.*?)==/g, '<mark style="background:#FEF08A;border-radius:2px;padding:0 2px">$1</mark>')
-    .replace(/~~(.*?)~~/g, "<s>$1</s>")
-    .replace(/__(.*?)__/g, "<u>$1</u>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>");
+function insertPlainText(editor: HTMLElement, text: string) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !selectionInsideEditor(sel, editor)) {
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+  const s2 = window.getSelection();
+  if (!s2?.rangeCount) return;
+  const r = s2.getRangeAt(0);
+  r.deleteContents();
+  const tn = document.createTextNode(text.replace(/\r\n/g, "\n"));
+  r.insertNode(tn);
+  r.setStartAfter(tn);
+  r.collapse(true);
+  s2.removeAllRanges();
+  s2.addRange(r);
+}
+
+function toggleHighlightMark(editor: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !selectionInsideEditor(sel, editor)) return;
+
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+
+  let anchorEl = range.commonAncestorContainer;
+  if (anchorEl.nodeType === Node.TEXT_NODE) anchorEl = anchorEl.parentElement!;
+  const existing = anchorEl instanceof Element ? anchorEl.closest("mark.question-text-mark") : null;
+
+  if (existing && editor.contains(existing)) {
+    const parent = existing.parentNode;
+    if (!parent) return;
+    while (existing.firstChild) parent.insertBefore(existing.firstChild, existing);
+    parent.removeChild(existing);
+    parent.normalize();
+    return;
+  }
+
+  try {
+    const mark = document.createElement("mark");
+    mark.className = "question-text-mark";
+    range.surroundContents(mark);
+  } catch {
+    try {
+      const contents = range.extractContents();
+      const mark = document.createElement("mark");
+      mark.className = "question-text-mark";
+      mark.appendChild(contents);
+      range.insertNode(mark);
+    } catch {
+      /* seleção inválida */
+    }
+  }
+}
+
+function execInEditor(editor: HTMLElement, command: string) {
+  editor.focus();
+  try {
+    document.execCommand(command, false);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
- * Textarea com barra de ferramentas para aplicar formatação markdown.
- * O conteúdo é armazenado em markdown e renderizado como HTML na pré-visualização.
+ * Editor WYSIWYG: mesma aparência que o aluno vê (`importedTextToSafeHtml`),
+ * armazena o mesmo texto com marcadores leves (sem exibir ** ou __ na tela).
  */
 export function RichTextArea({
   value,
@@ -57,81 +115,80 @@ export function RichTextArea({
   disabled,
   ariaLabel,
 }: Props) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState(false);
+  const displayHtml = importedTextToSafeHtml(value);
 
-  const applyFormat = useCallback(
-    (open: string, close: string) => {
-      const el = textareaRef.current;
-      if (!el || disabled) return;
+  const syncFromValue = useCallback(() => {
+    const el = editorRef.current;
+    if (!el || focused) return;
+    if (el.innerHTML !== displayHtml) {
+      el.innerHTML = displayHtml;
+    }
+  }, [displayHtml, focused]);
 
-      const start = el.selectionStart;
-      const end = el.selectionEnd;
-      const selected = value.slice(start, end);
+  useLayoutEffect(() => {
+    syncFromValue();
+  }, [syncFromValue]);
 
-      // Toggle: se o texto já está entre os marcadores, remove; senão, adiciona
-      const before = value.slice(0, start);
-      const after = value.slice(end);
+  const emitMarkdown = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const md = editorHtmlToRichMarkdown(el.innerHTML);
+    onChange(md);
+  }, [onChange]);
 
-      let nextValue: string;
-      let nextStart: number;
-      let nextEnd: number;
-
-      if (
-        before.endsWith(open) &&
-        after.startsWith(close)
-      ) {
-        // Remove marcadores existentes
-        nextValue =
-          value.slice(0, start - open.length) +
-          selected +
-          value.slice(end + close.length);
-        nextStart = start - open.length;
-        nextEnd = end - open.length;
-      } else if (selected.startsWith(open) && selected.endsWith(close) && selected.length >= open.length + close.length) {
-        // Remove marcadores dentro da seleção
-        const inner = selected.slice(open.length, selected.length - close.length);
-        nextValue = before + inner + after;
-        nextStart = start;
-        nextEnd = start + inner.length;
-      } else {
-        // Adiciona marcadores
-        nextValue = before + open + selected + close + after;
-        nextStart = start + open.length;
-        nextEnd = end + open.length;
-      }
-
-      onChange(nextValue);
-
-      // Restaura a seleção após setState
-      requestAnimationFrame(() => {
-        if (!el) return;
-        el.focus();
-        el.setSelectionRange(nextStart, nextEnd);
-      });
+  const onToolbar = useCallback(
+    (fn: () => void) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (disabled) return;
+      const el = editorRef.current;
+      if (!el) return;
+      fn();
+      requestAnimationFrame(() => emitMarkdown());
     },
-    [value, onChange, disabled],
+    [disabled, emitMarkdown],
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      e.preventDefault();
+      const text = e.clipboardData.getData("text/plain");
+      const ed = editorRef.current;
+      if (!ed) return;
+      insertPlainText(ed, text);
+      emitMarkdown();
+    },
+    [disabled, emitMarkdown],
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (!e.ctrlKey && !e.metaKey) return;
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled || (!e.ctrlKey && !e.metaKey)) return;
+      const ed = editorRef.current;
+      if (!ed) return;
       if (e.key === "b" || e.key === "B") {
         e.preventDefault();
-        applyFormat("**", "**");
+        execInEditor(ed, "bold");
+        requestAnimationFrame(() => emitMarkdown());
       } else if (e.key === "i" || e.key === "I") {
         e.preventDefault();
-        applyFormat("*", "*");
+        execInEditor(ed, "italic");
+        requestAnimationFrame(() => emitMarkdown());
       } else if (e.key === "u" || e.key === "U") {
         e.preventDefault();
-        applyFormat("__", "__");
+        execInEditor(ed, "underline");
+        requestAnimationFrame(() => emitMarkdown());
       }
     },
-    [applyFormat],
+    [disabled, emitMarkdown],
   );
+
+  const showPlaceholder = Boolean(placeholder?.trim()) && !value.trim();
 
   return (
     <div className="flex flex-col gap-0">
-      {/* Toolbar */}
       <div
         className={cn(
           "flex flex-wrap items-center gap-1 rounded-t-xl border border-b-0 border-black/[0.1] bg-slate-50/90 px-2 py-1.5",
@@ -139,44 +196,109 @@ export function RichTextArea({
         )}
         aria-label="Formatação de texto"
       >
-        {FORMAT_TOKENS.map((tok) => (
-          <button
-            key={tok.open}
-            type="button"
-            title={tok.title}
-            tabIndex={-1}
-            disabled={disabled}
-            onClick={() => applyFormat(tok.open, tok.close)}
-            className={cn(
-              "inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-white px-1.5 text-[12px] text-slate-700 shadow-sm transition hover:bg-violet-50 hover:text-violet-800 active:scale-95",
-              tok.bold && "font-black",
-              tok.italic && "italic",
-              tok.underline && "underline underline-offset-2",
-            )}
-          >
-            {tok.label}
-          </button>
-        ))}
-        <span className="ml-auto text-[10px] font-medium text-slate-400 select-none">
-          Ctrl+B · I · U
-        </span>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          title="Negrito (Ctrl+B)"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onToolbar(() => {
+            const ed = editorRef.current;
+            if (ed) execInEditor(ed, "bold");
+          })}
+          className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-white px-1.5 text-[12px] font-black text-slate-800 shadow-sm hover:bg-violet-50 hover:text-violet-800 active:scale-95"
+        >
+          N
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          title="Itálico (Ctrl+I)"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onToolbar(() => {
+            const ed = editorRef.current;
+            if (ed) execInEditor(ed, "italic");
+          })}
+          className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-white px-1.5 text-[12px] italic text-slate-700 shadow-sm hover:bg-violet-50 hover:text-violet-800 active:scale-95"
+        >
+          I
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          title="Sublinhado (Ctrl+U)"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onToolbar(() => {
+            const ed = editorRef.current;
+            if (ed) execInEditor(ed, "underline");
+          })}
+          className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-white px-1.5 text-[12px] text-slate-700 underline underline-offset-2 shadow-sm hover:bg-violet-50 hover:text-violet-800 active:scale-95"
+        >
+          S̲
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          title="Tachado"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onToolbar(() => {
+            const ed = editorRef.current;
+            if (ed) execInEditor(ed, "strikeThrough");
+          })}
+          className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-white px-1.5 text-[12px] text-slate-600 shadow-sm line-through decoration-slate-600 hover:bg-violet-50 hover:text-violet-800 active:scale-95"
+        >
+          T̶
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          title="Grifado / destaque"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onToolbar(() => {
+            const ed = editorRef.current;
+            if (ed) toggleHighlightMark(ed);
+          })}
+          className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-black/[0.08] bg-amber-100/90 px-1.5 text-[11px] font-extrabold text-amber-950 shadow-sm hover:bg-amber-200/90 active:scale-95"
+        >
+          H
+        </button>
+        <span className="ml-auto text-[10px] font-medium text-slate-400 select-none">Ctrl+B · I · U</span>
       </div>
 
-      {/* Área de texto */}
-      <textarea
-        ref={textareaRef}
-        className={cn(
-          "input w-full min-w-0 resize-y break-words rounded-t-none text-sm leading-relaxed",
-          className,
-        )}
-        style={{ minHeight }}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="relative">
+        {showPlaceholder && !focused ? (
+          <span className="pointer-events-none absolute left-3 top-2.5 z-10 max-w-[calc(100%-1.5rem)] truncate text-sm text-slate-400 select-none">
+            {placeholder}
+          </span>
+        ) : null}
+        <div
+          ref={editorRef}
+          role="textbox"
+          aria-multiline="true"
+          aria-label={ariaLabel}
+          contentEditable={!disabled}
+          suppressContentEditableWarning
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            emitMarkdown();
+            setFocused(false);
+          }}
+          onInput={emitMarkdown}
+          onPaste={handlePaste}
+          onKeyDown={handleKeyDown}
+          className={cn(
+            WYSIWYG_MARKDOWN_CLASSES,
+            "relative z-0 w-full min-w-0 rounded-t-none border border-black/[0.1] bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:z-[1] focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20",
+            disabled && "cursor-not-allowed bg-slate-50 text-slate-500",
+            className,
+          )}
+          style={{ minHeight }}
+        />
+      </div>
     </div>
   );
 }

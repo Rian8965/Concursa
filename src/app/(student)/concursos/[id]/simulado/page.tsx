@@ -9,6 +9,7 @@ import {
   AlertTriangle, Send, X, Bot,
 } from "lucide-react";
 import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
+import { FormattedQuestionText } from "@/components/student/FormattedQuestionText";
 
 type Phase = "config" | "loading" | "exam" | "results";
 
@@ -761,11 +762,19 @@ export default function SimuladoPage() {
                   {reviewQuestion.question?.supportText ? (
                     <div style={{ marginBottom: 12, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
                       <p style={{ fontSize: 11, fontWeight: 800, color: "#7C3AED", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Texto de apoio</p>
-                      <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{reviewQuestion.question.supportText}</p>
+                      <FormattedQuestionText
+                        text={reviewQuestion.question.supportText}
+                        as="div"
+                        className="text-[14px] text-[#374151] leading-[1.65]"
+                      />
                     </div>
                   ) : null}
 
-                  <p style={{ fontSize: 15, color: "#111827", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{reviewQuestion.question?.content}</p>
+                  <FormattedQuestionText
+                    text={reviewQuestion.question?.content}
+                    as="div"
+                    className="text-[15px] text-[#111827] leading-[1.7]"
+                  />
 
                   {reviewQuestion.question?.imageUrl ? (
                     <div style={{ marginTop: 10 }}>
@@ -793,7 +802,11 @@ export default function SimuladoPage() {
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={a.imageUrl} alt="" style={{ maxWidth: "100%", height: "auto", borderRadius: 10, border: "1px solid #E5E7EB" }} />
                                 ) : (
-                                  <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{a.content}</p>
+                                  <FormattedQuestionText
+                                    text={a.content}
+                                    as="div"
+                                    className="text-[13px] text-[#374151] leading-[1.6]"
+                                  />
                                 )}
                               </div>
                             </div>
@@ -1124,11 +1137,15 @@ export default function SimuladoPage() {
             {q.supportText && (
               <div style={{ marginBottom: 14, padding: 14, background: "#F8F7FF", borderRadius: 12, border: "1px solid #EDE9FE" }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Texto de apoio</p>
-                <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{q.supportText}</p>
+                <FormattedQuestionText text={q.supportText} as="div" className="text-sm text-[#374151] leading-[1.65]" />
               </div>
             )}
 
-            <p style={{ fontSize: 15.5, color: "#1F2937", lineHeight: 1.7, fontWeight: 500, whiteSpace: "pre-wrap" }}>{q.content}</p>
+            <FormattedQuestionText
+              text={q.content}
+              as="div"
+              className="text-[15.5px] font-medium leading-[1.7] text-[#1F2937]"
+            />
             {q.imageUrl && String(q.imageUrl).trim() && (
               <div style={{ marginTop: 12 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1172,7 +1189,11 @@ export default function SimuladoPage() {
                         />
                       </span>
                     ) : (
-                      alt.content
+                      <FormattedQuestionText
+                        text={alt.content}
+                        as="span"
+                        className="text-sm leading-[1.55]"
+                      />
                     )}
                   </span>
                 </button>

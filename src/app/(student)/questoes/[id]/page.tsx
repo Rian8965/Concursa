@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
 import { QuestionMetaLine } from "@/components/questions/QuestionMetaLine";
+import { FormattedQuestionText } from "@/components/student/FormattedQuestionText";
 
 type Alternative = { letter: string; content: string; imageUrl: string | null };
 type QuestionDetail = {
@@ -135,11 +136,15 @@ export default function StudentQuestionDetailPage() {
         {q.supportText ? (
           <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 sm:px-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Texto de apoio</p>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{q.supportText}</p>
+            <FormattedQuestionText text={q.supportText} as="div" className="mt-1.5 text-sm leading-relaxed text-slate-700" />
           </div>
         ) : null}
 
-        <p className="text-[15px] font-medium leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap">{q.content}</p>
+        <FormattedQuestionText
+          text={q.content}
+          as="div"
+          className="text-[15px] font-medium leading-relaxed text-[var(--text-primary)]"
+        />
 
         {showImage ? (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -163,7 +168,7 @@ export default function StudentQuestionDetailPage() {
                 )}
               >
                 <span className="mt-0.5 font-bold text-slate-500">{a.letter})</span>
-                <span className="text-slate-800 whitespace-pre-wrap">
+                <span className="text-slate-800">
                   {a.imageUrl && String(a.imageUrl).trim().length > 0 ? (
                     <span className="block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -174,7 +179,7 @@ export default function StudentQuestionDetailPage() {
                       />
                     </span>
                   ) : (
-                    a.content
+                    <FormattedQuestionText text={a.content} as="span" className="text-sm leading-relaxed" />
                   )}
                 </span>
               </div>

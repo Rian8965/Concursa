@@ -18,37 +18,71 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!iq) return NextResponse.json({ error: "Questão importada não encontrada" }, { status: 404 });
 
-  const maxPos = await prisma.importedQuestion.aggregate({
-    where: { importId },
-    _max: { sourcePosition: true },
-  });
-  const nextPos = (maxPos._max.sourcePosition ?? 0) + 1;
+  const created = await prisma.$transaction(async (tx) => {
+    const p = iq.sourcePosition;
 
-  const created = await prisma.importedQuestion.create({
-    data: {
-      importId,
-      content: iq.content,
-      alternatives: iq.alternatives as any,
-      correctAnswer: iq.correctAnswer,
-      suggestedSubjectId: iq.suggestedSubjectId,
-      suggestedTopicId: iq.suggestedTopicId,
-      year: iq.year,
-      examBoardId: iq.examBoardId,
-      competitionId: iq.competitionId,
-      cityId: iq.cityId,
-      jobRoleId: iq.jobRoleId,
-      difficulty: iq.difficulty,
-      tags: iq.tags ?? [],
-      sourcePage: iq.sourcePage,
-      sourcePosition: nextPos,
-      hasImage: iq.hasImage,
-      imageUrl: iq.imageUrl,
-      rawText: iq.rawText,
-      confidence: iq.confidence,
-      status: "PENDING_REVIEW",
-    },
+    if (p != null && Number.isFinite(p)) {
+      await tx.importedQuestion.updateMany({
+        where: { importId, sourcePosition: { gt: p } },
+        data: { sourcePosition: { increment: 1 } },
+      });
+      return tx.importedQuestion.create({
+        data: {
+          importId,
+          content: iq.content,
+          alternatives: iq.alternatives as object,
+          correctAnswer: iq.correctAnswer,
+          suggestedSubjectId: iq.suggestedSubjectId,
+          suggestedTopicId: iq.suggestedTopicId,
+          year: iq.year,
+          examBoardId: iq.examBoardId,
+          competitionId: iq.competitionId,
+          cityId: iq.cityId,
+          jobRoleId: iq.jobRoleId,
+          difficulty: iq.difficulty,
+          tags: iq.tags ?? [],
+          sourcePage: iq.sourcePage,
+          sourcePosition: p + 1,
+          hasImage: iq.hasImage,
+          imageUrl: iq.imageUrl,
+          rawText: iq.rawText,
+          confidence: iq.confidence,
+          status: "PENDING_REVIEW",
+        },
+      });
+    }
+
+    const maxPos = await tx.importedQuestion.aggregate({
+      where: { importId },
+      _max: { sourcePosition: true },
+    });
+    const nextPos = (maxPos._max.sourcePosition ?? 0) + 1;
+
+    return tx.importedQuestion.create({
+      data: {
+        importId,
+        content: iq.content,
+        alternatives: iq.alternatives as object,
+        correctAnswer: iq.correctAnswer,
+        suggestedSubjectId: iq.suggestedSubjectId,
+        suggestedTopicId: iq.suggestedTopicId,
+        year: iq.year,
+        examBoardId: iq.examBoardId,
+        competitionId: iq.competitionId,
+        cityId: iq.cityId,
+        jobRoleId: iq.jobRoleId,
+        difficulty: iq.difficulty,
+        tags: iq.tags ?? [],
+        sourcePage: iq.sourcePage,
+        sourcePosition: nextPos,
+        hasImage: iq.hasImage,
+        imageUrl: iq.imageUrl,
+        rawText: iq.rawText,
+        confidence: iq.confidence,
+        status: "PENDING_REVIEW",
+      },
+    });
   });
 
   return NextResponse.json({ question: created }, { status: 201 });
 }
-
