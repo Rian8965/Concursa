@@ -7,6 +7,8 @@ import { runLlmJson } from "@/lib/ai/llm";
 import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { DOCUMENT_AI_IMAGELESS_REQUEST_FIELDS } from "@/lib/docai/process-options";
 import { processPdfWithDocumentAi } from "@/lib/docai/process-pdf";
+import { buildFormattedText, LLM_FORMATTING_INSTRUCTIONS } from "@/lib/docai/format-text";
+import type { DocaiTextStyle } from "@/lib/docai/format-text";
 import { enqueueImportProcessTask } from "@/lib/tasks/cloud-tasks";
 import {
   extractGabaritoSectionFromProvaFullText,
@@ -325,7 +327,11 @@ export async function POST(req: NextRequest) {
 
       const doc = docaiRes.document as unknown as {
         pages?: Array<{ pageNumber?: number; paragraphs?: Array<{ layout?: DocaiLayout }> }>;
+        textStyles?: DocaiTextStyle[];
       } | undefined;
+
+      // Texto com marcadores de formatação markdown extraídos dos estilos do Document AI
+      const formattedFullText = buildFormattedText(fullText, doc?.textStyles ?? []);
 
       const pages =
         doc?.pages?.map((p) => {
@@ -333,7 +339,7 @@ export async function POST(req: NextRequest) {
             (p.paragraphs ?? [])
               .map((para) => {
                 const s = bboxStats(para.layout);
-                return { text: segText(fullText, para.layout), midX: s?.midX ?? null, midY: s?.midY ?? null };
+                return { text: segText(formattedFullText, para.layout), midX: s?.midX ?? null, midY: s?.midY ?? null };
               })
               .filter((x) => x.text.trim().length > 0);
           return { pageNumber: p.pageNumber ?? null, paragraphs };
@@ -346,10 +352,14 @@ export async function POST(req: NextRequest) {
       const system = [
         "Você é um extrator de provas de concurso.",
         "Você receberá texto OCR (já em ordem de leitura por páginas/colunas).",
+        "O texto pode conter marcadores de formatação markdown. Preserve-os.",
+        "",
+        LLM_FORMATTING_INSTRUCTIONS,
+        "",
         "TAREFA: retornar APENAS JSON válido (sem markdown) no formato:",
-        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], correctAnswerLetter?, commentary?}] }",
+        "{ meta: { city?, concurso?, ano?: number|null, banca?, cargo?, materia? }, baseTexts: [{id, text, appliesToQuestionNumbers?: number[]}], questions: [{number, statement, baseTextId?, materia?, assunto?, alternatives:[{letter, text}], commentary?}] }",
         "REGRAS:",
-        "- Se existir a seção TEXTO DO GABARITO abaixo, use-a para preencher correctAnswerLetter (A–E) de cada questão pelo NÚMERO da questão. Se o gabarito não tiver resposta para aquele número ou estiver ilegível, use null.",
+        "- O campo 'correctAnswerLetter' deve ser SEMPRE omitido — o gabarito oficial é processado separadamente pelo sistema. Não tente adivinhar a resposta.",
         "- MATÉRIA (crítico): em cadernos com várias disciplinas, o PDF costuma mostrar o NOME DA MATÉRIA em título de seção, cabeçalho ou linha logo ANTES do bloco de questões daquela matéria (ex.: 'LÍNGUA PORTUGUESA', 'RACIOCÍNIO LÓGICO', 'Conhecimentos Específicos — Informática'). Para CADA questão, preencha o campo 'materia' com a matéria vigente: repita a última matéria anunciada no OCR até aparecer outra seção. Não confunda com o enunciado da questão. O campo 'materia' é OBRIGATÓRIO.",
         "- ASSUNTO: para cada questão, preencha o campo 'assunto' com o tópico específico abordado (ex: 'Concordância Verbal', 'Funções do 2º Grau', 'Direito Administrativo — Atos Administrativos'). Use o enunciado e as alternativas para inferir o assunto se não houver cabeçalho explícito.",
         "- meta: preencha banca, concurso, cargo, ano (4 dígitos se visível), city (cidade/UF) a partir da capa/cabeçalho global. meta.materia pode resumir a matéria predominante ou ficar omitido se só existir matéria por questão.",

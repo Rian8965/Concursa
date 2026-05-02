@@ -25,7 +25,11 @@ export function extractGabaritoSectionFromProvaFullText(fullText: string): strin
 }
 
 /**
- * Interpreta formatos comuns: "1-A", "01 B", "Questão 5: C", linhas "01A 02B".
+ * Interpreta formatos comuns de gabarito:
+ * - "1-A", "01 B", "Questão 5: C", linhas "01A 02B"
+ * - Tabela em duas linhas: "01 02 03…" seguida de "A B C…"
+ * - Formato sequencial sem números: coluna de letras cujo índice = número da questão
+ * - "1A 2B 3C" (compacto com dígito único)
  */
 export function parseGabaritoMap(text: string): Map<number, string> {
   const map = new Map<number, string>();
@@ -37,10 +41,12 @@ export function parseGabaritoMap(text: string): Map<number, string> {
     if (n >= 1 && n <= 999 && /^[A-E]$/.test(L)) map.set(n, L);
   };
 
+  // ─── Passo 1: formatos linha-a-linha com número explícito ───────────────────
   for (const raw of lines) {
     const line = raw.trim();
-    if (line.length > 200) continue;
+    if (!line || line.length > 300) continue;
 
+    // "questão 01 - A" | "01-A" | "01: A" | "01) A" | "01 A"
     const reLine =
       /^(?:quest[aã]o|questão|q\.?)?\s*(\d{1,4})\s*[-–.:)\]]\s*([A-E])\b/i.exec(line) ??
       /^(\d{1,4})\s+([A-E])\b/.exec(line);
@@ -49,6 +55,7 @@ export function parseGabaritoMap(text: string): Map<number, string> {
       continue;
     }
 
+    // tokens "01A" | "1-A" | "01 A" dentro de uma linha mista
     const tokenRe = /\b(\d{1,4})\s*[-–.]?\s*([A-E])\b/gi;
     let m: RegExpExecArray | null;
     while ((m = tokenRe.exec(line)) !== null) {
@@ -56,12 +63,72 @@ export function parseGabaritoMap(text: string): Map<number, string> {
     }
   }
 
-  // Blocos densos sem quebras (ex: "01A02B03C")
+  // ─── Passo 2: blocos densos sem espaço ("01A02B03C") ────────────────────────
   const compact = normalized.replace(/\s+/g, " ");
-  const dense = /\b(\d{2,4})([A-E])\b/g;
+  // Inclui dígito único: "1A2B" ou "01A02B"
+  const denseRe = /(\d{1,4})([A-E])(?=\d|$|\s)/g;
   let dm: RegExpExecArray | null;
-  while ((dm = dense.exec(compact)) !== null) {
+  while ((dm = denseRe.exec(compact)) !== null) {
     push(parseInt(dm[1], 10), dm[2].toUpperCase());
+  }
+
+  // ─── Passo 3: tabela em DUAS LINHAS ─────────────────────────────────────────
+  // Formato: linha com números "01 02 03 04 05" seguida de linha com letras "A B C D E"
+  // Tanto a linha de números quanto a de letras podem ser separadas por espaço/tab/|
+  if (map.size === 0) {
+    const numLineRe = /^[\s|]*(\d{1,4}(?:\s*[|,\t]\s*\d{1,4}){2,})[\s|]*$/;
+    const letLineRe = /^[\s|]*([A-E](?:\s*[|,\t]\s*[A-E]){2,})[\s|]*$/i;
+
+    for (let i = 0; i < lines.length - 1; i++) {
+      const lineA = lines[i].trim();
+      const lineB = lines[i + 1].trim();
+
+      const numMatch = numLineRe.exec(lineA);
+      const letMatch = letLineRe.exec(lineB);
+
+      if (numMatch && letMatch) {
+        const nums = lineA.split(/[\s|,\t]+/).map((t) => parseInt(t, 10)).filter((n) => Number.isFinite(n) && n >= 1);
+        const letters = lineB.split(/[\s|,\t]+/).map((t) => t.trim().toUpperCase()).filter((t) => /^[A-E]$/.test(t));
+        for (let j = 0; j < Math.min(nums.length, letters.length); j++) {
+          push(nums[j], letters[j]);
+        }
+        i++; // Pula a linha de letras para não reprocessar
+      }
+    }
+  }
+
+  // ─── Passo 4: tabela em DUAS LINHAS (cabeçalho de coluna separado por | ou tab) ─
+  // Formato: "| 01 | 02 | 03 |" / "| A  | B  | C  |"
+  if (map.size === 0) {
+    for (let i = 0; i < lines.length - 1; i++) {
+      const cells0 = lines[i].split(/\|/).map((c) => c.trim()).filter(Boolean);
+      const cells1 = lines[i + 1].split(/\|/).map((c) => c.trim()).filter(Boolean);
+      if (cells0.length < 3 || cells0.length !== cells1.length) continue;
+      const allNums = cells0.every((c) => /^\d{1,4}$/.test(c));
+      const allLets = cells1.every((c) => /^[A-E]$/i.test(c));
+      if (allNums && allLets) {
+        for (let j = 0; j < cells0.length; j++) {
+          push(parseInt(cells0[j], 10), cells1[j].toUpperCase());
+        }
+        i++;
+      }
+    }
+  }
+
+  // ─── Passo 5: formato sequencial puro (apenas letras em ordem) ───────────────
+  // Detecta se há um bloco onde cada linha é apenas uma letra A-E (sem número),
+  // inferindo que a primeira letra corresponde à menor questão ainda não mapeada.
+  // Só tenta se o mapa ainda estiver vazio para evitar conflitos.
+  if (map.size === 0) {
+    const pureLetters: string[] = [];
+    for (const raw of lines) {
+      const t = raw.trim().toUpperCase();
+      if (/^[A-E]$/.test(t)) pureLetters.push(t);
+      else if (t) pureLetters.length = 0; // quebra de sequência
+    }
+    if (pureLetters.length >= 5) {
+      pureLetters.forEach((L, i) => push(i + 1, L));
+    }
   }
 
   return map;

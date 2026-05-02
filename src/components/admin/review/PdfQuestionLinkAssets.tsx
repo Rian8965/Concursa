@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -11,6 +11,7 @@ import {
   Trash2,
   RefreshCw,
   Link2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -41,6 +42,12 @@ function linkForQuestion(a: ImportAssetDTO, questionId: string) {
 
 function linkRoleForQuestion(a: ImportAssetDTO, questionId: string): "SUPPORT_TEXT" | "FIGURE" | null {
   return linkForQuestion(a, questionId)?.role ?? null;
+}
+
+/** Quantas questões distintas têm vínculo com este asset */
+function countLinkedQuestions(a: ImportAssetDTO): number {
+  const ids = new Set((a.questionLinks ?? []).map((l) => l.importedQuestionId));
+  return ids.size;
 }
 
 export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh, onOpenLinkText, onOpenLinkImage }: Props) {
@@ -87,8 +94,74 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
     return () => window.removeEventListener("keydown", onKey);
   }, [detailAsset, lightbox, closeDetail]);
 
+  /** Persiste o texto editado, perguntando sobre escopo quando o asset tem múltiplos vínculos */
   const saveText = useCallback(async () => {
     if (!detailAsset || detailAsset.kind !== "TEXT_BLOCK") return;
+
+    const linkedCount = countLinkedQuestions(detailAsset);
+
+    // Se compartilhado por mais de 1 questão, pergunta ao usuário o escopo da edição
+    if (linkedCount > 1) {
+      const choice = window.confirm(
+        `Este texto está vinculado a ${linkedCount} questões.\n\n` +
+        `• Clique OK para aplicar a edição a TODAS as questões que usam este texto.\n` +
+        `• Clique Cancelar para criar uma cópia exclusiva somente para esta questão.`,
+      );
+
+      if (!choice) {
+        // Cria cópia exclusiva: POST novo asset e substitui o vínculo desta questão
+        setSaving(true);
+        try {
+          const link = linkForQuestion(detailAsset, questionId);
+
+          // 1. Cria novo asset com o texto editado
+          const createRes = await fetch(`/api/admin/imports/${importId}/assets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "TEXT_BLOCK",
+              page: detailAsset.page,
+              bboxX: detailAsset.bboxX,
+              bboxY: detailAsset.bboxY,
+              bboxW: detailAsset.bboxW,
+              bboxH: detailAsset.bboxH,
+              scope: "EXCLUSIVE",
+              extractedText: draftText,
+              label: detailAsset.label ? `${detailAsset.label} (cópia)` : null,
+            }),
+          });
+          const createData = await createRes.json().catch(() => ({}));
+          if (!createRes.ok) {
+            toast.error(createData.error ?? "Erro ao criar cópia do texto.");
+            return;
+          }
+          const newAssetId = createData.asset?.id;
+
+          // 2. Remove o vínculo antigo desta questão
+          if (link) {
+            await fetch(`/api/admin/imports/${importId}/links/${link.id}`, { method: "DELETE" });
+          }
+
+          // 3. Cria novo vínculo com o asset copiado
+          const role = link?.role ?? "SUPPORT_TEXT";
+          await fetch(`/api/admin/imports/${importId}/links`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ importedQuestionId: questionId, importAssetId: newAssetId, role }),
+          });
+
+          toast.success("Cópia criada e aplicada somente a esta questão.");
+          setEditingInModal(false);
+          closeDetail();
+          await onRefresh();
+        } finally {
+          setSaving(false);
+        }
+        return;
+      }
+    }
+
+    // Aplica a todos: PATCH no asset original
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/imports/${importId}/assets/${detailAsset.id}`, {
@@ -101,13 +174,13 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
         toast.error(data.error ?? "Não foi possível salvar o texto.");
         return;
       }
-      toast.success("Texto salvo.");
+      toast.success(linkedCount > 1 ? `Texto atualizado em ${linkedCount} questões.` : "Texto salvo.");
       setEditingInModal(false);
       await onRefresh();
     } finally {
       setSaving(false);
     }
-  }, [detailAsset, draftText, importId, onRefresh]);
+  }, [detailAsset, draftText, importId, questionId, onRefresh, closeDetail]);
 
   const removeLinkOnly = useCallback(async () => {
     if (!detailAsset) return;
@@ -176,6 +249,7 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
   const detailLabel = detail ? formatAssetLabel(detail.label) : null;
   const detailIsText = detail?.kind === "TEXT_BLOCK";
   const detailIsImage = detail?.kind === "IMAGE";
+  const detailLinkedCount = detail ? countLinkedQuestions(detail) : 0;
   const busy = saving || removing || replacing;
 
   return (
@@ -199,6 +273,7 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
               const isText = a.kind === "TEXT_BLOCK";
               const isImage = a.kind === "IMAGE";
               const labelPretty = formatAssetLabel(a.label);
+              const sharedCount = countLinkedQuestions(a);
 
               return (
                 <button
@@ -232,6 +307,11 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
                       {role === "SUPPORT_TEXT" && (
                         <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-violet-900">
                           Apoio
+                        </span>
+                      )}
+                      {sharedCount > 1 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800" title={`Compartilhado com ${sharedCount} questões`}>
+                          <Users className="h-3 w-3" /> {sharedCount}
                         </span>
                       )}
                     </div>
@@ -300,6 +380,11 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
                         Apoio
                       </span>
                     )}
+                    {detailLinkedCount > 1 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                        <Users className="h-3 w-3" /> Compartilhado com {detailLinkedCount} questões
+                      </span>
+                    )}
                   </div>
                   {detailLabel ? (
                     <p className="mt-2 break-words text-xs font-medium text-[var(--text-muted)]">{detailLabel}</p>
@@ -315,13 +400,20 @@ export function PdfQuestionLinkAssets({ importId, questionId, assets, onRefresh,
               {detailIsText && (
                 <div className="space-y-4">
                   {editingInModal ? (
-                    <textarea
-                      className="input min-h-[240px] w-full resize-y break-words text-sm leading-relaxed"
-                      value={draftText}
-                      disabled={busy}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      placeholder="Texto do vínculo (OCR/editável)…"
-                    />
+                    <>
+                      {detailLinkedCount > 1 && (
+                        <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-[12px] font-medium text-amber-900">
+                          <strong>Atenção:</strong> ao salvar, você poderá aplicar a edição a todas as {detailLinkedCount} questões vinculadas ou criar uma cópia exclusiva para esta questão.
+                        </div>
+                      )}
+                      <textarea
+                        className="input min-h-[240px] w-full resize-y break-words text-sm leading-relaxed"
+                        value={draftText}
+                        disabled={busy}
+                        onChange={(e) => setDraftText(e.target.value)}
+                        placeholder="Texto do vínculo (OCR/editável)…"
+                      />
+                    </>
                   ) : (
                     <div className="max-h-[min(360px,50vh)] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-black/[0.06] bg-slate-50/80 p-4 text-sm leading-relaxed text-[var(--text-secondary)]">
                       {(detail.extractedText ?? "").trim() ? (

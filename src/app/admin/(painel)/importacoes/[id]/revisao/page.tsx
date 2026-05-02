@@ -12,6 +12,7 @@ import { ImportIdentifyAlternativesDrawer } from "@/components/admin/ImportIdent
 import { TopBar } from "@/components/admin/review/TopBar";
 import { StatsRow } from "@/components/admin/review/StatsRow";
 import { PdfQuestionLinkAssets } from "@/components/admin/review/PdfQuestionLinkAssets";
+import { RichTextArea } from "@/components/admin/RichTextArea";
 import {
   analyzeEnunciadoHeuristic,
   getDependencyBlockUserMessage,
@@ -1967,12 +1968,13 @@ export default function RevisaoImportacaoPage() {
                     <div className="min-w-0 flex-1 space-y-10">
                       <section className="space-y-4">
                         <label className="orbit-form-label text-base">Enunciado</label>
-                        <textarea
-                          className="input min-h-[220px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
+                        <RichTextArea
                           value={draft.content}
-                          onChange={(e) => {
+                          minHeight="220px"
+                          ariaLabel="Enunciado da questão"
+                          onChange={(v) => {
                             unsavedRef.current = true;
-                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: e.target.value } }));
+                            setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, content: v } }));
                           }}
                         />
                       </section>
@@ -2082,12 +2084,12 @@ export default function RevisaoImportacaoPage() {
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Texto da alternativa</span>
-                                    <textarea
-                                      className="input min-h-[100px] w-full min-w-0 resize-y break-words text-sm leading-relaxed"
-                                      placeholder={visOn ? "Texto opcional — deixe vazio se a alternativa for só imagem no PDF" : undefined}
+                                    <RichTextArea
                                       value={alt.content}
-                                      onChange={(e) => {
-                                        const v = e.target.value;
+                                      minHeight="100px"
+                                      placeholder={visOn ? "Texto opcional — deixe vazio se a alternativa for só imagem no PDF" : undefined}
+                                      ariaLabel={`Texto da alternativa ${alt.letter}`}
+                                      onChange={(v) => {
                                         unsavedRef.current = true;
                                         setDrafts((prev) => {
                                           const nextAlts = draft.alternatives.map((a, i) => (i === altIdx ? { ...a, content: v } : a));

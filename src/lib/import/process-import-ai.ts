@@ -3,6 +3,8 @@ import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
 import { runLlmJson } from "@/lib/ai/llm";
 import { parseLlmJsonRobustly } from "@/lib/ai/parse-llm-json";
 import { processPdfWithDocumentAi } from "@/lib/docai/process-pdf";
+import { buildFormattedText, LLM_FORMATTING_INSTRUCTIONS } from "@/lib/docai/format-text";
+import type { DocaiTextStyle } from "@/lib/docai/format-text";
 import {
   extractGabaritoSectionFromProvaFullText,
   parseGabaritoMap,
@@ -237,7 +239,11 @@ export async function processImportAiJob(importId: string): Promise<void> {
 
   const doc = processed.document as unknown as {
     pages?: Array<{ pageNumber?: number; paragraphs?: Array<{ layout?: DocaiLayout }> }>;
+    textStyles?: DocaiTextStyle[];
   } | undefined;
+
+  // Texto com marcadores de formatação markdown extraídos dos estilos do Document AI
+  const formattedFullText = buildFormattedText(fullText, doc?.textStyles ?? []);
 
   const pages =
     doc?.pages?.map((p) => {
@@ -245,7 +251,8 @@ export async function processImportAiJob(importId: string): Promise<void> {
         (p.paragraphs ?? [])
           .map((para) => {
             const s = bboxStats(para.layout);
-            return { text: segText(fullText, para.layout), midX: s?.midX ?? null, midY: s?.midY ?? null };
+            // Usa texto formatado (com markdown) para preservar negrito/itálico/etc.
+            return { text: segText(formattedFullText, para.layout), midX: s?.midX ?? null, midY: s?.midY ?? null };
           })
           .filter((x) => x.text.trim().length > 0);
       return { pageNumber: p.pageNumber ?? null, paragraphs };
@@ -266,7 +273,10 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const system = [
     "Você é um extrator especializado de provas de concurso público.",
     "Receberá texto OCR em ordem de leitura (já organizado por páginas e colunas).",
+    "O texto pode conter marcadores de formatação markdown (negrito **texto**, itálico *texto*, sublinhado __texto__, tachado ~~texto~~, grifado ==texto==).",
     "IMPORTANTE: você receberá apenas um TRECHO do PDF. Extraia SOMENTE as questões que aparecem nesse trecho.",
+    "",
+    LLM_FORMATTING_INSTRUCTIONS,
     "",
     "═══ COMO IDENTIFICAR QUESTÕES vs ALTERNATIVAS ═══",
     "• Uma QUESTÃO começa com número seguido de ponto, parêntese ou travessão: '1.', '01)', 'Questão 1', '1 -'.",

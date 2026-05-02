@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Link2, Trash2, Unlink } from "lucide-react";
+import { Link2, Trash2, Unlink, Users } from "lucide-react";
 import type { ImportAssetDTO } from "@/components/admin/ImportPdfMarkupPanel";
 
 type QOpt = { id: string; label: string };
@@ -13,6 +13,12 @@ type Props = {
   selectedQuestionId: string;
   onChanged: () => Promise<void> | void;
 };
+
+/** Quantas questões distintas têm vínculo com este asset */
+function countLinkedQuestions(a: ImportAssetDTO): number {
+  const ids = new Set((a.questionLinks ?? []).map((l) => l.importedQuestionId));
+  return ids.size;
+}
 
 export function PainelDireito({ importId, questions, assets, selectedQuestionId, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
@@ -35,6 +41,27 @@ export function PainelDireito({ importId, questions, assets, selectedQuestionId,
   }, [assets, selectedQuestionId]);
 
   const patchAssetText = async (assetId: string, extractedText: string) => {
+    // Verifica se o asset é compartilhado
+    const asset = assets.find((a) => a.id === assetId);
+    const linkedCount = asset ? countLinkedQuestions(asset) : 1;
+
+    if (linkedCount > 1) {
+      const applyAll = window.confirm(
+        `Este texto está vinculado a ${linkedCount} questões.\n\n` +
+        `• Clique OK para aplicar a edição a TODAS as questões que usam este texto.\n` +
+        `• Clique Cancelar para cancelar a edição (use o painel de vínculos abaixo para editar somente esta questão).`,
+      );
+      if (!applyAll) {
+        // Cancela e reverte o rascunho local
+        setEditingText((prev) => {
+          const next = { ...prev };
+          delete next[assetId];
+          return next;
+        });
+        return;
+      }
+    }
+
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/imports/${importId}/assets/${assetId}`, {
@@ -50,7 +77,21 @@ export function PainelDireito({ importId, questions, assets, selectedQuestionId,
   };
 
   const removeAsset = async (assetId: string) => {
-    if (!confirm("Remover esta região e todos os vínculos?")) return;
+    const asset = assets.find((a) => a.id === assetId);
+    const linkedCount = asset ? countLinkedQuestions(asset) : 1;
+
+    let confirmMsg: string;
+    if (linkedCount > 1) {
+      confirmMsg =
+        `Este ${asset?.kind === "IMAGE" ? "imagem" : "texto"} está vinculado a ${linkedCount} questões.\n\n` +
+        `• Clique OK para remover este item de TODAS as ${linkedCount} questões.\n` +
+        `• Clique Cancelar para não excluir.`;
+    } else {
+      confirmMsg = "Remover esta região e todos os vínculos?";
+    }
+
+    if (!confirm(confirmMsg)) return;
+
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/imports/${importId}/assets/${assetId}`, { method: "DELETE" });
@@ -116,44 +157,52 @@ export function PainelDireito({ importId, questions, assets, selectedQuestionId,
           {linkedAssets.length === 0 ? (
             <div className="text-[12px] text-[#6B7280]">Nenhum vínculo ainda.</div>
           ) : (
-            linkedAssets.map((a) => (
-              <div key={a.id} className="rounded-[12px] border border-[#E5E7EB] bg-white p-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-[12px] font-semibold text-[#374151]">
-                    {a.kind === "IMAGE" ? "Figura" : "Texto-base"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
+            linkedAssets.map((a) => {
+              const sharedCount = countLinkedQuestions(a);
+              return (
+                <div key={a.id} className="rounded-[12px] border border-[#E5E7EB] bg-white p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[12px] font-semibold text-[#374151]">
+                      {a.kind === "IMAGE" ? "Figura" : "Texto-base"} <span className="text-[#9CA3AF]">· p.{a.page}</span>
+                      {sharedCount > 1 && (
+                        <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={`Compartilhado com ${sharedCount} questões`}>
+                          <Users className="h-2.5 w-2.5" /> {sharedCount}
+                        </span>
+                      )}
+                    </div>
+                    <button type="button" className="text-red-600" title="Excluir região" onClick={() => removeAsset(a.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                  <button type="button" className="text-red-600" title="Excluir região" onClick={() => removeAsset(a.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
 
-                {a.kind === "TEXT_BLOCK" && (
-                  <textarea
-                    className="input mt-2 min-h-[56px] text-[12px]"
-                    placeholder="Texto-base…"
-                    value={editingText[a.id] ?? a.extractedText ?? ""}
-                    onChange={(e) => setEditingText((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                    onBlur={() => {
-                      const v = editingText[a.id];
-                      if (v !== undefined && v !== (a.extractedText ?? "")) patchAssetText(a.id, v);
-                    }}
-                  />
-                )}
+                  {a.kind === "TEXT_BLOCK" && (
+                    <textarea
+                      className="input mt-2 min-h-[56px] text-[12px]"
+                      placeholder="Texto-base…"
+                      value={editingText[a.id] ?? a.extractedText ?? ""}
+                      onChange={(e) => setEditingText((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                      onBlur={() => {
+                        const v = editingText[a.id];
+                        if (v !== undefined && v !== (a.extractedText ?? "")) patchAssetText(a.id, v);
+                      }}
+                    />
+                  )}
 
-                <div className="mt-2 space-y-1 border-t border-[#E5E7EB] pt-2">
-                  {(a.questionLinks ?? [])
-                    .filter((l) => l.importedQuestionId === selectedQuestionId)
-                    .map((l) => (
-                      <div key={l.id} className="flex items-center justify-between gap-2 text-[11px] text-[#6B7280]">
-                        <span>{l.role === "FIGURE" ? "Figura" : "Texto-base"} (link)</span>
-                        <button type="button" className="text-[#9CA3AF] hover:text-red-600" onClick={() => removeLink(l.id)}>
-                          <Unlink className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="mt-2 space-y-1 border-t border-[#E5E7EB] pt-2">
+                    {(a.questionLinks ?? [])
+                      .filter((l) => l.importedQuestionId === selectedQuestionId)
+                      .map((l) => (
+                        <div key={l.id} className="flex items-center justify-between gap-2 text-[11px] text-[#6B7280]">
+                          <span>{l.role === "FIGURE" ? "Figura" : "Texto-base"} (link)</span>
+                          <button type="button" className="text-[#9CA3AF] hover:text-red-600" onClick={() => removeLink(l.id)}>
+                            <Unlink className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
