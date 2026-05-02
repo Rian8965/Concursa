@@ -111,6 +111,7 @@ function normalizeForMatch(s: string): string {
     .trim();
 }
 
+
 function statementLooksGrounded(statement: string, corpusNorm: string): boolean {
   const st = normalizeForMatch(statement);
   if (!st) return false;
@@ -465,7 +466,9 @@ export async function processImportAiJob(importId: string): Promise<void> {
   const mergedAll = mergeFromChunks(chunks);
   const baseMap = mergedAll.baseMapLocal;
   const baseApplies = mergedAll.baseAppliesLocal;
+
   const questionsMerged = mergedAll.questionsLocal;
+
   const grounded = filterHallucinatedQuestions(questionsMerged, corpusNorm);
   const questions = grounded.kept;
 

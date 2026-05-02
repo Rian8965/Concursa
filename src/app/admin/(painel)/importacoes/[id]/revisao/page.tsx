@@ -370,6 +370,8 @@ export default function RevisaoImportacaoPage() {
   >("all");
   const [flashQ, setFlashQ] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingChunk, setSavingChunk] = useState(false);
+  const [chunkProgress, setChunkProgress] = useState<{ saved: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [llmById, setLlmById] = useState<Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null>(null);
   const [llmAnalyzed, setLlmAnalyzed] = useState(false);
@@ -695,6 +697,98 @@ export default function RevisaoImportacaoPage() {
       toast.error(data.error?.trim() || "Erro ao salvar revisão");
     }
     setSaving(false);
+  }
+
+  /** Salva apenas as próximas 25 questões já decididas (approve/reject), em ordem de posição.
+   *  A cada clique avança o ponteiro automaticamente usando o progresso salvo. */
+  async function saveReviewChunk() {
+    if (!imp) return;
+    if (reviewSaveBlock.blocked) {
+      toast.error(reviewSaveBlock.hint);
+      return;
+    }
+
+    const CHUNK_SIZE = 25;
+
+    const allDecided = Object.entries(decisions)
+      .filter(([, d]) => d !== "pending")
+      .map(([qId, action]) => {
+        if (action === "reject") return { questionId: qId, action: "reject" as const };
+        const dr = drafts[qId];
+        if (!dr) return { questionId: qId, action: "approve" as const };
+        const diff: DifficultyChoice =
+          dr.difficulty === "EASY" || dr.difficulty === "MEDIUM" || dr.difficulty === "HARD" ? dr.difficulty : "MEDIUM";
+        return {
+          questionId: qId,
+          action: "approve" as const,
+          suggestedSubjectId: dr.suggestedSubjectId ?? null,
+          suggestedTopicId: dr.suggestedTopicId ?? null,
+          year: dr.year ?? null,
+          examBoardId: dr.examBoardId ?? null,
+          competitionId: dr.competitionId ?? null,
+          cityId: dr.cityId ?? null,
+          jobRoleId: dr.jobRoleId ?? null,
+          difficulty: diff,
+          tags: dr.tags ?? [],
+        };
+      });
+
+    if (allDecided.length === 0) {
+      toast.info("Nenhuma questão marcada para aprovar ou rejeitar ainda.");
+      return;
+    }
+
+    // Calcula quantas já foram salvas (questões cujo status não é mais PENDING_REVIEW)
+    const alreadySavedIds = new Set(
+      imp.importedQuestions
+        .filter((q) => q.status !== "PENDING_REVIEW")
+        .map((q) => q.id),
+    );
+
+    const remaining = allDecided.filter((d) => !alreadySavedIds.has(d.questionId));
+
+    if (remaining.length === 0) {
+      toast.success("Todas as questões decididas já foram salvas.");
+      await refreshImport();
+      return;
+    }
+
+    const batch = remaining.slice(0, CHUNK_SIZE);
+    const totalDecided = allDecided.length;
+    const alreadySavedCount = allDecided.length - remaining.length;
+
+    setSavingChunk(true);
+    setChunkProgress({ saved: alreadySavedCount, total: totalDecided });
+
+    const res = await fetch(`/api/admin/imports/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decisions: batch }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      importStatus?: "REVIEW_PENDING" | "COMPLETED";
+      stillInReview?: number;
+    };
+
+    if (res.ok) {
+      await refreshImport();
+      const nowSaved = alreadySavedCount + batch.length;
+      setChunkProgress({ saved: nowSaved, total: totalDecided });
+
+      if (nowSaved >= totalDecided) {
+        toast.success(data.importStatus === "COMPLETED"
+          ? "Revisão concluída! Todas as questões foram enviadas."
+          : `Lote salvo (${nowSaved}/${totalDecided}). Continue a revisão das pendentes.`);
+        if (data.importStatus === "COMPLETED") router.push("/admin/importacoes");
+      } else {
+        toast.success(`Lote salvo: ${batch.length} questões (${nowSaved}/${totalDecided}). Clique novamente para o próximo lote.`);
+      }
+    } else {
+      toast.error(data.error?.trim() || "Erro ao salvar lote");
+    }
+
+    setSavingChunk(false);
   }
 
   useEffect(() => {
@@ -1141,7 +1235,10 @@ export default function RevisaoImportacaoPage() {
         onApproveAll={() => selectAll("approve")}
         onRejectAll={() => selectAll("reject")}
         onSave={saveReview}
+        onSaveChunk={saveReviewChunk}
         saving={saving}
+        savingChunk={savingChunk}
+        chunkProgress={chunkProgress}
         saveDisabled={reviewSaveBlock.blocked}
         saveHint={reviewSaveBlock.blocked ? reviewSaveBlock.hint : undefined}
       />
