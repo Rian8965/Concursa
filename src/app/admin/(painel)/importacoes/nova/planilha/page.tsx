@@ -175,11 +175,11 @@ const COLUNAS = [
   { nome: "numero_questao", obrig: true },
   { nome: "enunciado", obrig: true },
   { nome: "texto_vinculado", obrig: false },
-  { nome: "alternativa_a", obrig: true },
-  { nome: "alternativa_b", obrig: true },
-  { nome: "alternativa_c", obrig: false },
-  { nome: "alternativa_d", obrig: false },
-  { nome: "alternativa_e", obrig: false },
+  { nome: "Alternativa A", obrig: true },
+  { nome: "Alternativa B", obrig: true },
+  { nome: "Alternativa C", obrig: false },
+  { nome: "Alternativa D", obrig: false },
+  { nome: "Alternativa E", obrig: false },
   { nome: "gabarito", obrig: true },
 ];
 

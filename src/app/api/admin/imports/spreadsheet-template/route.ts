@@ -31,11 +31,11 @@ export async function GET() {
     "numero_questao",
     "enunciado",
     "texto_vinculado",
-    "alternativa_a",
-    "alternativa_b",
-    "alternativa_c",
-    "alternativa_d",
-    "alternativa_e",
+    "Alternativa A",
+    "Alternativa B",
+    "Alternativa C",
+    "Alternativa D",
+    "Alternativa E",
     "gabarito",
   ];
 
