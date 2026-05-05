@@ -185,6 +185,21 @@ function parseSuggestedSubject(rawText?: string | null): { subject: string; conf
   } catch { /* não é JSON */ }
   return null;
 }
+
+function parseSpreadsheetMeta(rawText?: string | null): { textoVinculado?: string | null; source?: string | null } | null {
+  if (!rawText) return null;
+  try {
+    const p = JSON.parse(rawText) as { textoVinculado?: string | null; source?: string | null };
+    return { textoVinculado: p.textoVinculado ?? null, source: p.source ?? null };
+  } catch { return null; }
+}
+
+function patchRawTextVinculado(rawText: string | null | undefined, textoVinculado: string | null): string {
+  try {
+    const o = rawText?.trim() ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+    return JSON.stringify({ ...o, textoVinculado: textoVinculado?.trim() || null });
+  } catch { return JSON.stringify({ textoVinculado }); }
+}
 interface ImportData {
   id: string;
   originalFilename: string;
@@ -1327,7 +1342,11 @@ export default function RevisaoImportacaoPage() {
       <TopBar
         title={`Revisão: ${imp.originalFilename}`}
         subtitle={
-          [imp.competition?.name, imp.year != null ? String(imp.year) : null].filter(Boolean).join(" · ") || null
+          [
+            !imp.storedPdfPath ? "📊 Planilha" : null,
+            imp.competition?.name,
+            imp.year != null ? String(imp.year) : null,
+          ].filter(Boolean).join(" · ") || null
         }
         onApproveAll={() => selectAll("approve")}
         onRejectAll={() => selectAll("reject")}
@@ -1425,7 +1444,9 @@ export default function RevisaoImportacaoPage() {
       <div className="orbit-card-premium !py-5 sm:!py-6">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Gabarito extraído pela IA</h2>
+            <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">
+              {imp.storedPdfPath ? "Gabarito extraído pela IA" : "Gabarito das questões"}
+            </h2>
             <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
               Clique em um quadradinho para ir direto na questão e conferir o gabarito marcado.
             </p>
@@ -1470,9 +1491,13 @@ export default function RevisaoImportacaoPage() {
           if (!rows.length) return null;
           return (
             <div className="orbit-card-premium !py-5 sm:!py-6">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">Referências do PDF</h2>
+              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-muted)]">
+                {imp.storedPdfPath ? "Referências do PDF" : "Referências da Importação"}
+              </h2>
               <p className="mt-1 max-w-prose text-xs leading-relaxed text-[var(--text-muted)]">
-                Preenchido pelo cadastro da importação e/ou inferido pela IA a partir do texto do PDF (quando disponível).
+                {imp.storedPdfPath
+                  ? "Preenchido pelo cadastro da importação e/ou inferido pela IA a partir do texto do PDF (quando disponível)."
+                  : "Metadados definidos na importação via planilha. Aplicados a todas as questões."}
               </p>
               <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {rows.map(([k, v]) => (
@@ -1495,6 +1520,8 @@ export default function RevisaoImportacaoPage() {
           const linkedAssets = (imp.importAssets ?? []).filter((a) => (a.questionLinks ?? []).some((l) => l.importedQuestionId === q.id));
           const warningsRaw = computeReviewWarnings(draft);
           const aiMeta = parseAiMeta(draft.rawText);
+          const spreadsheetMeta = parseSpreadsheetMeta(draft.rawText);
+          const isSpreadsheetQuestion = spreadsheetMeta?.source === "spreadsheet";
           const qi = orderedImportedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
@@ -1650,7 +1677,12 @@ export default function RevisaoImportacaoPage() {
                             Alts. visuais
                           </span>
                         )}
-                        {q.confidence != null && (
+                        {isSpreadsheetQuestion && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-emerald-900 ring-1 ring-emerald-200/90 whitespace-normal">
+                            📊 Planilha
+                          </span>
+                        )}
+                        {q.confidence != null && !isSpreadsheetQuestion && (
                           <span className="inline-flex max-w-full items-center rounded-full bg-violet-100 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-violet-900 ring-1 ring-violet-200/80 whitespace-normal">
                             Confiança {Math.round(q.confidence * 100)}%
                           </span>
@@ -2103,6 +2135,28 @@ export default function RevisaoImportacaoPage() {
                         />
                       </section>
 
+                      {isSpreadsheetQuestion && (
+                        <section className="space-y-3">
+                          <div>
+                            <label className="orbit-form-label text-base">Texto vinculado / Texto de apoio</label>
+                            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                              Texto de apoio comum a esta questão (extraído da planilha). Será salvo como texto de suporte ao aprovar.
+                            </p>
+                          </div>
+                          <RichTextArea
+                            value={spreadsheetMeta?.textoVinculado ?? ""}
+                            minHeight="100px"
+                            ariaLabel="Texto vinculado / Texto de apoio"
+                            placeholder="Texto de apoio (deixe vazio se não houver)"
+                            onChange={(v) => {
+                              unsavedRef.current = true;
+                              const nextRaw = patchRawTextVinculado(draft.rawText, v || null);
+                              setDrafts((prev) => ({ ...prev, [q.id]: { ...draft, rawText: nextRaw } }));
+                            }}
+                          />
+                        </section>
+                      )}
+
                       <section className="space-y-5">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                           <div>
@@ -2229,25 +2283,27 @@ export default function RevisaoImportacaoPage() {
                         </div>
                       </section>
 
-                      <section className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/90 to-white p-5 shadow-md sm:p-6">
-                        <h3 className="text-sm font-extrabold tracking-tight text-violet-900">Extrair alternativas com IA</h3>
-                        <p className="mt-2 max-w-prose text-sm leading-relaxed text-violet-900/85">
-                          Selecione no PDF o bloco onde estão as alternativas (A–E) para preencher ou corrigir os textos automaticamente.
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-primary mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl px-5 text-sm font-extrabold shadow-md sm:w-auto"
-                          onClick={() => {
-                            setSelectedQ(q.id);
-                            setAltDrawerStartPage(
-                              resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
-                            );
-                            setAltDrawerOpen(true);
-                          }}
-                        >
-                          Identificar alternativas no PDF
-                        </button>
-                      </section>
+                      {!isSpreadsheetQuestion && imp.storedPdfPath && (
+                        <section className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/90 to-white p-5 shadow-md sm:p-6">
+                          <h3 className="text-sm font-extrabold tracking-tight text-violet-900">Extrair alternativas com IA</h3>
+                          <p className="mt-2 max-w-prose text-sm leading-relaxed text-violet-900/85">
+                            Selecione no PDF o bloco onde estão as alternativas (A–E) para preencher ou corrigir os textos automaticamente.
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-primary mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl px-5 text-sm font-extrabold shadow-md sm:w-auto"
+                            onClick={() => {
+                              setSelectedQ(q.id);
+                              setAltDrawerStartPage(
+                                resolvePdfStartPageForQuestion(drafts[q.id] ?? q, imp?.importAssets),
+                              );
+                              setAltDrawerOpen(true);
+                            }}
+                          >
+                            Identificar alternativas no PDF
+                          </button>
+                        </section>
+                      )}
                     </div>
 
                     <aside className="w-full shrink-0 space-y-8 xl:sticky xl:top-6 xl:w-[400px] xl:max-w-[400px] xl:self-start">

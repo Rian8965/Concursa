@@ -4,15 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, Upload, FileText, X, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Upload, FileText, X, CheckCircle2, Loader2, AlertCircle, FileSpreadsheet, Bot } from "lucide-react";
 
-type Stage = "form" | "processing" | "done" | "error";
+type Stage = "select" | "form" | "processing" | "done" | "error";
 
 export default function NovaImportacaoPage() {
   const router = useRouter();
   const [competitions, setCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
-  const [stage, setStage] = useState<Stage>("form");
+  const [stage, setStage] = useState<Stage>("select");
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<{ importId: string; totalExtracted: number; usedOcr: boolean } | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -124,6 +124,69 @@ export default function NovaImportacaoPage() {
     }
   }
 
+  // ── SELECT MODE ─────────────────────────────────────────────
+  if (stage === "select") {
+    return (
+      <div style={{ maxWidth: 600 }}>
+        <div style={{ marginBottom: 28 }}>
+          <Link href="/admin/importacoes" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+            <ArrowLeft style={{ width: 13, height: 13 }} /> Voltar
+          </Link>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Nova Importação</h1>
+          <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>Escolha como deseja importar as questões</p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <button
+            type="button"
+            onClick={() => setStage("form")}
+            style={{
+              display: "flex", alignItems: "flex-start", gap: 20, padding: "24px 28px",
+              background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16,
+              cursor: "pointer", textAlign: "left", fontFamily: "var(--font-sans)",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#7C3AED"; (e.currentTarget as HTMLButtonElement).style.background = "#FAF5FF"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#E5E7EB"; (e.currentTarget as HTMLButtonElement).style.background = "#fff"; }}
+          >
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: "#EDE9FE", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Bot style={{ width: 24, height: 24, color: "#7C3AED" }} />
+            </div>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Importar por PDF com IA</p>
+              <p style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, margin: 0 }}>
+                Faça upload do PDF da prova. A IA extrai automaticamente as questões, identifica o layout em colunas, lê o gabarito e estrutura tudo para revisão.
+              </p>
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>Recomendado para provas originais em PDF</p>
+            </div>
+          </button>
+
+          <Link
+            href="/admin/importacoes/nova/planilha"
+            style={{
+              display: "flex", alignItems: "flex-start", gap: 20, padding: "24px 28px",
+              background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16,
+              cursor: "pointer", textDecoration: "none", transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#059669"; (e.currentTarget as HTMLAnchorElement).style.background = "#F0FDF4"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E5E7EB"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}
+          >
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: "#DCFCE7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <FileSpreadsheet style={{ width: 24, height: 24, color: "#059669" }} />
+            </div>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Importar por Planilha</p>
+              <p style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, margin: 0 }}>
+                Faça upload de uma planilha CSV ou XLS/XLSX com questões já organizadas. Sem IA — processamento direto e rápido. Ideal para questões em texto puro.
+              </p>
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>Apenas para questões de texto (sem imagens, gráficos ou fórmulas visuais)</p>
+            </div>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // ── PROCESSING ──────────────────────────────────────────────
   if (stage === "processing") {
     return (
@@ -214,10 +277,10 @@ export default function NovaImportacaoPage() {
   return (
     <div style={{ maxWidth: 600 }}>
       <div style={{ marginBottom: 28 }}>
-        <Link href="/admin/importacoes" style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+        <button type="button" onClick={() => setStage("select")} style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8, background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", padding: 0 }}>
           <ArrowLeft style={{ width: 13, height: 13 }} /> Voltar
-        </Link>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Nova Importação de PDF</h1>
+        </button>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>Importar PDF com IA</h1>
         <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>
           Faça upload do PDF da prova para extração automática de questões
         </p>
@@ -329,7 +392,7 @@ export default function NovaImportacaoPage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <Link href="/admin/importacoes" className="btn btn-ghost">Cancelar</Link>
+          <button type="button" onClick={() => setStage("select")} className="btn btn-ghost">Cancelar</button>
           <button type="submit" disabled={!provaFile} className="btn btn-primary" style={{ minWidth: 160, opacity: !provaFile ? 0.5 : 1 }}>
             <Upload style={{ width: 14, height: 14 }} /> Processar PDF
           </button>

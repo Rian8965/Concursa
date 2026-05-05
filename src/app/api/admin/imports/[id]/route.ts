@@ -351,7 +351,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                     l.importAsset.extractedText?.trim(),
                 )
                 .map((l) => l.importAsset.extractedText!.trim());
-              const supportText = supportParts.length > 0 ? supportParts.join("\n\n") : null;
+              // Para importações por planilha: extrair textoVinculado do rawText como supportText
+              const spreadsheetSupportText = (() => {
+                if (supportParts.length > 0) return null; // já tem via asset
+                try {
+                  const rt = freshIq.rawText ? (JSON.parse(freshIq.rawText) as { textoVinculado?: string | null }) : null;
+                  return rt?.textoVinculado?.trim() || null;
+                } catch { return null; }
+              })();
+              const supportText = supportParts.length > 0 ? supportParts.join("\n\n") : (spreadsheetSupportText ?? null);
               const mainFig = assetLinks.find(
                 (l) => l.role === "FIGURE" && l.importAsset.kind === "IMAGE" && !l.alternativeLetter,
               );
