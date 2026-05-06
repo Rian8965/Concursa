@@ -20,6 +20,7 @@ export async function GET() {
   }
 
   const headers = [
+    // Metadados por questão
     "disciplina",
     "assunto",
     "banca",
@@ -28,6 +29,7 @@ export async function GET() {
     "cidade",
     "cargo",
     "concurso",
+    // Dados da questão
     "numero_questao",
     "enunciado",
     "texto_vinculado",
@@ -37,9 +39,18 @@ export async function GET() {
     "Alternativa D",
     "Alternativa E",
     "gabarito",
+    // Flags de pendência visual (preencher com SIM ou NÃO)
+    "precisa de imagem",
+    "precisa de grafico",
+    "precisa de tabela",
+    "precisa de formula",
+    "precisa de mapa/figura/esquema",
+    "alternativas em imagem",
+    "observacao da IA",
   ];
 
-  const exemplo = [
+  // Exemplo 1 – questão normal sem pendência visual
+  const ex1 = [
     "Direito Constitucional",
     "Direitos Fundamentais",
     "CESPE",
@@ -57,9 +68,17 @@ export async function GET() {
     "Apenas brasileiros natos possuem direitos fundamentais.",
     "",
     "B",
+    "NÃO", // precisa de imagem
+    "NÃO", // precisa de gráfico
+    "NÃO", // precisa de tabela
+    "NÃO", // precisa de fórmula
+    "NÃO", // precisa de mapa/figura/esquema
+    "NÃO", // alternativas em imagem
+    "",    // observação da IA
   ];
 
-  const exemplo2 = [
+  // Exemplo 2 – questão com gráfico
+  const ex2 = [
     "Língua Portuguesa",
     "Interpretação de Texto",
     "FGV",
@@ -69,24 +88,30 @@ export async function GET() {
     "",
     "",
     "2",
-    "Assinale a alternativa que apresenta uso correto da crase.",
+    "Com base no gráfico apresentado, assinale a alternativa que indica corretamente o tema abordado.",
     "",
-    "Vou à escola todos os dias.",
-    "Refiro-me à problemas antigos.",
-    "Fui à pé ao trabalho.",
+    "Desemprego no Brasil em 2022.",
+    "Crescimento do PIB no último trimestre.",
+    "Evolução da inflação nos últimos 5 anos.",
     "",
     "",
-    "A",
+    "C",
+    "NÃO", // precisa de imagem
+    "SIM", // precisa de gráfico
+    "NÃO", // precisa de tabela
+    "NÃO", // precisa de fórmula
+    "NÃO", // precisa de mapa/figura/esquema
+    "NÃO", // alternativas em imagem
+    "A questão se refere a um gráfico apresentado no PDF da prova.", // observação da IA
   ];
 
-  const linhas = [headers, exemplo, exemplo2]
+  const linhas = [headers, ex1, ex2]
     .map((linha) => linha.map(csvEscape).join(","))
     .join("\r\n");
 
   const bom = "\uFEFF";
-  const csvContent = bom + linhas;
 
-  return new NextResponse(csvContent, {
+  return new NextResponse(bom + linhas, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

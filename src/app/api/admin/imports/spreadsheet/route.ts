@@ -7,11 +7,38 @@ import {
   findOrCreateCity,
   findOrCreateJobRole,
 } from "@/lib/import/auto-create-meta";
+import { saveImportPdfBuffer } from "@/lib/import-pdf-storage";
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
 function isAdmin(r?: string) {
   return r === "ADMIN" || r === "SUPER_ADMIN";
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+function normalizeColName(raw: string): string {
+  return (raw ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s_/]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** "SIM", "S", "YES", "TRUE", "1" → true; qualquer outro → false */
+function parseBoolFlag(val: string): boolean {
+  const v = (val ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return v === "sim" || v === "s" || v === "yes" || v === "true" || v === "1";
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -29,7 +56,7 @@ const COL_ALIASES: Record<string, string> = {
   "topico assunto": "assunto",
   banca: "banca",
   "orgao banca": "banca",
-  "organizadora": "banca",
+  organizadora: "banca",
   ano: "ano",
   "ano da prova": "ano",
   "ano prova": "ano",
@@ -51,8 +78,8 @@ const COL_ALIASES: Record<string, string> = {
   "numero da questao": "numero_questao",
   "numero questao": "numero_questao",
   numero: "numero_questao",
-  "no": "numero_questao",
-  "questao": "numero_questao",
+  no: "numero_questao",
+  questao: "numero_questao",
   enunciado: "enunciado",
   "texto da questao": "enunciado",
   "texto questao": "enunciado",
@@ -92,19 +119,46 @@ const COL_ALIASES: Record<string, string> = {
   "resposta correta": "gabarito",
   "alternativa correta": "gabarito",
   "letra correta": "gabarito",
+  // Flags de pendência visual
+  "precisa de imagem": "precisa_imagem",
+  "precisa imagem": "precisa_imagem",
+  "precisa_imagem": "precisa_imagem",
+  "imagem": "precisa_imagem",
+  "precisa de grafico": "precisa_grafico",
+  "precisa grafico": "precisa_grafico",
+  "precisa_grafico": "precisa_grafico",
+  "grafico": "precisa_grafico",
+  "precisa de tabela": "precisa_tabela",
+  "precisa tabela": "precisa_tabela",
+  "precisa_tabela": "precisa_tabela",
+  "tabela": "precisa_tabela",
+  "precisa de formula": "precisa_formula",
+  "precisa formula": "precisa_formula",
+  "precisa_formula": "precisa_formula",
+  "formula": "precisa_formula",
+  "precisa de mapa/figura/esquema": "precisa_mapa_figura",
+  "precisa de mapa figura esquema": "precisa_mapa_figura",
+  "precisa mapa figura esquema": "precisa_mapa_figura",
+  "precisa mapa/figura/esquema": "precisa_mapa_figura",
+  "precisa_mapa_figura": "precisa_mapa_figura",
+  "mapa figura esquema": "precisa_mapa_figura",
+  "mapa": "precisa_mapa_figura",
+  "figura": "precisa_mapa_figura",
+  "esquema": "precisa_mapa_figura",
+  "charge": "precisa_mapa_figura",
+  "tirinha": "precisa_mapa_figura",
+  "alternativas em imagem": "alternativas_em_imagem",
+  "alternativas imagem": "alternativas_em_imagem",
+  "alternativas_em_imagem": "alternativas_em_imagem",
+  "alt em imagem": "alternativas_em_imagem",
+  "observacao da ia": "observacao_ia",
+  "observacao ia": "observacao_ia",
+  "observacao": "observacao_ia",
+  "observacao_ia": "observacao_ia",
+  "obs ia": "observacao_ia",
+  "comentario ia": "observacao_ia",
+  "nota ia": "observacao_ia",
 };
-
-function normalizeColName(raw: string): string {
-  return (raw ?? "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s_/]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -112,7 +166,7 @@ function normalizeColName(raw: string): string {
 
 type ParsedRow = {
   rowIndex: number;
-  // Metadados por questão (texto livre — serão resolvidos para IDs)
+  // Metadados por questão
   disciplina: string;
   assunto: string;
   banca: string;
@@ -121,7 +175,7 @@ type ParsedRow = {
   cidade: string;
   cargo: string;
   concurso: string;
-  // Dados da questão
+  // Dados
   numero: string;
   enunciado: string;
   textoVinculado: string;
@@ -131,6 +185,14 @@ type ParsedRow = {
   altD: string;
   altE: string;
   gabarito: string;
+  // Flags visuais (da planilha)
+  precisaImagem: boolean;
+  precisaGrafico: boolean;
+  precisaTabela: boolean;
+  precisaFormula: boolean;
+  precisaMapaFigura: boolean;
+  alternativasEmImagem: boolean;
+  observacaoIA: string;
 };
 
 type RowError = { row: number; field: string; message: string };
@@ -153,8 +215,10 @@ export async function POST(req: NextRequest) {
   }
 
   const arquivo = formData.get("arquivo") as File | null;
+  const pdfApoio = formData.get("pdf_apoio") as File | null;
+
   if (!arquivo) {
-    return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
+    return NextResponse.json({ error: "Nenhum arquivo de planilha enviado." }, { status: 400 });
   }
 
   const fileName = arquivo.name ?? "planilha";
@@ -165,6 +229,15 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  if (pdfApoio) {
+    const pdfExt = (pdfApoio.name ?? "").split(".").pop()?.toLowerCase() ?? "";
+    if (pdfExt !== "pdf") {
+      return NextResponse.json({ error: "O PDF de apoio deve ser um arquivo .pdf." }, { status: 400 });
+    }
+  }
+
+  // ── Ler planilha ───────────────────────────────────────────────────────────
 
   const buffer = Buffer.from(await arquivo.arrayBuffer());
   let workbook: XLSX.WorkBook;
@@ -188,7 +261,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A planilha não contém linhas de dados." }, { status: 400 });
   }
 
-  // ── Parsear linhas ──────────────────────────────────────────────────────────
+  // ── Parsear linhas ─────────────────────────────────────────────────────────
 
   function mapRow(raw: Record<string, unknown>): ParsedRow | null {
     const mapped: Record<string, string> = {};
@@ -199,7 +272,6 @@ export async function POST(req: NextRequest) {
         mapped[canonical] = String(v ?? "").trim();
       }
     }
-    // Linha em branco ou sem dado relevante → ignorar
     if (!mapped["enunciado"] && !mapped["gabarito"]) return null;
     return {
       rowIndex: 0,
@@ -220,6 +292,13 @@ export async function POST(req: NextRequest) {
       altD: mapped["alternativa_d"] ?? "",
       altE: mapped["alternativa_e"] ?? "",
       gabarito: (mapped["gabarito"] ?? "").toUpperCase().trim(),
+      precisaImagem: parseBoolFlag(mapped["precisa_imagem"] ?? ""),
+      precisaGrafico: parseBoolFlag(mapped["precisa_grafico"] ?? ""),
+      precisaTabela: parseBoolFlag(mapped["precisa_tabela"] ?? ""),
+      precisaFormula: parseBoolFlag(mapped["precisa_formula"] ?? ""),
+      precisaMapaFigura: parseBoolFlag(mapped["precisa_mapa_figura"] ?? ""),
+      alternativasEmImagem: parseBoolFlag(mapped["alternativas_em_imagem"] ?? ""),
+      observacaoIA: mapped["observacao_ia"] ?? "",
     };
   }
 
@@ -227,7 +306,7 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < rawRows.length; i++) {
     const pr = mapRow(rawRows[i]!);
     if (!pr) continue;
-    pr.rowIndex = i + 2; // linha 1 = cabeçalho
+    pr.rowIndex = i + 2;
     parsedRows.push(pr);
   }
 
@@ -238,14 +317,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Validações por linha ────────────────────────────────────────────────────
+  // ── Validações por linha ───────────────────────────────────────────────────
 
   const parseErrors: RowError[] = [];
 
   for (const pr of parsedRows) {
     const row = pr.rowIndex;
 
-    // Metadados obrigatórios
     if (!pr.disciplina) parseErrors.push({ row, field: "disciplina", message: "Disciplina/matéria ausente." });
     if (!pr.assunto) parseErrors.push({ row, field: "assunto", message: "Assunto ausente." });
     if (!pr.banca) parseErrors.push({ row, field: "banca", message: "Banca ausente." });
@@ -257,42 +335,24 @@ export async function POST(req: NextRequest) {
         parseErrors.push({ row, field: "ano", message: `Ano inválido: "${pr.ano}".` });
       }
     }
-
-    // Dados obrigatórios
     if (!pr.numero) parseErrors.push({ row, field: "numero_questao", message: "Número da questão ausente." });
     if (!pr.enunciado) parseErrors.push({ row, field: "enunciado", message: "Enunciado ausente." });
-    if (!pr.altA) parseErrors.push({ row, field: "alternativa_a", message: "Alternativa A ausente." });
-    if (!pr.altB) parseErrors.push({ row, field: "alternativa_b", message: "Alternativa B ausente." });
+    if (!pr.altA) parseErrors.push({ row, field: "Alternativa A", message: "Alternativa A ausente." });
+    if (!pr.altB) parseErrors.push({ row, field: "Alternativa B", message: "Alternativa B ausente." });
 
     if (!pr.gabarito) {
       parseErrors.push({ row, field: "gabarito", message: "Gabarito ausente." });
-    } else {
-      // Gabarito deve apontar para uma alternativa existente e preenchida
+    } else if (pr.gabarito !== "PENDENTE") {
       const altMap: Record<string, string> = {
-        A: pr.altA,
-        B: pr.altB,
-        C: pr.altC,
-        D: pr.altD,
-        E: pr.altE,
+        A: pr.altA, B: pr.altB, C: pr.altC, D: pr.altD, E: pr.altE,
       };
-      const validLetters = Object.entries(altMap)
-        .filter(([, v]) => v.trim())
-        .map(([k]) => k);
-
+      const validLetters = Object.entries(altMap).filter(([, v]) => v.trim()).map(([k]) => k);
       if (!validLetters.includes(pr.gabarito)) {
-        if (!altMap[pr.gabarito]) {
-          parseErrors.push({
-            row,
-            field: "gabarito",
-            message: `Gabarito "${pr.gabarito}" inválido. Use apenas as letras das alternativas existentes nesta questão: ${validLetters.join(", ") || "(nenhuma preenchida)"}.`,
-          });
-        } else {
-          parseErrors.push({
-            row,
-            field: "gabarito",
-            message: `Gabarito "${pr.gabarito}" aponta para alternativa vazia.`,
-          });
-        }
+        parseErrors.push({
+          row,
+          field: "gabarito",
+          message: `Gabarito "${pr.gabarito}" inválido. Alternativas disponíveis: ${validLetters.join(", ") || "(nenhuma preenchida)"}. Use PENDENTE se o gabarito for desconhecido.`,
+        });
       }
     }
   }
@@ -301,21 +361,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erros de validação", validationErrors: parseErrors }, { status: 422 });
   }
 
-  // ── Resolver metadados texto → ID (deduplica por texto para evitar N+1) ─────
+  // ── Resolver metadados texto → ID ─────────────────────────────────────────
 
-  // Disciplina (subject)
   const uniqueDisciplinas = [...new Set(parsedRows.map((r) => r.disciplina).filter(Boolean))];
   const disciplinaIdMap: Record<string, string | null> = {};
   for (const name of uniqueDisciplinas) {
     disciplinaIdMap[name] = await findOrCreateSubject(name, prisma);
   }
 
-  // Assunto (topic) — depende da disciplina
   const uniqueAssuntos = [
     ...new Map(
       parsedRows
         .filter((r) => r.assunto && r.disciplina)
-        .map((r) => [`${r.disciplina}||${r.assunto}`, { disciplina: r.disciplina, assunto: r.assunto }] as const),
+        .map(
+          (r) => [`${r.disciplina}||${r.assunto}`, { disciplina: r.disciplina, assunto: r.assunto }] as const,
+        ),
     ).values(),
   ];
   const assuntoIdMap: Record<string, string | null> = {};
@@ -326,28 +386,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Banca (examBoard)
   const uniqueBancas = [...new Set(parsedRows.map((r) => r.banca).filter(Boolean))];
   const bancaIdMap: Record<string, string | null> = {};
   for (const name of uniqueBancas) {
     bancaIdMap[name] = await findOrCreateExamBoard(name, prisma);
   }
 
-  // Cidade (city) — opcional, find-or-create
   const uniqueCidades = [...new Set(parsedRows.map((r) => r.cidade).filter(Boolean))];
   const cidadeIdMap: Record<string, string | null> = {};
   for (const name of uniqueCidades) {
     cidadeIdMap[name] = await findOrCreateCity(name, prisma);
   }
 
-  // Cargo (jobRole) — opcional, find-or-create
   const uniqueCargos = [...new Set(parsedRows.map((r) => r.cargo).filter(Boolean))];
   const cargoIdMap: Record<string, string | null> = {};
   for (const name of uniqueCargos) {
     cargoIdMap[name] = await findOrCreateJobRole(name, prisma);
   }
 
-  // Concurso — apenas find (não criar automaticamente)
   const uniqueConcursos = [...new Set(parsedRows.map((r) => r.concurso).filter(Boolean))];
   const concursoIdMap: Record<string, string | null> = {};
   for (const name of uniqueConcursos) {
@@ -358,7 +414,7 @@ export async function POST(req: NextRequest) {
     concursoIdMap[name] = found?.id ?? null;
   }
 
-  // ── Criar registro de importação (sem metadados globais) ───────────────────
+  // ── Criar PDFImport ────────────────────────────────────────────────────────
 
   const pdfImport = await prisma.pDFImport.create({
     data: {
@@ -369,9 +425,27 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // ── Salvar PDF de apoio se enviado ─────────────────────────────────────────
+
+  if (pdfApoio) {
+    try {
+      const pdfBuffer = Buffer.from(await pdfApoio.arrayBuffer());
+      const storedPath = await saveImportPdfBuffer(pdfImport.id, pdfBuffer);
+      await prisma.pDFImport.update({
+        where: { id: pdfImport.id },
+        data: {
+          storedPdfPath: storedPath,
+          originalFilename: `${fileName} + ${pdfApoio.name}`,
+        },
+      });
+    } catch {
+      // PDF salvo como opcional — não bloqueia a importação
+    }
+  }
+
   // ── Criar ImportedQuestion para cada linha ─────────────────────────────────
 
-  const vinculoExcecao = { semTexto: true, semImagem: true, at: new Date().toISOString() };
+  const vinculoExcecaoBypass = { semTexto: true, semImagem: true, at: new Date().toISOString() };
 
   await prisma.importedQuestion.createMany({
     data: parsedRows.map((pr, idx) => {
@@ -391,12 +465,37 @@ export async function POST(req: NextRequest) {
       const competitionId = pr.concurso ? (concursoIdMap[pr.concurso] ?? null) : null;
       const anoInt = parseInt(pr.ano, 10);
 
+      // Flags visuais combinadas
+      const hasAnyVisualFlag =
+        pr.precisaImagem || pr.precisaGrafico || pr.precisaTabela ||
+        pr.precisaFormula || pr.precisaMapaFigura || pr.alternativasEmImagem;
+
+      const spreadsheetFlags = {
+        precisaImagem: pr.precisaImagem,
+        precisaGrafico: pr.precisaGrafico,
+        precisaTabela: pr.precisaTabela,
+        precisaFormula: pr.precisaFormula,
+        precisaMapaFigura: pr.precisaMapaFigura,
+        alternativasEmImagem: pr.alternativasEmImagem,
+        observacaoIA: pr.observacaoIA || null,
+      };
+
+      const reviewObj = hasAnyVisualFlag
+        ? {
+            // Sem vinculoExcecao — permite que o sistema bloqueie aprovação até os vínculos serem feitos
+            ...(pr.alternativasEmImagem ? { alternativasVisuais: { revisorMarcou: true } } : {}),
+          }
+        : {
+            // Sem flags visuais → bypass (como antes)
+            vinculoExcecao: vinculoExcecaoBypass,
+          };
+
       const rawTextObj = {
         source: "spreadsheet",
         nivel: pr.nivel || null,
         numero: pr.numero || String(idx + 1),
         textoVinculado: pr.textoVinculado || null,
-        // Metadados originais (texto livre) para exibição na revisão
+        spreadsheetFlags: hasAnyVisualFlag ? spreadsheetFlags : null,
         meta: {
           disciplina: pr.disciplina,
           assunto: pr.assunto,
@@ -406,15 +505,15 @@ export async function POST(req: NextRequest) {
           cargo: pr.cargo || null,
           concurso: pr.concurso || null,
         },
-        // Dispensa checagem de vínculos com PDF (não há PDF nesta importação).
-        review: { vinculoExcecao },
+        review: reviewObj,
       };
 
       return {
         importId: pdfImport.id,
         content: pr.enunciado,
         alternatives: alts,
-        correctAnswer: pr.gabarito || null,
+        // PENDENTE → sem resposta marcada (admin vai preencher na revisão)
+        correctAnswer: pr.gabarito === "PENDENTE" ? null : (pr.gabarito || null),
         suggestedSubjectId: subjectId,
         suggestedTopicId: topicId,
         examBoardId,

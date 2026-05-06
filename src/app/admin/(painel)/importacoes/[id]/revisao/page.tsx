@@ -186,12 +186,43 @@ function parseSuggestedSubject(rawText?: string | null): { subject: string; conf
   return null;
 }
 
-function parseSpreadsheetMeta(rawText?: string | null): { textoVinculado?: string | null; source?: string | null } | null {
+type SpreadsheetFlags = {
+  precisaImagem: boolean;
+  precisaGrafico: boolean;
+  precisaTabela: boolean;
+  precisaFormula: boolean;
+  precisaMapaFigura: boolean;
+  alternativasEmImagem: boolean;
+  observacaoIA: string | null;
+};
+
+function parseSpreadsheetMeta(rawText?: string | null): {
+  textoVinculado?: string | null;
+  source?: string | null;
+  spreadsheetFlags?: SpreadsheetFlags | null;
+} | null {
   if (!rawText) return null;
   try {
-    const p = JSON.parse(rawText) as { textoVinculado?: string | null; source?: string | null };
-    return { textoVinculado: p.textoVinculado ?? null, source: p.source ?? null };
+    const p = JSON.parse(rawText) as {
+      textoVinculado?: string | null;
+      source?: string | null;
+      spreadsheetFlags?: SpreadsheetFlags | null;
+    };
+    return {
+      textoVinculado: p.textoVinculado ?? null,
+      source: p.source ?? null,
+      spreadsheetFlags: p.spreadsheetFlags ?? null,
+    };
   } catch { return null; }
+}
+
+function spreadsheetFlagsToDep(flags: SpreadsheetFlags | null | undefined): { needsFigure: boolean; needsTextSupport: boolean } | null {
+  if (!flags) return null;
+  const needsFigure =
+    flags.precisaImagem || flags.precisaGrafico || flags.precisaTabela ||
+    flags.precisaFormula || flags.precisaMapaFigura;
+  if (!needsFigure) return null;
+  return { needsFigure: true, needsTextSupport: false };
 }
 
 function patchRawTextVinculado(rawText: string | null | undefined, textoVinculado: string | null): string {
@@ -286,11 +317,13 @@ function canApproveImportQuestion(
   drafts: Record<string, ImportedQ>,
   llmById: Record<string, { needsTextSupport: boolean; needsFigure: boolean }> | null,
   qid: string,
+  mergedDepOverride?: ReturnType<typeof mergeDependencyOr> | null,
 ): { ok: true } | { ok: false; message: string } {
   const draft = drafts[qid];
   if (!draft) return { ok: false, message: "Rascunho indisponível" };
   const c = draft.content ?? "";
-  const dep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
+  const baseDep = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[qid] ?? null);
+  const dep = mergedDepOverride ?? baseDep;
   const { review } = parseImportRawText(draft.rawText);
   const ext = getExtendedLinkFlags(imp.importAssets, qid);
   const vg = isVinculoSatisfiedForReview(
@@ -614,7 +647,11 @@ export default function RevisaoImportacaoPage() {
     const o: Record<string, ReturnType<typeof mergeDependencyOr>> = {};
     for (const q of imp.importedQuestions) {
       const c = drafts[q.id]?.content ?? q.content;
-      o[q.id] = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[q.id] ?? null);
+      const rawText = drafts[q.id]?.rawText ?? q.rawText;
+      const ssFlags = parseSpreadsheetMeta(rawText)?.spreadsheetFlags ?? null;
+      const ssDep = spreadsheetFlagsToDep(ssFlags);
+      const base = mergeDependencyOr(analyzeEnunciadoHeuristic(c), llmById?.[q.id] ?? null);
+      o[q.id] = ssDep ? mergeDependencyOr(base, ssDep) : base;
     }
     return o;
   }, [imp, drafts, llmById]);
@@ -623,7 +660,7 @@ export default function RevisaoImportacaoPage() {
     if (!imp) return { blocked: false, hint: "" as string };
     for (const [qid, dec] of Object.entries(decisions)) {
       if (dec !== "approve") continue;
-      const c = canApproveImportQuestion(imp, drafts, llmById, qid);
+      const c = canApproveImportQuestion(imp, drafts, llmById, qid, mergedDepByQuestion[qid]);
       if (!c.ok) {
         return {
           blocked: true,
@@ -632,7 +669,7 @@ export default function RevisaoImportacaoPage() {
       }
     }
     return { blocked: false, hint: "" };
-  }, [imp, decisions, drafts, llmById]);
+  }, [imp, decisions, drafts, llmById, mergedDepByQuestion]);
 
   function selectAll(action: "approve" | "reject") {
     if (!imp) return;
@@ -645,7 +682,7 @@ export default function RevisaoImportacaoPage() {
     let skipped = 0;
     const next: Record<string, Decision> = { ...decisions };
     for (const q of imp.importedQuestions) {
-      if (canApproveImportQuestion(imp, drafts, llmById, q.id).ok) {
+      if (canApproveImportQuestion(imp, drafts, llmById, q.id, mergedDepByQuestion[q.id]).ok) {
         next[q.id] = "approve";
       } else {
         skipped += 1;
@@ -667,7 +704,7 @@ export default function RevisaoImportacaoPage() {
       setDecisions((p) => ({ ...p, [qid]: next }));
       return;
     }
-    const c = canApproveImportQuestion(imp, drafts, llmById, qid);
+    const c = canApproveImportQuestion(imp, drafts, llmById, qid, mergedDepByQuestion[qid]);
     if (!c.ok) {
       toast.error(c.message);
       return;
@@ -1187,7 +1224,7 @@ export default function RevisaoImportacaoPage() {
       const { review } = parseImportRawText(d.rawText);
       const warningsRaw = computeReviewWarnings(d);
       const warnings = review.revisaoDispensada ? [] : warningsRaw;
-      const cap = imp ? canApproveImportQuestion(imp, drafts, llmById, q.id) : { ok: true };
+      const cap = imp ? canApproveImportQuestion(imp, drafts, llmById, q.id, mergedDepByQuestion[q.id]) : { ok: true };
       const ext = imp
         ? getExtendedLinkFlags(imp.importAssets, q.id)
         : ({ hasTextBlockLink: true, hasMainImageLink: true, altImageByLetter: {} } as any);
@@ -1522,6 +1559,7 @@ export default function RevisaoImportacaoPage() {
           const aiMeta = parseAiMeta(draft.rawText);
           const spreadsheetMeta = parseSpreadsheetMeta(draft.rawText);
           const isSpreadsheetQuestion = spreadsheetMeta?.source === "spreadsheet";
+          const ssFlags = spreadsheetMeta?.spreadsheetFlags ?? null;
           const qi = orderedImportedQuestions.findIndex((x) => x.id === q.id) + 1;
           const isFirstVisible = filteredQuestions[0]?.id === q.id;
           const ansMeta = parseAnswerMeta(draft.rawText);
@@ -1559,7 +1597,7 @@ export default function RevisaoImportacaoPage() {
           }
           const missAlts = visOn ? missingAlternativeImageLinks(altLetters, hasByLetter) : [];
           const altsPend = missAlts.length > 0 && !visExempted;
-          const cap = canApproveImportQuestion(imp, drafts, llmById, q.id);
+          const cap = canApproveImportQuestion(imp, drafts, llmById, q.id, mergedDepByQuestion[q.id]);
           const anyPend = !cap.ok;
           const vExAtiva = Boolean(
             reviewFromDraft.vinculoExcecao?.semTexto && reviewFromDraft.vinculoExcecao?.semImagem,
@@ -1680,6 +1718,41 @@ export default function RevisaoImportacaoPage() {
                         {isSpreadsheetQuestion && (
                           <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-emerald-900 ring-1 ring-emerald-200/90 whitespace-normal">
                             📊 Planilha
+                          </span>
+                        )}
+                        {ssFlags?.precisaImagem && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-800 ring-1 ring-orange-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            🖼️ Precisa imagem
+                          </span>
+                        )}
+                        {ssFlags?.precisaGrafico && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-800 ring-1 ring-orange-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            📊 Precisa gráfico
+                          </span>
+                        )}
+                        {ssFlags?.precisaTabela && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-800 ring-1 ring-orange-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            📋 Precisa tabela
+                          </span>
+                        )}
+                        {ssFlags?.precisaFormula && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-800 ring-1 ring-orange-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            🔢 Precisa fórmula
+                          </span>
+                        )}
+                        {ssFlags?.precisaMapaFigura && !ext.hasMainImageLink && !reviewFromDraft.vinculoExcecao?.semImagem && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-orange-800 ring-1 ring-orange-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            🗺️ Precisa mapa/figura
+                          </span>
+                        )}
+                        {ssFlags?.alternativasEmImagem && !visExempted && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1.5 text-[11px] font-extrabold leading-snug text-rose-800 ring-1 ring-rose-200/90 whitespace-normal" title={ssFlags.observacaoIA ?? undefined}>
+                            🖼️ Alts. em imagem
+                          </span>
+                        )}
+                        {ssFlags?.observacaoIA && (ssFlags.precisaImagem || ssFlags.precisaGrafico || ssFlags.precisaTabela || ssFlags.precisaFormula || ssFlags.precisaMapaFigura || ssFlags.alternativasEmImagem) && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-yellow-800 ring-1 ring-yellow-200/80 whitespace-normal" title={ssFlags.observacaoIA}>
+                            💬 Obs. IA
                           </span>
                         )}
                         {q.confidence != null && !isSpreadsheetQuestion && (

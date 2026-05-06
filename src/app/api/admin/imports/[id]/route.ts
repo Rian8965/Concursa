@@ -270,7 +270,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
         const assetLinks = linksByIqId.get(iq.id) ?? [];
         const heur = analyzeEnunciadoHeuristic(iq.content);
-        const dep = mergeDependencyOr(heur, llmEnunciadoMap?.[iq.id] ?? null);
+        const ssDepHint = (() => {
+          try {
+            const rt = iq.rawText ? (JSON.parse(iq.rawText) as { spreadsheetFlags?: { precisaImagem?: boolean; precisaGrafico?: boolean; precisaTabela?: boolean; precisaFormula?: boolean; precisaMapaFigura?: boolean } | null }) : null;
+            const f = rt?.spreadsheetFlags;
+            if (!f) return null;
+            const needsFigure = !!(f.precisaImagem || f.precisaGrafico || f.precisaTabela || f.precisaFormula || f.precisaMapaFigura);
+            return needsFigure ? { needsFigure: true as const, needsTextSupport: false as const } : null;
+          } catch { return null; }
+        })();
+        const dep = mergeDependencyOr(
+          mergeDependencyOr(heur, llmEnunciadoMap?.[iq.id] ?? null),
+          ssDepHint,
+        );
         const { review } = parseImportRawText(iq.rawText);
         const linkStats = reviewLinkStatsFromPrismaJoins(assetLinks);
         const vg = isVinculoSatisfiedForReview(
