@@ -23,7 +23,12 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         studentProfile: {
-          include: {
+          select: {
+            planId: true,
+            accessExpiresAt: true,
+            phone: true,
+            cpf: true,
+            createdByPayment: true,
             plan: { select: { name: true } },
             _count: { select: { studentAnswers: true, trainingSessions: true } },
           },

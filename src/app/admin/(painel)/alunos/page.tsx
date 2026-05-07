@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Search, Users, UserPlus, ShieldCheck, ShieldX, Plus, Trash2 } from "lucide-react";
+import { Search, Users, UserPlus, ShieldCheck, ShieldX, Plus, Trash2, Phone } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
 
@@ -14,8 +14,12 @@ interface Student {
   isActive: boolean;
   createdAt: string;
   studentProfile?: {
+    planId?: string | null;
     plan?: { name: string } | null;
     accessExpiresAt?: string | null;
+    phone?: string | null;
+    cpf?: string | null;
+    createdByPayment?: boolean;
     _count?: { studentAnswers: number; trainingSessions: number };
   } | null;
 }
@@ -116,6 +120,12 @@ export default function AdminAlunosPage() {
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-extrabold text-[var(--text-primary)]">{s.name}</p>
                     <p className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">{s.email}</p>
+                    {s.studentProfile?.phone && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
+                        <Phone className="h-3 w-3 shrink-0" />
+                        {s.studentProfile.phone}
+                      </p>
+                    )}
                     <p className="mt-2 text-[12px] font-semibold text-[var(--text-secondary)]">
                       Plano: {s.studentProfile?.plan?.name ?? "—"}
                     </p>
@@ -187,6 +197,17 @@ export default function AdminAlunosPage() {
                         <td className="min-w-0">
                           <p className="truncate font-semibold text-[var(--text-primary)]">{s.name}</p>
                           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{s.email}</p>
+                          {s.studentProfile?.phone && (
+                            <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+                              <Phone className="h-3 w-3 shrink-0" />
+                              {s.studentProfile.phone}
+                            </p>
+                          )}
+                          {s.studentProfile?.createdByPayment && (
+                            <span className="mt-1 inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">
+                              Checkout
+                            </span>
+                          )}
                         </td>
                         <td className="min-w-0">
                           <p className="truncate text-[var(--text-secondary)]">
@@ -278,7 +299,7 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
     name: student.name,
     email: student.email,
     password: "",
-    planId: (student.studentProfile as { planId?: string } | undefined)?.planId ?? "",
+    planId: student.studentProfile?.planId ?? "",
     accessExpiresAt: student.studentProfile?.accessExpiresAt
       ? new Date(student.studentProfile.accessExpiresAt).toISOString().slice(0, 10)
       : "",
@@ -475,6 +496,31 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
                   placeholder="email@exemplo.com"
                 />
               </div>
+
+              {/* Telefone e CPF — preenchidos via checkout, somente leitura */}
+              {!isNew && (student.studentProfile?.phone || student.studentProfile?.cpf) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {student.studentProfile?.phone && (
+                    <div>
+                      <label className="orbit-form-label flex items-center gap-1">
+                        <Phone className="h-3 w-3" /> Telefone
+                      </label>
+                      <div className="input flex items-center gap-2 bg-[var(--bg-muted)] text-[var(--text-secondary)] cursor-default select-text">
+                        {student.studentProfile.phone}
+                      </div>
+                    </div>
+                  )}
+                  {student.studentProfile?.cpf && (
+                    <div>
+                      <label className="orbit-form-label">CPF</label>
+                      <div className="input flex items-center gap-2 bg-[var(--bg-muted)] text-[var(--text-secondary)] cursor-default select-text">
+                        {student.studentProfile.cpf}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="orbit-form-label">{isNew ? "Senha *" : "Nova senha (deixe em branco para manter)"}</label>
                 <input
