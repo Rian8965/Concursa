@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Search, Users, UserPlus, ShieldCheck, ShieldX, Plus, Trash2, Phone } from "lucide-react";
+import { Search, Users, UserPlus, ShieldCheck, ShieldX, Plus, Trash2, Phone, Pencil, Check, X as XIcon } from "lucide-react";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
 
@@ -42,6 +42,8 @@ export default function AdminAlunosPage() {
   const [selected, setSelected] = useState<Student | null>(null);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
+  const [inlineEdit, setInlineEdit] = useState<{ id: string; value: string } | null>(null);
+  const [savingInline, setSavingInline] = useState(false);
 
   const load = useCallback(async (q = "") => {
     setLoading(true);
@@ -62,6 +64,23 @@ export default function AdminAlunosPage() {
       setPlans(pd.plans ?? []);
     });
   }, [load]);
+
+  async function saveExpiry(id: string, value: string) {
+    setSavingInline(true);
+    const res = await fetch(`/api/admin/students/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessExpiresAt: value || null }),
+    });
+    setSavingInline(false);
+    if (res.ok) {
+      toast.success("Data de expiração atualizada");
+      setInlineEdit(null);
+      load(search);
+    } else {
+      toast.error("Erro ao atualizar data");
+    }
+  }
 
   async function toggleActive(id: string, isActive: boolean) {
     const res = await fetch(`/api/admin/students/${id}`, {
@@ -135,6 +154,58 @@ export default function AdminAlunosPage() {
                     <p className="mt-1 text-[12px] text-[var(--text-muted)]">
                       Cadastro: {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
                     </p>
+                    <div className="mt-1 flex items-center gap-1 text-[12px]">
+                      <span className="text-[var(--text-muted)]">Expiração:</span>
+                      {inlineEdit?.id === s.id ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            type="date"
+                            className="input h-6 px-1 py-0 text-[11px]"
+                            value={inlineEdit.value}
+                            onChange={(e) => setInlineEdit({ id: s.id, value: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            disabled={savingInline}
+                            onClick={() => saveExpiry(s.id, inlineEdit.value)}
+                            className="flex h-5 w-5 items-center justify-center rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInlineEdit(null)}
+                            className="flex h-5 w-5 items-center justify-center rounded bg-red-50 text-red-500 hover:bg-red-100"
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setInlineEdit({
+                            id: s.id,
+                            value: s.studentProfile?.accessExpiresAt
+                              ? new Date(s.studentProfile.accessExpiresAt).toISOString().slice(0, 10)
+                              : "",
+                          })}
+                          className="group flex items-center gap-1 rounded px-1 hover:bg-black/5"
+                        >
+                          <span className={cn(
+                            "font-semibold",
+                            s.studentProfile?.accessExpiresAt && new Date(s.studentProfile.accessExpiresAt) < new Date()
+                              ? "text-red-600"
+                              : "text-[var(--text-secondary)]"
+                          )}>
+                            {s.studentProfile?.accessExpiresAt
+                              ? formatDate(new Date(s.studentProfile.accessExpiresAt))
+                              : "—"}
+                          </span>
+                          <Pencil className="h-3 w-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
                     {s.isActive ? "Ativo" : "Inativo"}
@@ -172,16 +243,17 @@ export default function AdminAlunosPage() {
               <div className="orbit-table-wrap">
                 <table className="orbit-admin-table">
                   <colgroup>
-                    <col className="min-w-[200px] w-[30%]" />
-                    <col className="min-w-[140px] w-[22%]" />
-                    <col className="min-w-[88px] w-[10%]" />
-                    <col className="min-w-[120px] w-[14%]" />
-                    <col className="min-w-[100px] w-[10%]" />
-                    <col className="min-w-[140px] w-[14%]" />
+                    <col className="min-w-[190px] w-[26%]" />
+                    <col className="min-w-[120px] w-[17%]" />
+                    <col className="min-w-[80px] w-[8%]" />
+                    <col className="min-w-[105px] w-[11%]" />
+                    <col className="min-w-[160px] w-[15%]" />
+                    <col className="min-w-[90px] w-[9%]" />
+                    <col className="min-w-[130px] w-[14%]" />
                   </colgroup>
                   <thead>
                     <tr>
-                      {["Aluno", "Plano", "Questões", "Cadastro", "Status", "Ações"].map((h) => (
+                      {["Aluno", "Plano", "Questões", "Cadastro", "Expiração", "Status", "Ações"].map((h) => (
                         <th
                           key={h}
                           className={h === "Questões" || h === "Cadastro" || h === "Ações" ? "text-right" : "text-left"}
@@ -219,6 +291,66 @@ export default function AdminAlunosPage() {
                         </td>
                         <td className="text-right text-sm tabular-nums text-[var(--text-secondary)]">
                           {s.createdAt ? formatDate(new Date(s.createdAt)) : "—"}
+                        </td>
+                        <td>
+                          {inlineEdit?.id === s.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                autoFocus
+                                type="date"
+                                className="input h-8 px-1.5 py-0 text-xs"
+                                value={inlineEdit.value}
+                                onChange={(e) => setInlineEdit({ id: s.id, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveExpiry(s.id, inlineEdit.value);
+                                  if (e.key === "Escape") setInlineEdit(null);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                disabled={savingInline}
+                                onClick={() => saveExpiry(s.id, inlineEdit.value)}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                title="Salvar"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInlineEdit(null)}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
+                                title="Cancelar"
+                              >
+                                <XIcon className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setInlineEdit({
+                                id: s.id,
+                                value: s.studentProfile?.accessExpiresAt
+                                  ? new Date(s.studentProfile.accessExpiresAt).toISOString().slice(0, 10)
+                                  : "",
+                              })}
+                              className="group flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-black/5"
+                              title="Clique para editar"
+                            >
+                              <span className={cn(
+                                "text-sm tabular-nums font-medium",
+                                !s.studentProfile?.accessExpiresAt
+                                  ? "text-[var(--text-muted)]"
+                                  : new Date(s.studentProfile.accessExpiresAt) < new Date()
+                                  ? "text-red-600"
+                                  : "text-[var(--text-secondary)]"
+                              )}>
+                                {s.studentProfile?.accessExpiresAt
+                                  ? formatDate(new Date(s.studentProfile.accessExpiresAt))
+                                  : "—"}
+                              </span>
+                              <Pencil className="h-3 w-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          )}
                         </td>
                         <td>
                           <span className={s.isActive ? "orbit-status-badge orbit-status-badge--success" : "orbit-status-badge orbit-status-badge--danger"}>
