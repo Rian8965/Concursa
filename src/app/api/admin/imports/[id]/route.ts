@@ -38,7 +38,10 @@ function isAdmin(r?: string) {
 }
 
 /** JSON de importação às vezes vem como array ou como objeto indexado. */
-function normalizeImportedAlternatives(raw: unknown): { letter: string; content: string }[] {
+function normalizeImportedAlternatives(
+  raw: unknown,
+  { allowEmptyContent = false }: { allowEmptyContent?: boolean } = {},
+): { letter: string; content: string }[] {
   let arr: unknown[] = [];
   if (Array.isArray(raw)) arr = raw;
   else if (raw && typeof raw === "object") arr = Object.values(raw as Record<string, unknown>);
@@ -53,7 +56,8 @@ function normalizeImportedAlternatives(raw: unknown): { letter: string; content:
       .toUpperCase()
       .slice(0, 4);
     const content = String(o.content ?? "").trim();
-    if (!letter || !content) continue;
+    if (!letter) continue;
+    if (!allowEmptyContent && !content) continue;
     if (seen.has(letter)) continue;
     seen.add(letter);
     out.push({ letter, content });
@@ -262,7 +266,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const iq = iqById.get(d.questionId);
         if (!iq) continue;
         if (iq.status === "PUBLISHED" && iq.publishedQuestionId) continue;
-        const alternatives = normalizeImportedAlternatives(iq.alternatives);
+        const { review } = parseImportRawText(iq.rawText);
+        const altVisualDispensado = Boolean(review.alternativasVisuais?.dispensarExigencia);
+        const alternatives = normalizeImportedAlternatives(iq.alternatives, { allowEmptyContent: altVisualDispensado });
         if (alternatives.length === 0) {
           throw new Error(
             `Questão importada sem alternativas válidas (id: ${d.questionId}). Edite a questão e tente de novo.`,
@@ -283,7 +289,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           mergeDependencyOr(heur, llmEnunciadoMap?.[iq.id] ?? null),
           ssDepHint,
         );
-        const { review } = parseImportRawText(iq.rawText);
         const linkStats = reviewLinkStatsFromPrismaJoins(assetLinks);
         const vg = isVinculoSatisfiedForReview(
           dep.needsTextSupport,
@@ -295,9 +300,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!vg.ok) {
           throw new Error(`Questão ${d.questionId.slice(0, 8)}…: ${getDependencyBlockUserMessage(vg.missing)}`);
         }
-        const alts = normalizeImportedAlternatives(iq.alternatives);
+        const alts = normalizeImportedAlternatives(iq.alternatives, { allowEmptyContent: altVisualDispensado });
         const heurVis = detectLikelyVisualAlternatives(alts);
-        if (alternativasVisuaisAtivas(review, heurVis)) {
+        if (alternativasVisuaisAtivas(review, heurVis) && !altVisualDispensado) {
           const letters = alts.map((a) => a.letter.trim().toUpperCase().slice(0, 1));
           const hasByLetter: Record<string, boolean> = {};
           for (const L of letters) {
@@ -348,7 +353,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               if (!freshIq) continue;
               if (freshIq.status === "PUBLISHED" && freshIq.publishedQuestionId) continue;
 
-              const alternatives = normalizeImportedAlternatives(freshIq.alternatives);
+              const { review: freshReview } = parseImportRawText(freshIq.rawText);
+              const freshAltVisualDispensado = Boolean(freshReview.alternativasVisuais?.dispensarExigencia);
+              const alternatives = normalizeImportedAlternatives(freshIq.alternatives, { allowEmptyContent: freshAltVisualDispensado });
               if (alternatives.length === 0) {
                 throw new Error(
                   `Questão importada sem alternativas válidas (id: ${d.questionId}). Edite a questão e tente de novo.`,
