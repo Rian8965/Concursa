@@ -629,13 +629,13 @@ function StudentModal({ student, competitions, plans, onClose, onSaved }: ModalP
                 />
               </div>
 
-              {/* Telefone e CPF — preenchidos via checkout, somente leitura */}
+              {/* WhatsApp e CPF — preenchidos via checkout, somente leitura */}
               {!isNew && (student.studentProfile?.phone || student.studentProfile?.cpf) && (
                 <div className="grid grid-cols-2 gap-3">
                   {student.studentProfile?.phone && (
                     <div>
                       <label className="orbit-form-label flex items-center gap-1">
-                        <Phone className="h-3 w-3" /> Telefone
+                        <Phone className="h-3 w-3" /> WhatsApp
                       </label>
                       <div className="input flex items-center gap-2 bg-[var(--bg-muted)] text-[var(--text-secondary)] cursor-default select-text">
                         {student.studentProfile.phone}

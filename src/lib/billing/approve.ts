@@ -19,10 +19,20 @@ function randomToken() {
 async function ensureStudentFromTransaction(tx: { raw: any }) {
   const email = (tx.raw?.customer?.email ?? "").toString().trim().toLowerCase();
   const name = (tx.raw?.customer?.name ?? "Aluno").toString().trim();
+  const phone = (tx.raw?.customer?.phone ?? tx.raw?.customer?.phone_number ?? "").toString().trim() || null;
   if (!email) throw new Error("Transação sem e-mail do comprador");
 
   const existing = await prisma.user.findUnique({ where: { email }, include: { studentProfile: true } });
-  if (existing?.studentProfile) return { user: existing, profile: existing.studentProfile, createdNew: false as const };
+  if (existing?.studentProfile) {
+    // Atualiza WhatsApp se ainda não estava salvo
+    if (phone && !(existing.studentProfile as any).phone) {
+      await prisma.studentProfile.update({
+        where: { id: existing.studentProfile.id },
+        data: { phone } as any,
+      });
+    }
+    return { user: existing, profile: existing.studentProfile, createdNew: false as const };
+  }
 
   const passwordTemp = randomToken().slice(0, 16);
   const passwordHash = await bcrypt.hash(passwordTemp, 10);
@@ -39,7 +49,7 @@ async function ensureStudentFromTransaction(tx: { raw: any }) {
   });
   await prisma.studentProfile.update({
     where: { id: user.studentProfile!.id },
-    data: { createdByPayment: true, needsOnboarding: true } as any,
+    data: { createdByPayment: true, needsOnboarding: true, ...(phone ? { phone } : {}) } as any,
   });
 
   void createAdminNotification({
