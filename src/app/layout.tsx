@@ -30,10 +30,46 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const theme = await prisma.brandTheme.findFirst({
-    where: { isDefault: true, isActive: true },
-    select: { primaryColor: true, secondaryColor: true, accentColor: true, uiConfig: true },
-  });
+  let theme: {
+    primaryColor: string | null;
+    secondaryColor: string | null;
+    accentColor: string | null;
+    uiConfig: unknown;
+  } | null = null;
+
+  try {
+    theme = await prisma.brandTheme.findFirst({
+      where: { isDefault: true, isActive: true },
+      select: { primaryColor: true, secondaryColor: true, accentColor: true, uiConfig: true },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const isComputeQuota = /compute time quota/i.test(message);
+    // #region agent log
+    console.error(
+      JSON.stringify({
+        sessionId: "f080c8",
+        hypothesisId: isComputeQuota ? "H1" : "H4",
+        location: "layout.tsx:brandTheme",
+        message: isComputeQuota ? "postgres_compute_quota" : "brand_theme_query_failed",
+        data: { isComputeQuota, errorPreview: message.slice(0, 240) },
+        timestamp: Date.now(),
+      }),
+    );
+    fetch("http://127.0.0.1:7920/ingest/9736e9f4-dabc-4bb0-9625-863cffe8a676", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f080c8" },
+      body: JSON.stringify({
+        sessionId: "f080c8",
+        hypothesisId: isComputeQuota ? "H1" : "H4",
+        location: "layout.tsx:brandTheme",
+        message: isComputeQuota ? "postgres_compute_quota" : "brand_theme_query_failed",
+        data: { isComputeQuota, errorPreview: message.slice(0, 240) },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }
 
   function darken(hex: string, amount = 0.12) {
     const h = (hex || "").replace("#", "").trim();
