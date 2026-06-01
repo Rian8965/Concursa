@@ -208,6 +208,32 @@ export async function approvePaidTransaction(input: {
       });
       createdToken = token;
     }
+
+    // Vincular aluno ao concurso automaticamente (quando vem do link de venda do concurso)
+    const competitionId = (tx.raw as any)?.competitionId as string | undefined;
+    if (competitionId) {
+      // Upsert matrícula no concurso (evita duplicidade)
+      await p.$executeRaw`
+        INSERT INTO student_competitions ("id", "studentProfileId", "competitionId", "enrolledAt", "isActive")
+        VALUES (gen_random_uuid()::text, ${profile.id}, ${competitionId}, now(), true)
+        ON CONFLICT ("studentProfileId", "competitionId") DO UPDATE
+          SET "isActive" = true, "enrolledAt" = COALESCE(student_competitions."enrolledAt", now())
+      `;
+      // Definir como concurso preferido se ainda não tiver
+      const hasPreferred = await p.studentProfile.findUnique({
+        where: { id: profile.id },
+        select: { preferredCompetitionId: true },
+      });
+      if (!hasPreferred?.preferredCompetitionId) {
+        await p.studentProfile.update({
+          where: { id: profile.id },
+          data: {
+            preferredCompetitionId: competitionId,
+            needsOnboarding: false,
+          } as any,
+        });
+      }
+    }
   });
 
   const firstAccessUrl = createdToken

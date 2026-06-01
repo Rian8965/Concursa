@@ -18,6 +18,7 @@ const bodySchema = z.object({
   email: z.string().email(),
   phone: z.string().optional(),
   planSlug: z.enum(["avancado", "premium"]).default("avancado"),
+  competitionSlug: z.string().optional(),
 });
 
 function makeOrderNsu() {
@@ -38,11 +39,26 @@ export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
-  const { name, email, phone, planSlug } = parsed.data;
+  const { name, email, phone, planSlug, competitionSlug } = parsed.data;
 
   // Resolver plano
   const plan = planSlug === "premium" ? await ensurePlanoPremium() : await ensurePlanoAvancado();
   const planInfo = planSlug === "premium" ? PLAN_PREMIUM : PLAN_AVANCADO;
+
+  // Validar concurso (se informado) — segurança: validação no backend
+  let competition: { id: string; name: string; slug: string } | null = null;
+  if (competitionSlug) {
+    competition = await prisma.competition.findUnique({
+      where: { slug: competitionSlug },
+      select: { id: true, name: true, slug: true, isActive: true, salesLinkActive: true },
+    }).then((c) => {
+      if (!c || !(c as any).isActive || !(c as any).salesLinkActive) return null;
+      return { id: c.id, name: c.name, slug: c.slug };
+    });
+    if (!competition) {
+      return NextResponse.json({ error: "Concurso não encontrado ou link inativo" }, { status: 400 });
+    }
+  }
 
   const orderNsu = makeOrderNsu();
   const phoneNormalized = normalizePhone(phone);
@@ -58,6 +74,7 @@ export async function POST(req: NextRequest) {
         planSlug: plan.slug,
         planId: plan.id,
         customer: { name, email, phone: phoneNormalized ?? null },
+        ...(competition ? { competitionId: competition.id, competitionSlug: competition.slug, competitionName: competition.name } : {}),
       } as any,
     },
   });
