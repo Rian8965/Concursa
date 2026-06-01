@@ -218,14 +218,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     setImmediate(async () => {
       await limitConcurrency(wrongToExplain, 3, async (w) => {
         try {
-          const expl = await generateWrongAnswerExplanation({
+          const result = await generateWrongAnswerExplanation({
             content: w.content,
             supportText: w.supportText,
             alternatives: w.alternatives,
             selectedAnswer: w.selectedAnswer,
             correctAnswer: w.correctAnswer,
           });
-          if (!expl) return;
+          if (!result?.explanation) return;
           await prisma.studentAnswer.updateMany({
             where: {
               studentProfileId: profile.id,
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               sessionId: id,
               aiExplanation: null,
             },
-            data: { aiExplanation: expl },
+            data: { aiExplanation: result.explanation },
           });
         } catch (e) {
           console.error("[training/submit] async explain", e);

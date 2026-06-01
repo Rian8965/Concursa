@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   LifeBuoy,
   Bell,
+  Cpu,
 } from "lucide-react";
 
 const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -57,6 +58,7 @@ const navGroups = [
     items: [
       { label: "Alunos", href: "/admin/alunos", icon: Users },
       { label: "Planos", href: "/admin/planos", icon: CreditCard },
+      { label: "Consumo de IA", href: "/admin/ia", icon: Cpu },
     ],
   },
   {

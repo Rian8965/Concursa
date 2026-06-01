@@ -189,6 +189,20 @@ model StudentProfile {
   preferredJobRoleId String?
   preferredJobRoleText String?
   onboardingCompletedAt DateTime?
+
+  // ---- Controle de uso de IA ----
+  aiCorrectionsToday       Int       @default(0)
+  aiCorrectionsMonth       Int       @default(0)
+  aiLastDailyResetAt       DateTime?
+  aiLastMonthlyResetAt     DateTime?
+  aiBlockedManually        Boolean   @default(false)
+  aiDailyLimitOverride     Int?
+  aiMonthlyLimitOverride   Int?
+  aiEstimatedCostTodayBrl  Float     @default(0)
+  aiEstimatedCostMonthBrl  Float     @default(0)
+  aiEstimatedCostTotalBrl  Float     @default(0)
+  aiLastUsageAt            DateTime?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -198,6 +212,9 @@ model StudentProfile {
   preferredJobRole     JobRole?             @relation("StudentPreferredJobRole", fields: [preferredJobRoleId], references: [id])
   studentCompetitions StudentCompetition[]
   studentAnswers      StudentAnswer[]
+  aiUsageLogs         AiUsageLog[]
+  aiCreditBalance     StudentAiCreditBalance?
+  aiCreditTransactions AiCreditTransaction[]
   trainingSessions    TrainingSession[]
   simulatedExams      SimulatedExam[]
   apostilas           Apostila[]
@@ -307,19 +324,28 @@ model PasswordResetToken {
 // ============================================================
 
 model Plan {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  description  String?
-  isActive     Boolean  @default(true)
-  durationDays Int?
-  features     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  name                 String
+  slug                 String   @unique
+  description          String?
+  isActive             Boolean  @default(true)
+  durationDays         Int?
+  features             Json?
+  // Preço em centavos (ex: 3990 = R$ 39,90)
+  priceCents           Int?
+  // Limites de IA
+  aiDailyLimit         Int?
+  aiMonthlyLimit       Int?
+  aiResponseCharLimit  Int?
+  // ID do produto/preço no gateway de pagamento
+  checkoutProductId    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   students         StudentProfile[]
   planCompetitions PlanCompetition[]
   subscriptions    Subscription[]
+  aiUsageLogs      AiUsageLog[]
 
   @@map("plans")
 }
@@ -333,6 +359,149 @@ model PlanCompetition {
 
   @@id([planId, competitionId])
   @@map("plan_competitions")
+}
+
+// ============================================================
+// IA — LOGS, CRÉDITOS EXTRAS E CONFIGURAÇÃO GLOBAL
+// ============================================================
+
+enum AiUsageSource {
+  plan_quota
+  extra_credit
+  admin_bonus
+  legacy_allowance
+}
+
+enum AiCreditTransactionType {
+  purchase
+  usage
+  manual_adjustment
+  refund
+  admin_bonus
+}
+
+/// Registro de cada chamada de IA (Gemini/OpenAI) feita por um aluno
+model AiUsageLog {
+  id                      String        @id @default(cuid())
+  studentProfileId        String
+  planId                  String?
+  questionId              String?
+  usageSource             AiUsageSource @default(plan_quota)
+  model                   String?
+  inputTokens             Int?
+  outputTokens            Int?
+  estimatedCostUsd        Float?
+  estimatedCostBrl        Float?
+  exchangeRateUsed        Float?
+  extraCreditBalanceBefore Int?
+  extraCreditBalanceAfter  Int?
+  status                  String        @default("success")
+  errorMessage            String?       @db.Text
+  createdAt               DateTime      @default(now())
+
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  plan            Plan?          @relation(fields: [planId], references: [id], onDelete: SetNull)
+  question        Question?      @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  creditTransactions AiCreditTransaction[]
+
+  @@index([studentProfileId, createdAt])
+  @@index([planId])
+  @@index([questionId])
+  @@index([createdAt])
+  @@map("ai_usage_logs")
+}
+
+/// Pacotes de créditos extras disponíveis para compra
+model AiCreditPackage {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  priceBrl           Float
+  creditsAmount      Int
+  active             Boolean  @default(true)
+  checkoutProductId  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  transactions AiCreditTransaction[]
+
+  @@map("ai_credit_packages")
+}
+
+/// Saldo de créditos extras por aluno
+model StudentAiCreditBalance {
+  id                    String   @id @default(cuid())
+  studentProfileId      String   @unique
+  availableCredits      Int      @default(0)
+  totalPurchasedCredits Int      @default(0)
+  totalUsedExtraCredits Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@map("student_ai_credit_balances")
+}
+
+/// Histórico de movimentações de créditos extras (compras, usos, bônus admin)
+model AiCreditTransaction {
+  id                  String                  @id @default(cuid())
+  studentProfileId    String
+  transactionType     AiCreditTransactionType
+  creditsAmount       Int
+  balanceBefore       Int
+  balanceAfter        Int
+  relatedPaymentId    String?
+  relatedAiUsageLogId String?
+  packageId           String?
+  description         String?
+  createdAt           DateTime                @default(now())
+
+  studentProfile  StudentProfile   @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  aiUsageLog      AiUsageLog?      @relation(fields: [relatedAiUsageLogId], references: [id], onDelete: SetNull)
+  package         AiCreditPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@index([studentProfileId, createdAt])
+  @@index([relatedPaymentId])
+  @@map("ai_credit_transactions")
+}
+
+/// Configuração global de segurança da IA
+model AiGlobalConfig {
+  id                             String   @id @default(cuid())
+  aiEnabled                      Boolean  @default(true)
+  globalDailyCallLimit           Int      @default(5000)
+  globalDailyCallsUsed           Int      @default(0)
+  globalDailyCostLimitBrl        Float    @default(80.0)
+  globalDailyCostUsedBrl         Float    @default(0.0)
+  globalLastDailyResetAt         DateTime?
+  alertThreshold1Brl             Float    @default(20.0)
+  alertThreshold2Brl             Float    @default(40.0)
+  blockPartialThresholdBrl       Float    @default(60.0)
+  pauseAllThresholdBrl           Float    @default(80.0)
+  manualBlockUntil               DateTime?
+  allowExtraCreditsAboveDailyLimit Boolean @default(false)
+  exchangeRateUsdBrl             Float    @default(5.5)
+  exchangeRateUpdatedAt          DateTime?
+  updatedAt                      DateTime @updatedAt
+
+  @@map("ai_global_config")
+}
+
+/// Log de ações administrativas manuais
+model AdminActionLog {
+  id            String   @id @default(cuid())
+  adminUserId   String
+  targetUserId  String
+  actionType    String
+  previousValue Json?
+  newValue      Json?
+  reason        String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([adminUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@map("admin_action_logs")
 }
 
 // ============================================================
@@ -622,6 +791,7 @@ model Question {
   usedBy            UsedQuestion[]
   questionReports   QuestionReport[]
   revisions        QuestionRevision[]
+  aiUsageLogs      AiUsageLog[]
 
   @@map("questions")
 }

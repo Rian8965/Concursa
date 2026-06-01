@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { generateWrongAnswerExplanation } from "@/lib/ai/explain-wrong-answer";
+import { canUseAI, recordAiUsage, recordAiError } from "@/lib/ai/ai-gate";
 import { prisma } from "@/lib/db/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -14,7 +15,9 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ ok: true, filled: 0, message: "IA não configurada" });
   }
 
-  const profile = await prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
+  const userId = session.user.id;
+
+  const profile = await prisma.studentProfile.findUnique({ where: { userId } });
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
 
   const pending = await prisma.studentAnswer.findMany({
@@ -27,18 +30,45 @@ export async function POST(_req: NextRequest) {
   });
 
   let filled = 0;
+  let blocked = false;
+
   for (const row of pending) {
+    // Verificar gate antes de cada chamada
+    const gate = await canUseAI(userId);
+    if (!gate.allowed) {
+      blocked = true;
+      break;
+    }
+
     const q = row.question;
-    const text = await generateWrongAnswerExplanation({
+    const result = await generateWrongAnswerExplanation({
       content: q.content,
       supportText: q.supportText,
       alternatives: q.alternatives.map((a) => ({ letter: a.letter, content: a.content })),
       selectedAnswer: row.selectedAnswer,
       correctAnswer: q.correctAnswer,
+      charLimit: gate.charLimit,
     });
-    if (text) {
-      await prisma.studentAnswer.update({ where: { id: row.id }, data: { aiExplanation: text } });
+
+    if (result?.explanation) {
+      await prisma.studentAnswer.update({ where: { id: row.id }, data: { aiExplanation: result.explanation } });
+      await recordAiUsage({
+        userId,
+        questionId: q.id,
+        source: gate.source,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      });
       filled += 1;
+    } else {
+      await recordAiError({
+        userId,
+        questionId: q.id,
+        source: gate.source,
+        model: "unknown",
+        errorMessage: "Resposta vazia da IA (ensure)",
+      });
     }
   }
 
@@ -46,5 +76,5 @@ export async function POST(_req: NextRequest) {
     where: { studentProfileId: profile.id, isCorrect: false, aiExplanation: null },
   });
 
-  return NextResponse.json({ ok: true, filled, remaining });
+  return NextResponse.json({ ok: true, filled, remaining, blocked });
 }

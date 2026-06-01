@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 import { WeeklyPerformanceChart, AccuracyTrendChart } from "@/components/student/PerformanceCharts";
+import { AiStatusCard } from "@/components/student/AiStatusCard";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -577,6 +578,9 @@ export default async function StudentDashboardPage() {
               </div>
             </div>
           )}
+
+          {/* STATUS DA IA */}
+          <AiStatusCard />
 
           {/* OUTROS CONCURSOS */}
           {(profile?.studentCompetitions.length ?? 0) > 1 && (
