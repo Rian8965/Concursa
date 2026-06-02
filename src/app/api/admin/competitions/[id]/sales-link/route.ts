@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { getAppUrl } from "@/lib/billing/infinitepay";
+import { getLandingUrl } from "@/lib/billing/infinitepay";
 
 function isAdmin(role?: string) {
   return role === "ADMIN" || role === "SUPER_ADMIN";
@@ -40,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!competition) return NextResponse.json({ error: "Concurso não encontrado" }, { status: 404 });
 
-  const appUrl = getAppUrl();
+  const appUrl = getLandingUrl();
   const publicLink = `${appUrl}/c/${competition.slug}`;
 
   // Checkouts iniciados (transações com este competitionId)
@@ -168,10 +168,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     select: { id: true, slug: true, salesLinkActive: true, salesLinkVisits: true },
   });
 
-  const appUrl = getAppUrl();
+  const landingUrl = getLandingUrl();
   return NextResponse.json({
     ok: true,
     competition: updated,
-    publicLink: `${appUrl}/c/${updated.slug}`,
+    publicLink: `${landingUrl}/c/${updated.slug}`,
   });
 }

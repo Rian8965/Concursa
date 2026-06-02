@@ -11,6 +11,7 @@ import {
   getAppUrl,
   getInfinitepayWebhookUrl,
   infinitepayCreateCheckoutLink,
+  corsHeaders,
 } from "@/lib/billing/infinitepay";
 
 const bodySchema = z.object({
@@ -35,9 +36,17 @@ function normalizePhone(phone?: string | null) {
   return `+55${digits}`;
 }
 
+export async function OPTIONS(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
+}
+
 export async function POST(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  const cors = corsHeaders(origin);
+
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400, headers: cors });
 
   const { name, email, phone, planSlug, competitionSlug } = parsed.data;
 
@@ -56,7 +65,7 @@ export async function POST(req: NextRequest) {
       return { id: c.id, name: c.name, slug: c.slug };
     });
     if (!competition) {
-      return NextResponse.json({ error: "Concurso não encontrado ou link inativo" }, { status: 400 });
+      return NextResponse.json({ error: "Concurso não encontrado ou link inativo" }, { status: 400, headers: cors });
     }
   }
 
@@ -102,12 +111,12 @@ export async function POST(req: NextRequest) {
       where: { id: tx.id },
       data: { status: "REFUSED", raw: { ...(tx.raw as any), error: String(e?.message ?? e) } as any },
     });
-    return NextResponse.json({ error: "Não foi possível iniciar o pagamento", orderNsu }, { status: 502 });
+    return NextResponse.json({ error: "Não foi possível iniciar o pagamento", orderNsu }, { status: 502, headers: cors });
   }
 
   if (!checkoutUrl) {
     await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: "REFUSED", raw: raw as any } });
-    return NextResponse.json({ error: "Não foi possível gerar link de pagamento" }, { status: 502 });
+    return NextResponse.json({ error: "Não foi possível gerar link de pagamento" }, { status: 502, headers: cors });
   }
 
   await prisma.paymentTransaction.update({
@@ -118,9 +127,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({
-    checkoutUrl,
-    orderNsu,
-    plan: { name: plan.name, priceCents: planInfo.priceCents, slug: plan.slug },
-  });
+  return NextResponse.json(
+    { checkoutUrl, orderNsu, plan: { name: plan.name, priceCents: planInfo.priceCents, slug: plan.slug } },
+    { headers: cors },
+  );
 }

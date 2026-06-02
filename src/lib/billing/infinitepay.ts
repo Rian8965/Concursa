@@ -37,9 +37,40 @@ export function getInfinitepayWebhookUrl() {
 export function getAppUrl() {
   const u = (process.env.APP_URL ?? "").trim();
   if (u) return u.replace(/\/+$/, "");
-  // Fallback seguro para DEV (evita 500 no localhost)
   if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
   throw new Error("APP_URL não configurado");
+}
+
+/** URL da landing page pública (domínio de vendas) */
+export function getLandingUrl() {
+  const u = (process.env.LANDING_URL ?? "").trim();
+  if (u) return u.replace(/\/+$/, "");
+  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+  return getAppUrl(); // fallback seguro
+}
+
+/** Domínios permitidos para CORS (landing + app) */
+export function getCorsOrigins(): string[] {
+  const origins: string[] = [];
+  const app = (process.env.APP_URL ?? "").trim();
+  const landing = (process.env.LANDING_URL ?? "").trim();
+  if (app) origins.push(app);
+  if (landing) origins.push(landing);
+  if (process.env.NODE_ENV !== "production") {
+    origins.push("http://localhost:3000", "http://localhost:5173");
+  }
+  return origins;
+}
+
+export function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = getCorsOrigins();
+  const use = origin && allowed.includes(origin) ? origin : allowed[0] ?? "*";
+  return {
+    "Access-Control-Allow-Origin": use,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
 }
 
 export async function infinitepayCreateCheckoutLink(input: {
