@@ -56,7 +56,8 @@ export function getCorsOrigins(): string[] {
   const app = (process.env.APP_URL ?? "").trim();
   const landing = (process.env.LANDING_URL ?? "").trim();
   if (app) origins.push(app);
-  if (landing) origins.push(landing);
+  // Fallback fixo para produção — landing sempre no domínio raiz
+  origins.push(landing || "https://descompliqueseuconcurso.com.br");
   if (process.env.NODE_ENV !== "production") {
     origins.push("http://localhost:3000", "http://localhost:5173");
   }
@@ -65,7 +66,11 @@ export function getCorsOrigins(): string[] {
 
 export function corsHeaders(origin: string | null): Record<string, string> {
   const allowed = getCorsOrigins();
-  const use = origin && allowed.includes(origin) ? origin : allowed[0] ?? "*";
+  // Se a origem está na lista, usa ela; caso contrário, permite a landing page
+  const use =
+    origin && allowed.includes(origin)
+      ? origin
+      : allowed.find((o) => o.includes("descompliqueseuconcurso.com.br") && !o.includes("app.")) ?? "*";
   return {
     "Access-Control-Allow-Origin": use,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
