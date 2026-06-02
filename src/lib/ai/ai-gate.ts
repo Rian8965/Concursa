@@ -48,10 +48,59 @@ export async function canUseAI(userId: string): Promise<AiGateResult> {
     };
   }
 
-  // 3. Verificar assinatura ativa
+  // 3. Verificar assinatura ativa ou teste grátis ativo
   const now = new Date();
   const hasActiveSubscription =
     profile.accessExpiresAt != null && profile.accessExpiresAt > now;
+
+  // --- Fluxo especial: usuário em Teste Grátis ---
+  const trialStatus = (profile as any).freeTrialStatus as string | null;
+  const trialEndsAt = (profile as any).freeTrialEndsAt as Date | null;
+  const isActiveTrial =
+    trialStatus === "active" && trialEndsAt != null && new Date(trialEndsAt) > now;
+
+  if (!hasActiveSubscription && isActiveTrial) {
+    // Limites do teste grátis
+    const TRIAL_DAILY = 5;
+    const TRIAL_TOTAL = 35;
+    const TRIAL_CHAR_LIMIT = 600;
+
+    // Reset diário do trial se necessário
+    const lastReset = (profile as any).freeTrialLastDailyResetAt as Date | null;
+    const todayStr = now.toDateString();
+    if (!lastReset || new Date(lastReset).toDateString() !== todayStr) {
+      await prisma.studentProfile.update({
+        where: { id: profile.id },
+        data: { freeTrialAiUsedToday: 0, freeTrialLastDailyResetAt: now } as any,
+      });
+      (profile as any).freeTrialAiUsedToday = 0;
+    }
+
+    const usedToday = (profile as any).freeTrialAiUsedToday ?? 0;
+    const usedTotal = (profile as any).freeTrialAiUsedTotal ?? 0;
+
+    if (usedToday >= TRIAL_DAILY) {
+      return {
+        allowed: false,
+        reason: "daily_limit",
+        message:
+          "Você atingiu o limite diário de correções com IA do teste grátis. Amanhã novas correções estarão disponíveis.",
+        canBuyCredits: false,
+      };
+    }
+
+    if (usedTotal >= TRIAL_TOTAL) {
+      return {
+        allowed: false,
+        reason: "monthly_limit_no_credits",
+        message:
+          "Você usou todas as correções com IA disponíveis no teste grátis. Para continuar usando a IA, escolha um dos planos.",
+        canBuyCredits: false,
+      };
+    }
+
+    return { allowed: true, source: "plan_quota", charLimit: TRIAL_CHAR_LIMIT };
+  }
 
   if (!hasActiveSubscription) {
     return {
@@ -227,8 +276,13 @@ export async function recordAiUsage(input: {
   if (input.source === "plan_quota" || input.source === "legacy_allowance") {
     profileUpdates.aiCorrectionsToday = { increment: 1 };
     profileUpdates.aiCorrectionsMonth = { increment: 1 };
+    // Se está em trial, também incrementar contadores específicos
+    const tStatus = (profile as any).freeTrialStatus as string | null;
+    if (tStatus === "active") {
+      profileUpdates.freeTrialAiUsedToday = { increment: 1 };
+      profileUpdates.freeTrialAiUsedTotal = { increment: 1 };
+    }
   } else if (input.source === "extra_credit") {
-    // Limite diário ainda conta para créditos extras (controle de abuso)
     profileUpdates.aiCorrectionsToday = { increment: 1 };
   }
 

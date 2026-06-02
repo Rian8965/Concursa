@@ -25,6 +25,7 @@ import {
   LifeBuoy,
   Bell,
   Cpu,
+  FlaskConical,
 } from "lucide-react";
 
 const DEFAULT_BRAND_NAME = "DESCOMPLIQUE SEU CONCURSO";
@@ -57,6 +58,7 @@ const navGroups = [
     label: "Alunos",
     items: [
       { label: "Alunos", href: "/admin/alunos", icon: Users },
+      { label: "Teste Grátis", href: "/admin/teste-gratis", icon: FlaskConical },
       { label: "Planos", href: "/admin/planos", icon: CreditCard },
       { label: "Consumo de IA", href: "/admin/ia", icon: Cpu },
     ],

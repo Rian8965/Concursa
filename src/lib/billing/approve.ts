@@ -209,6 +209,20 @@ export async function approvePaidTransaction(input: {
       createdToken = token;
     }
 
+    // Converter trial grátis em assinatura paga
+    const isFromTrial = !!(tx.raw as any)?.fromTrial;
+    const trialUserId = (tx.raw as any)?.trialUserId as string | undefined;
+    if (isFromTrial || (profile as any).freeTrialStatus === "active") {
+      await p.studentProfile.update({
+        where: { id: profile.id },
+        data: {
+          freeTrialStatus: "converted",
+          freeTrialConvertedAt: new Date(),
+          freeTrialConversionPlanId: plan.id,
+        } as any,
+      });
+    }
+
     // Vincular aluno ao concurso automaticamente (quando vem do link de venda do concurso)
     const competitionId = (tx.raw as any)?.competitionId as string | undefined;
     if (competitionId) {

@@ -4,6 +4,7 @@ import { StudentSidebar } from "@/components/shared/StudentSidebar";
 import { prisma } from "@/lib/db/prisma";
 import { getAccessStatus } from "@/lib/billing/access";
 import Link from "next/link";
+import { TrialConversionPopup } from "@/components/student/TrialConversionPopup";
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -24,15 +25,36 @@ export default async function StudentLayout({ children }: { children: React.Reac
     (studentProfile?.studentCompetitions?.length ?? 0) === 0;
   if (mustOnboard) redirect("/onboarding");
 
-  // Regra de vencimento + tolerância.
+  // Verificar se é usuário em teste grátis ativo
+  const trialStatus = (studentProfile as any)?.freeTrialStatus as string | null;
+  const trialEndsAt = (studentProfile as any)?.freeTrialEndsAt as Date | null;
+  const isActiveTrial =
+    trialStatus === "active" && trialEndsAt != null && new Date(trialEndsAt) > new Date();
+
+  // Expirar trial automaticamente se passou do prazo
+  if (trialStatus === "active" && trialEndsAt != null && new Date(trialEndsAt) <= new Date()) {
+    await prisma.studentProfile.update({
+      where: { userId: session.user.id },
+      data: { freeTrialStatus: "expired" } as any,
+    });
+    redirect("/trial-expirado");
+  }
+
+  // Se trial expirado (sem assinar), redirecionar para página de expiração
+  if (trialStatus === "expired") {
+    redirect("/trial-expirado");
+  }
+
+  // Regra de vencimento + tolerância (só para alunos pagos).
   const access = getAccessStatus({ accessExpiresAt: studentProfile?.accessExpiresAt ?? null, warnDays: 3, graceDays: 3 });
-  if (access.status === "BLOCKED") {
+  if (access.status === "BLOCKED" && !isActiveTrial) {
     redirect("/renovar");
   }
 
   return (
     <div className="orbit-shell min-h-screen">
-      <StudentSidebar studentName={session.user.name} planName={studentProfile?.plan?.name} />
+      <StudentSidebar studentName={session.user.name} planName={isActiveTrial ? "Teste Grátis" : studentProfile?.plan?.name} />
+      {isActiveTrial && <TrialConversionPopup />}
       <main className="student-main">
         <div className="student-main-inner">
           {access.status === "EXPIRING_SOON" ? (

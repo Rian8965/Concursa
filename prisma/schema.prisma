@@ -203,6 +203,20 @@ model StudentProfile {
   aiEstimatedCostTotalBrl  Float     @default(0)
   aiLastUsageAt            DateTime?
 
+  // ---- Teste Grátis ----
+  freeTrialStatus              String?   // active | expired | converted | blocked
+  freeTrialStartedAt           DateTime?
+  freeTrialEndsAt              DateTime?
+  freeTrialAiUsedToday         Int       @default(0)
+  freeTrialAiUsedTotal         Int       @default(0)
+  freeTrialLastDailyResetAt    DateTime?
+  freeTrialMaterialsDownloaded Int       @default(0)
+  freeTrialOriginSlug          String?
+  freeTrialConvertedAt         DateTime?
+  freeTrialConversionPlanId    String?
+  trialPopupCount              Int       @default(0)
+  trialLastPopupAt             DateTime?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

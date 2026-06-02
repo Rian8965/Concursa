@@ -12,6 +12,7 @@ import {
 import { formatDate, formatCountdown } from "@/lib/utils/date";
 import { WeeklyPerformanceChart, AccuracyTrendChart } from "@/components/student/PerformanceCharts";
 import { AiStatusCard } from "@/components/student/AiStatusCard";
+import { TrialStatusCard } from "@/components/student/TrialStatusCard";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -578,6 +579,9 @@ export default async function StudentDashboardPage() {
               </div>
             </div>
           )}
+
+          {/* STATUS DO TESTE GRÁTIS */}
+          <TrialStatusCard />
 
           {/* STATUS DA IA */}
           <AiStatusCard />
