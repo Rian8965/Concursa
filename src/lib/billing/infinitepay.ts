@@ -45,8 +45,9 @@ export function getAppUrl() {
 export function getLandingUrl() {
   const u = (process.env.LANDING_URL ?? "").trim();
   if (u) return u.replace(/\/+$/, "");
-  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
-  return getAppUrl(); // fallback seguro
+  // Fallback fixo para produção — landing sempre no domínio raiz
+  if (process.env.NODE_ENV === "production") return "https://descompliqueseuconcurso.com.br";
+  return "http://localhost:3000";
 }
 
 /** Domínios permitidos para CORS (landing + app) */
